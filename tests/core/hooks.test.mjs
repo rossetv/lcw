@@ -95,6 +95,22 @@ test('session-start hook with an unfinished run names it and the next step', () 
   assert.match(r.out, /carry on/)
 })
 
+test('session-start hook says why a run is paused: a pause by the user stays until they say so, one at the mark ends when the limit resets', () => {
+  const t = started('hold')
+  const said = () => run(START_HOOK, [], { home: t.home, cwd: t.repo, input: JSON.stringify({ session_id: 's1', cwd: t.repo }) }).out
+  t.cli('pause', 'human')
+  const human = said()
+  assert.match(human, /status paused \(paused by the user\)/)
+  assert.match(human, /stays paused until they say carry on/)
+  assert.ok(!/Load the lcw:lcw skill and carry on/.test(human), human)
+  t.cli('resume')
+  t.cli('pause', 'mark')
+  const mark = said()
+  assert.match(mark, /status paused \(paused at the usage mark\)/)
+  assert.ok(!/stays paused until they say/.test(mark), mark)
+  assert.match(mark, /lcw\.mjs resume/)
+})
+
 test('session start finds the run of a resumed session by its transcript', () => {
   const t = started('resumed')
   const input = JSON.stringify({ session_id: 'process-7', transcript_path: '/x/projects/y/s1.jsonl', cwd: t.repo })

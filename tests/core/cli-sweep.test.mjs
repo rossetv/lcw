@@ -26,6 +26,15 @@ function hunting(name) {
   return t
 }
 
+/** A sweep in Ship with wave 1 (of the given size) running and its worktree. */
+function shipping(fixes = 3, name) {
+  const t = hunting(name)
+  t.cli('wave', 'add', String(fixes))
+  t.cli('wave', 'start')
+  t.cli('stage', 'Ship')
+  return t
+}
+
 function commit(wt, file, text) {
   fs.writeFileSync(`${wt}/${file}`, text)
   git(wt, 'add', file)
@@ -225,6 +234,7 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
   const t = hunting()
   t.cli('wave', 'add', '3', '1')
   t.cli('wave', 'start')
+  t.cli('stage', 'Ship')
   for (const id of ['F1', 'F2', 'F3']) t.cli('req', 'add', id, `fix ${id}`)
   t.cli('req', 'F1', 'pass')
   t.cli('req', 'F2', 'pass')
@@ -247,9 +257,7 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
 })
 
 test('wave shipped is refused when the sweep\'s branch cannot fast-forward to the wave, and nothing moves', () => {
-  const t = hunting()
-  t.cli('wave', 'add', '1')
-  t.cli('wave', 'start')
+  const t = shipping(1)
   commit(t.wt, 'b.txt', 'fix\n')
   const aside = git(t.repo, 'commit-tree', 'lcw/tidy^{tree}', '-p', 'lcw/tidy', '-m', 'aside')
   git(t.repo, 'branch', '-f', 'lcw/tidy', aside)
@@ -408,6 +416,24 @@ test('a failing gh merge is reported and records nothing', () => {
   assert.equal(t.state().sweep.waves[0].merged, false)
 })
 
+test('a merge GitHub refuses puts the pull request it readied back to draft, and one that was not a draft is left alone', () => {
+  const t = shippedWaves()
+  const refused = fakeGh({ GH_FAIL: 'pr merge' })
+  assert.equal(lcw(['merge', '1'], { ...t.o, env: refused.env }).code, 1)
+  assert.deepEqual(refused.calls().slice(2), ['pr ready 12 -R acme/widgets', 'pr merge 12 -R acme/widgets --merge', 'pr ready 12 -R acme/widgets --undo'])
+  const open = fakeGh({ GH_FAIL: 'pr merge', GH_DRAFT: 'false' })
+  assert.equal(lcw(['merge', '1'], { ...t.o, env: open.env }).code, 1)
+  assert.ok(!open.calls().some((c) => c.startsWith('pr ready')), open.calls().join('\n'))
+})
+
+test('a merge that was only queued leaves the pull request ready, not back at draft', () => {
+  const t = shippedWaves()
+  const gh = fakeGh({ GH_STATE: 'OPEN' })
+  lcw(['merge', '1'], { ...t.o, env: gh.env })
+  assert.ok(gh.calls().includes('pr ready 12 -R acme/widgets'))
+  assert.ok(!gh.calls().some((c) => c.includes('--undo')), gh.calls().join('\n'))
+})
+
 test('status prints the choice, the round, each wave and the totals', () => {
   const t = shippedWaves()
   t.edit((s) => {
@@ -444,4 +470,150 @@ test('stop --pr records the pull request a stopped sweep opened', () => {
   const t = sweep()
   assert.equal(t.cli('stop', '--pr', 'https://github.com/acme/widgets/pull/7').code, 0)
   assert.deepEqual([t.state().status, t.state().pr], ['stopped', { number: 7, url: 'https://github.com/acme/widgets/pull/7' }])
+})
+
+test('wave shipped is refused outside Ship, and nothing moves', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1')
+  t.cli('wave', 'start')
+  commit(t.wt, 'b.txt', 'fix\n')
+  for (const stage of ['Build', 'Review']) {
+    t.cli('stage', stage)
+    assert.equal(t.cli('wave', 'shipped').code, 1, stage)
+  }
+  assert.equal(t.state().sweep.waves[0].status, 'running')
+  assert.notEqual(git(t.repo, 'rev-parse', 'lcw/tidy'), git(t.repo, 'rev-parse', 'lcw/tidy-wave-1'))
+  t.cli('stage', 'Ship')
+  assert.equal(t.cli('wave', 'shipped').code, 0)
+})
+
+test('a wave with no commits ships empty with no pull request, and the waves after it merge without waiting on it', () => {
+  const t = shipping(2)
+  t.cli('req', 'add', 'F1', 'one')
+  t.cli('req', 'F1', 'park')
+  t.cli('req', 'add', 'F2', 'two')
+  t.cli('req', 'F2', 'drop')
+  assert.equal(t.cli('wave', 'shipped', '--pr', '5').code, 1, 'a pull request for nothing')
+  assert.equal(t.cli('wave', 'shipped').code, 0)
+  const empty = t.state().sweep.waves[0]
+  assert.deepEqual([empty.status, empty.empty, empty.pr, empty.fixed], ['shipped', true, null, 0])
+  assert.match(t.cli('status').out, /^ {2}1 \[shipped\].*empty/m)
+  assert.equal(t.cli('wave', 'pr', '1', '5').code, 1, 'an empty wave takes no pull request')
+  assert.equal(lcw(['merge', '1'], { ...t.o, env: fakeGh().env }).code, 1, 'and has none to merge')
+
+  t.cli('set', 'sweep.prs=merged')
+  t.cli('wave', 'add', '1')
+  t.cli('wave', 'start')
+  t.cli('stage', 'Ship')
+  commit(t.wt, 'b.txt', 'fix\n')
+  assert.equal(t.cli('wave', 'shipped', '--pr', '9').code, 0)
+  const gh = fakeGh()
+  const r = lcw(['merge', '2'], { ...t.o, env: gh.env })
+  assert.equal(r.code, 0, r.out)
+  assert.ok(gh.calls().includes('pr merge 9 -R acme/widgets --merge'))
+})
+
+test('wave pr records the pull request of a shipped wave that has none, as a number or a URL, once', () => {
+  const t = shipping(1)
+  commit(t.wt, 'b.txt', 'fix\n')
+  assert.equal(t.cli('wave', 'pr', '1', '3').code, 1, 'still running')
+  t.cli('wave', 'shipped')
+  assert.equal(t.cli('wave', 'pr', '1', 'soon').code, 1)
+  assert.equal(t.cli('wave', 'pr', '2', '3').code, 1, 'no such wave')
+  assert.equal(t.cli('wave', 'pr', '1', 'https://github.com/acme/widgets/pull/31').code, 0)
+  assert.equal(t.state().sweep.waves[0].pr, 31)
+  assert.equal(t.cli('wave', 'pr', '1', '32').code, 1, 'it has one')
+  assert.equal(t.state().sweep.waves[0].pr, 31)
+  const u = shipping(1, 'bare')
+  commit(u.wt, 'b.txt', 'fix\n')
+  u.cli('wave', 'shipped')
+  assert.equal(u.cli('wave', 'pr', '1', '7').code, 0)
+  assert.equal(u.state().sweep.waves[0].pr, 7)
+  const queued = hunting('queued')
+  queued.cli('wave', 'add', '1')
+  assert.equal(queued.cli('wave', 'pr', '1', '3').code, 1, 'queued')
+})
+
+test('req park takes a fix out of the running wave once, and the wave ships counting only what passed', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '3')
+  assert.equal(t.cli('req', 'F1', 'park').code, 1, 'no wave runs')
+  t.cli('wave', 'start')
+  for (const id of ['F1', 'F2', 'F3']) t.cli('req', 'add', id, `fix ${id}`)
+  assert.equal(t.cli('req', 'F1', 'park').code, 0)
+  assert.equal(t.cli('req', 'F1', 'park').code, 0)
+  assert.equal(t.cli('req', 'nope', 'park').code, 1)
+  assert.deepEqual(t.state().requirements.map((r) => r.status), ['parked', 'todo', 'todo'])
+  assert.equal(t.state().sweep.parked, 1)
+  t.cli('req', 'F2', 'pass')
+  t.cli('req', 'F3', 'park')
+  t.cli('stage', 'Ship')
+  commit(t.wt, 'b.txt', 'fix\n')
+  t.cli('wave', 'shipped')
+  const s = t.state().sweep
+  assert.deepEqual([s.fixed, s.parked, s.waves[0].fixed], [1, 2, 1])
+})
+
+test('req park is refused in a build', () => {
+  const o = { home: tmp('home'), cwd: makeRepo(), session: 'b1' }
+  lcw(['start', 'b', '--title', 'B'], o)
+  lcw(['req', 'add', 'R1', 'one'], o)
+  assert.equal(lcw(['req', 'R1', 'park'], o).code, 1)
+})
+
+test('Hunt is refused while a wave is queued or running, and allowed once every wave has shipped', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1', '1')
+  t.cli('stage', 'Ship')
+  assert.equal(t.cli('stage', 'Hunt').code, 1, 'queued')
+  t.cli('wave', 'start')
+  assert.equal(t.cli('stage', 'Hunt').code, 1, 'running')
+  assert.equal(t.state().stage, 'Ship')
+  commit(t.wt, 'b.txt', 'fix\n')
+  t.cli('wave', 'shipped')
+  assert.equal(t.cli('stage', 'Hunt').code, 1, 'wave 2 is still queued')
+  t.cli('wave', 'start')
+  commit(t.wt, 'c.txt', 'fix\n')
+  t.cli('wave', 'shipped')
+  assert.equal(t.cli('stage', 'Hunt').code, 0)
+  assert.equal(t.state().sweep.round, 2)
+})
+
+test('going back to Charter clears the approval, so Hunt needs the charter put to the person again', () => {
+  const t = hunting()
+  t.cli('stage', 'Charter')
+  assert.equal(t.state().sweep.approvedAt, null)
+  assert.equal(t.cli('stage', 'Hunt').code, 1)
+  t.cli('approval')
+  assert.equal(t.cli('stage', 'Hunt').code, 0)
+})
+
+test('start is refused while this session drives an unfinished run of either shape, and allowed once it is finished or stopped', () => {
+  const t = sweep()
+  const again = t.cli('start', 'second', '--title', 'Second')
+  assert.equal(again.code, 1)
+  assert.ok(again.out.includes(t.state().id) && /lcw stop/.test(again.out), again.out)
+  assert.equal(lcw(['runs'], t.o).out.trim().split('\n').length, 1)
+  assert.equal(lcw(['start', 'other', '--title', 'Other'], { ...t.o, session: 's2' }).code, 0, 'another session is free to start')
+  t.cli('finish')
+  assert.equal(t.cli('start', 'second', '--title', 'Second').code, 0)
+  const b = { home: t.home, cwd: t.repo, session: 'b1' }
+  lcw(['start', 'build', '--title', 'Build'], b)
+  assert.equal(lcw(['start', 'again', '--title', 'Again'], b).code, 1, 'a build blocks too')
+  lcw(['stop'], b)
+  assert.equal(lcw(['start', 'again', '--title', 'Again'], b).code, 0)
+})
+
+test('finish and stop take a pull request as a bare number or a URL', () => {
+  const t = sweep()
+  t.cli('stop', '--pr', '7')
+  assert.deepEqual(t.state().pr, { number: 7, url: 'https://github.com/acme/widgets/pull/7' })
+  const o = { home: t.home, cwd: makeRepo(), session: 'f1' }
+  const dir = /^folder: (.+)$/m.exec(lcw(['start', 'f', '--title', 'F'], o).out)[1]
+  lcw(['finish', '--pr', '9'], o)
+  assert.equal(readJson(`${dir}/state.json`).pr.number, 9)
+  const u = { ...o, session: 'f2' }
+  const dir2 = /^folder: (.+)$/m.exec(lcw(['start', 'g', '--title', 'G'], u).out)[1]
+  lcw(['finish', '--pr', 'https://github.com/acme/widgets/pull/11'], u)
+  assert.equal(readJson(`${dir2}/state.json`).pr.number, 11)
 })

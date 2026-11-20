@@ -44,8 +44,8 @@ const argv = process.argv.slice(2)
 const USAGE = `lcw commands: ${'start status stage set task req ask answer approval ledger checkpoint mark cap spend-command usage pause resume stop finish worktree pictures runs where take abandon awake hunt wave merge'}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
 In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked and charter.md written.
-hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number; wave start runs the front queued wave on lcw/<name>-wave-<n>, cut from lcw/<name> in the worktree, and prints its plan; wave shipped [--pr <number>] fast-forwards lcw/<name> to it. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged. task <id> dropped drops a task; stop --pr <url> records the pull request a stopped sweep opened.
-req <id> rename "<name>" and req <id> drop change a requirement when what is built changes.
+hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number; wave start runs the front queued wave on lcw/<name>-wave-<n>, cut from lcw/<name> in the worktree, and prints its plan; wave shipped [--pr <number>], in Ship only, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request); wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
+req <id> rename "<name>" and req <id> drop change a requirement when what is built changes; in a sweep's running wave req <id> park takes a fix out of the wave for the person.
 approval ["<Go label>" ...] [--meaning "<what Go builds>"] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. Asked again, it replaces the last; a new stage clears it.
 take <runId> makes this session take over a run of this repository that no session has shown for 15 minutes; abandon <runId> stops such a run for good and removes its worktree when nothing in it is uncommitted, keeping its branch.
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
@@ -198,6 +198,8 @@ const commands = {
     const shape = flags.shape ?? 'build'
     if (shape !== 'build' && shape !== 'sweep') fail(`--shape is build or sweep, not ${shape}. Nothing was changed.`)
     const sweep = shape === 'sweep'
+    const driving = sessionId ? open(readJson(sessionFile(home(), sessionId))?.runDir) : null
+    if (driving) fail(`This session already drives run ${driving.state.id} (${driving.state.title}). Finish it, or lcw stop it, before starting another. Nothing was started.`)
     const key = repoKey(mainCheckout(cwd))
     const d = new Date(now())
     const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
@@ -275,6 +277,8 @@ const commands = {
     const stage = stages.find((s) => s.toLowerCase() === String(rest[0]).toLowerCase()) || fail(`Stage is one of: ${stages.join(', ')}`)
     if (stage === 'Hunt') {
       if (run.state.stage === 'Hunt') return out('stage Hunt')
+      const waiting = run.state.sweep.waves.filter((x) => x.status !== 'shipped')
+      if (waiting.length) fail(`Waves ${waiting.map((x) => x.n).join(', ')} are still queued or running; a new hunt starts once they have shipped. Nothing was changed.`)
       if (!run.state.sweep.approvedAt) fail('The charter has not been put to the person yet: ask with lcw approval in Charter first. Nothing was changed.')
       const charter = `${run.dir}/charter.md`
       if (!fs.existsSync(charter) || !fs.readFileSync(charter, 'utf8').trim()) fail('charter.md is empty: write the agreed charter there first. Nothing was changed.')
@@ -289,6 +293,7 @@ const commands = {
         const now = s.intent.now ? [s.intent.now] : []
         s.intent = { ...s.intent, settled: [...(s.intent.settled ?? []), ...now], now: '', next: [], questionsOpen: 0 }
       }
+      if (stage === 'Charter' && s.sweep) s.sweep.approvedAt = null // the charter is put to the person again before Hunt
       s.stage = stage
       s.stageSince = now()
       s.approval = null // asked for the playback of this Brainstorm only
@@ -517,7 +522,7 @@ const commands = {
     if (flags.pr && !isSweep(run.state)) fail('stop --pr is for a sweep that opened its pull request; a build records it with lcw finish --pr. Nothing was changed.')
     change(run, `stopped${flags.pr ? `, pull request ${flags.pr}` : ''}`, (s) => {
       s.status = 'stopped'
-      if (flags.pr) s.pr = prOf(flags.pr)
+      if (flags.pr) s.pr = prOf(flags.pr, s.repoRoot)
     })
     out('stopped')
   },
@@ -536,7 +541,7 @@ const commands = {
       s.health = ''
       s.pausedReason = null
       s.finishedAt = now()
-      if (flags.pr) s.pr = prOf(flags.pr)
+      if (flags.pr) s.pr = prOf(flags.pr, s.repoRoot)
       else if (flags.branch) s.pr = { branch: flags.branch }
     })
     out(`finished ${run.state.id}`)
@@ -709,23 +714,38 @@ const commands = {
       return out(`wave ${next.n} on ${branch}`, `plan: ${dir}/plan.md`)
     }
     if (sub === 'shipped') {
+      if (s.stage !== 'Ship') fail(`A wave ships in Ship; this sweep is in ${s.stage}. Nothing was changed.`)
       const wave = runningWave(s) || fail('No wave is running. Nothing was changed.')
-      const pr = flags.pr === undefined ? null : Number(/^\d+$/.test(flags.pr) ? flags.pr : prOf(flags.pr).number) || fail(`--pr takes the pull request's number, not ${flags.pr}. Nothing was changed.`)
+      const pr = flags.pr === undefined ? null : prOf(flags.pr).number || fail(`--pr takes the pull request's number, not ${flags.pr}. Nothing was changed.`)
       const tip = git(s.worktree, 'rev-parse', `refs/heads/${wave.branch}`)
+      // every fix dropped or parked: nothing to land, so no pull request and nothing for the waves after it to wait on
+      const empty = Number(git(s.worktree, 'rev-list', '--count', `${s.branch}..${tip}`)) === 0
+      if (empty && pr) fail(`${wave.branch} has no commits, so there is no pull request to record. Nothing was changed.`)
       try { git(s.worktree, 'merge-base', '--is-ancestor', s.branch, tip) } catch { fail(`${s.branch} has commits ${wave.branch} does not, so it cannot fast-forward to the wave. Nothing was changed.`) }
       try { git(s.worktree, 'branch', '-f', s.branch, tip) } catch (e) { fail(`git could not move ${s.branch} to ${tip}: ${firstLine(e)}. Nothing was changed.`) }
       const fixed = s.requirements.filter((r) => r.status === 'pass').length
-      const note = `wave ${wave.n} shipped: ${s.branch} now at ${tip}; ${fixed} fixed, ${wave.dropped} dropped${pr ? `; PR #${pr}` : ''}`
+      const note = `wave ${wave.n} shipped${empty ? ' empty, with no commits' : ''}: ${s.branch} now at ${tip}; ${fixed} fixed, ${wave.dropped} dropped${pr ? `; PR #${pr}` : ''}`
       change(run, note, (st) => {
         const x = st.sweep.waves.find((y) => y.n === wave.n)
-        Object.assign(x, { status: 'shipped', pr, fixed })
+        Object.assign(x, { status: 'shipped', pr, fixed, ...(empty ? { empty: true } : {}) })
         st.sweep.fixed += fixed
         st.sweep.dropped += x.dropped
       })
       appendRunLedger({ ledger: `${waveDir(run.dir, wave.n)}/ledger.md` }, note) // the wave no longer runs, so change did not copy it there
       return out(note)
     }
-    fail('Usage: lcw wave add <fixes> ... | wave start | wave shipped [--pr <number>]')
+    if (sub === 'pr') {
+      const [n, ref] = words
+      if (words.length !== 2) fail('Usage: lcw wave pr <n> <number|url>')
+      const wave = w.waves.find((x) => x.n === wholeNumber(n, 'lcw wave pr')) || fail(`No wave ${n}. Nothing was changed.`)
+      if (wave.status !== 'shipped') fail(`Wave ${wave.n} is ${wave.status}; a pull request is recorded once it has shipped. Nothing was changed.`)
+      if (wave.empty) fail(`Wave ${wave.n} shipped with no commits, so it has no pull request. Nothing was changed.`)
+      if (wave.pr) fail(`Wave ${wave.n} has pull request #${wave.pr} already. Nothing was changed.`)
+      const pr = prOf(ref).number || fail(`A pull request is its number or its URL, not ${ref}. Nothing was changed.`)
+      change(run, `wave ${wave.n}: PR #${pr}`, () => { wave.pr = pr })
+      return out(`wave ${wave.n}: PR #${pr}`)
+    }
+    fail('Usage: lcw wave add <fixes> ... | wave start | wave shipped [--pr <number>] | wave pr <n> <number|url>')
   },
 
   merge() {
@@ -734,9 +754,10 @@ const commands = {
     const n = wholeNumber(rest[0], 'lcw merge')
     if (w.prs !== 'merged') fail(`The charter's pull request choice is ${PR_CHOICES[w.prs] ?? 'not made yet'}, not merged as it goes, so the sweep merges nothing. Nothing was changed.`)
     const wave = w.waves.find((x) => x.n === n) || fail(`No wave ${n}. Nothing was changed.`)
+    if (wave.empty) fail(`Wave ${n} shipped with no commits, so it has no pull request to merge. Nothing was changed.`)
     if (wave.status !== 'shipped' || !wave.pr) fail(`Wave ${n} is ${wave.status}${wave.pr ? '' : ' with no pull request'}; only a shipped wave's pull request is merged. Nothing was changed.`)
     if (wave.merged) fail(`Wave ${n}'s pull request #${wave.pr} is merged already. Nothing was changed.`)
-    const open = w.waves.filter((x) => x.n < n && !x.merged)
+    const open = w.waves.filter((x) => x.n < n && !x.merged && !x.empty) // an empty wave has nothing to land
     if (open.length) fail(`Wave ${open[0].n} is not merged yet; waves merge in order. Nothing was changed.`)
     const root = run.state.repoRoot
     const repo = githubRepo(root) || fail('lcw merge needs a GitHub remote named origin. Nothing was merged.')
@@ -752,12 +773,16 @@ const commands = {
     if (view.state !== 'MERGED') {
       // the next wave's pull request is opened on this wave's branch, and GitHub retargets it only when that branch is deleted
       if (view.baseRefName !== main) fail(`#${pr} is based on ${view.baseRefName}, not the default branch ${main}; retarget it to ${main} first (gh pr edit ${pr} -R ${repo} --base ${main}). Nothing was merged or recorded.`)
-      let state
+      let state, readied = false, back = ''
       try {
-        if (view.isDraft) gh(root, 'pr', 'ready', pr, '-R', repo)
-        gh(root, 'pr', 'merge', pr, '-R', repo, '--merge')
+        if (view.isDraft) { gh(root, 'pr', 'ready', pr, '-R', repo); readied = true }
+        try { gh(root, 'pr', 'merge', pr, '-R', repo, '--merge') } catch (e) {
+          // a refused merge leaves it as it was; a queued one exits 0 and is not undone
+          if (readied) try { gh(root, 'pr', 'ready', pr, '-R', repo, '--undo'); back = ' It is a draft again.' } catch {}
+          throw e
+        }
         state = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state')).state
-      } catch (e) { fail(`gh could not merge #${pr}: ${firstLine(e)}. Nothing was recorded.`) }
+      } catch (e) { fail(`gh could not merge #${pr}: ${firstLine(e)}. Nothing was recorded.${back}`) }
       // a merge queue or required checks: gh returns once the merge is queued, and deleting the branch now would close it unmerged
       if (state !== 'MERGED') fail(`#${pr} is not merged yet: GitHub shows it ${state}, queued or waiting on checks. Nothing was recorded and its branch is kept; run lcw merge ${n} again once it is merged.`)
     }
@@ -773,7 +798,13 @@ const commands = {
   },
 }
 
-const prOf = (url) => ({ number: Number(/\/pull\/(\d+)/.exec(url)?.[1]) || null, url })
+/** A pull request given as a number or a URL; a bare number gets its URL when the repository's remote is on GitHub. */
+function prOf(text, root) {
+  const bare = /^\d+$/.test(text)
+  const number = Number(bare ? text : /\/pull\/(\d+)/.exec(text)?.[1]) || null
+  const repo = bare && root ? githubRepo(root) : null
+  return { number, url: bare ? (repo ? `https://github.com/${repo}/pull/${text}` : null) : text }
+}
 
 /** Only the charter's own settings can be set in a sweep, each within its range; the rest move with lcw hunt and lcw wave. */
 function checkSweepSetting(s, key, value) {
@@ -793,7 +824,7 @@ function sweepStatus(run) {
   const wave = runningWave(run.state)
   return [
     `pull requests: ${PR_CHOICES[w.prs] ?? 'not chosen yet'}  round: ${w.round}  fixed: ${w.fixed}  parked: ${w.parked}  dropped: ${w.dropped}`,
-    'waves:', ...(w.waves.length ? w.waves.map((x) => `  ${x.n} [${x.status}] ${x.fixes} fixes  branch: ${x.branch ?? 'none yet'}  ${x.pr ? `PR #${x.pr} ${x.merged ? 'merged' : 'not merged'}` : 'no PR'}`) : ['  none queued']),
+    'waves:', ...(w.waves.length ? w.waves.map((x) => `  ${x.n} [${x.status}] ${x.fixes} fixes  branch: ${x.branch ?? 'none yet'}  ${x.pr ? `PR #${x.pr} ${x.merged ? 'merged' : 'not merged'}` : x.empty ? 'empty, no PR' : 'no PR'}`) : ['  none queued']),
     `folder: ${run.dir}`, `charter: ${run.dir}/charter.md`, `findings: ${run.dir}/findings.md`, `parked: ${run.dir}/parked.md`, `ledger: ${run.paths.ledger}`,
     ...(wave ? [`plan: ${waveDir(run.dir, wave.n)}/plan.md`] : []),
   ]
@@ -859,6 +890,14 @@ function listItem(cmd, field, statuses, make) {
     const item = find(list, 'id', id)
     change(run, `req ${id} renamed: ${name}`, () => { item.name = name })
     return out(`${id} renamed`)
+  }
+  if (cmd === 'req' && status === 'park') {
+    if (!isSweep(run.state)) fail(`req park is for a sweep; run ${run.state.id} is a build. Nothing was changed.`)
+    const wave = runningWave(run.state) || fail('No wave is running, so there is no fix to park. Nothing was changed.')
+    const item = find(list, 'id', id)
+    if (item.status === 'parked') return out(`${id} is parked already`)
+    change(run, `req ${id} parked in wave ${wave.n}: ${item.name}`, (s) => { item.status = 'parked'; s.sweep.parked++ })
+    return out(`${id} parked`)
   }
   if (cmd === 'req' && status === 'drop') {
     const item = find(list, 'id', id)

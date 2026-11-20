@@ -107,9 +107,14 @@ try {
     const next = fs.existsSync(run.paths.ledger)
       ? fs.readFileSync(run.paths.ledger, 'utf8').split('\n').reverse().find((l) => l.includes(' checkpoint: '))?.split(' checkpoint: ')[1]
       : null
+    const paused = s.status === 'paused'
+    const byYou = s.pausedReason !== 'mark'
     lines.push(
-      `Unfinished LCW run: ${s.id} (${s.title}). Stage ${s.stage}, status ${s.status}. Folder ${run.dir}.`,
-      `Next step: ${next || 'see the ledger'}. Load the lcw:lcw skill and carry on (run "${cli} status" first).`,
+      `Unfinished LCW run: ${s.id} (${s.title}). Stage ${s.stage}, status ${s.status}${paused ? ` (${byYou ? 'paused by the user' : 'paused at the usage mark'})` : ''}. Folder ${run.dir}.`,
+      `Next step: ${next || 'see the ledger'}.`,
+      !paused ? `Load the lcw:lcw skill and carry on (run "${cli} status" first).`
+        : byYou ? `The user paused it, so it stays paused until they say carry on: do not resume it yourself. Load the lcw:lcw skill when they do.`
+          : `Load the lcw:lcw skill. It resumes once the limit has reset or the user raises the mark: check "${cli} usage", then run "${cli} resume" and carry on.`,
     )
   } else if (listRuns(runsDir(home(), repoKey(mainCheckout(cwd)))).length) {
     lines.push(`This repository has past LCW runs: "${cli} runs" lists them.`)
