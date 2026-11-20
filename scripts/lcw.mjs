@@ -744,8 +744,10 @@ const commands = {
     let view, main
     try {
       view = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state,isDraft,baseRefName'))
-      if (view.state !== 'MERGED') main = JSON.parse(gh(root, 'repo', 'view', repo, '--json', 'defaultBranchRef')).defaultBranchRef.name
+      main = JSON.parse(gh(root, 'repo', 'view', repo, '--json', 'defaultBranchRef')).defaultBranchRef.name
     } catch (e) { fail(`gh could not read #${pr}: ${firstLine(e)}. Nothing was recorded.`) }
+    // merged into an earlier wave's branch whose delete failed, so GitHub never retargeted it
+    if (view.state === 'MERGED' && view.baseRefName !== main) fail(`#${pr} was merged into ${view.baseRefName}, not the default branch ${main}, so its changes have not landed; it needs you. Nothing was recorded and its branch is kept.`)
     // merged earlier but never recorded: go on to the branch, do not merge twice
     if (view.state !== 'MERGED') {
       // the next wave's pull request is opened on this wave's branch, and GitHub retargets it only when that branch is deleted

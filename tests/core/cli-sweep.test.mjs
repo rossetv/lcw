@@ -322,6 +322,18 @@ test('a pull request still based on a wave branch is refused, with no write to G
   assert.equal(t.state().sweep.waves[1].merged, false)
 })
 
+test('a pull request GitHub shows merged into a wave branch is not recorded, and its branch is kept', () => {
+  const t = shippedWaves()
+  t.edit((s) => { s.sweep.waves[0].merged = true })
+  const gh = fakeGh({ GH_STATE: 'MERGED', GH_BASE: 'lcw/tidy-wave-1' })
+  const r = lcw(['merge', '2'], { ...t.o, env: gh.env })
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /lcw\/tidy-wave-1/)
+  assert.match(r.out, /\bmain\b/)
+  assert.ok(gh.calls().length > 0 && gh.calls().every((c) => c.startsWith('pr view') || c.startsWith('repo view')), gh.calls().join('\n'))
+  assert.equal(t.state().sweep.waves[1].merged, false)
+})
+
 test('merge deletes the remote wave branch through the api and leaves the local branch, its tracking ref and the worktree alone', () => {
   const t = shippedWaves()
   const wt = t.cli('worktree').out.trim()
