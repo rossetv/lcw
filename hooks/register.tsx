@@ -429,7 +429,7 @@ async function weekly($: EngineInterface, now: number) {
   if (!(await $.prompt.submit({ text }).then(() => true).catch(() => false))) S.weeklyText = text
 }
 
-// LCW's status rows and attribution off, by themselves (R21, R22), on a watched session's first draw.
+// LCW's status rows and attribution off, by themselves, on a watched session's first draw.
 async function autoSetup($: EngineInterface) {
   const r = await $.process.run(['node', `${$.plugin.root}/scripts/setup.mjs`, 'auto']).catch(() => null)
   if (r?.exitCode !== 0) return
