@@ -9,7 +9,7 @@ Take the milestones in the order plan.md gives them. A milestone's tasks all run
 1. `lcw task <task> running`.
 2. Launch the worker agent with the model and effort chosen for the task (you may change them now), a plain description of the task, and no name. Do not pass `isolation` to the Agent tool. The worker works in the run's worktree, which is its working directory, so it needs no path to change into.
 
-Workers share the run's worktree, and a milestone's tasks own separate files; that is what lets them run together. The next milestone starts as soon as this one's tasks are all done or parked: its check runs alongside (see Milestones). Build never runs more than one milestone ahead of a clean check: milestone 3 waits until milestone 1's check is clean, its fixes included.
+Workers share the run's worktree, and a milestone's tasks own separate files; that is what lets them run together. The next milestone starts as soon as this one's tasks are all done, parked or dropped: its check runs alongside (see Milestones). Build never runs more than one milestone ahead of a clean check: milestone 3 waits until milestone 1's check is clean, its fixes included.
 
 A worker never saw the brainstorm, so its brief is all it knows of the intent. Give it:
 
@@ -45,7 +45,7 @@ Ask the human only as SKILL.md allows. Only the tasks that depend on the answer 
 
 ## Milestones
 
-When a milestone's tasks are all done or parked, record where it ends: `lcw ledger "milestone <n> ends at <git rev-parse HEAD in the run's worktree>"`. Then, in one go, launch its check and the next milestone, as Launching a milestone says. The check does not hold the next milestone back; only the check before it does, until it is clean.
+When a milestone's tasks are all done, parked or dropped, record where it ends: `lcw ledger "milestone <n> ends at <git rev-parse HEAD in the run's worktree>"`. Then, in one go, launch its check and the next milestone, as Launching a milestone says. The check does not hold the next milestone back; only the check before it does, until it is clean.
 
 The check is the milestone-reviewer agent, the blind correctness review of the milestone's code, on the model plan.md gives that milestone (effort high). Give it the milestone's tasks with the files each one owns, the commit the milestone started from and the one it ended at, its tasks' own test commands from plan.md, never the whole suites, how plan.md makes a throwaway worktree ready to run them, and nothing about the spec or the run's decisions. Fixes to the milestone before land in the same worktree while this one builds, so they sit between its two commits: name those fix commits by their ids as ones to leave out, since they are checked on their own. It reads the milestone's commits for what would go wrong, runs those tests at the end commit in a throwaway worktree, since the run's worktree has moved on, checks that each task kept to its own files, and looks for what will not last and for anything over-built. You do not repeat its work.
 
@@ -59,7 +59,7 @@ When `lcw usage` says `at the mark`, or the launch hook refuses an agent: launch
 
 ## Done
 
-When every task is done or parked and every milestone's check is clean:
+When every task is done, parked or dropped and every milestone's check is clean:
 
 ```
 lcw stage Review
@@ -78,5 +78,9 @@ A wave builds as above, its areas in parallel, from the wave's plan, with charte
 - A security fix in a public repository commits no test and no other proof of the hole; the proof stays in the sweep's records. A fix findings.md marks "no proof in the repository" is briefed so: it commits no test or other proof of the hole, and keeps any proof outside the repository.
 
 When a worker reports a dropped fix, it has recorded the drop itself: run none of those commands again. Move the finding to Drop in findings.md with the worker's reason. It is never passed to a more capable model to try again.
+
+When a worker reports a fix it skipped because it needs a no-go zone or a kind of change the charter does not allow, run `lcw req <F id> park` (and `lcw task <id> parked` if all the task's fixes were skipped), move the finding to Park in findings.md with the reason, and add it to parked.md in plain words: where it is, why it was parked, and what the human decides. It is never retried or moved up a tier, and Review does not check it.
+
+Name each fix findings.md marks "no proof in the repository" in the brief of every milestone check and of any X task, and say it has no test by design.
 
 Every milestone of a wave gets the same check as a Build's, but the fix tasks it adds are named X1, X2 and on, since F ids belong to the wave's fixes. When the wave is done, checkpoint as Done says, naming the wave: `lcw checkpoint "Review: read stages/review.md and launch wave <n>'s reviewers, ..."`.

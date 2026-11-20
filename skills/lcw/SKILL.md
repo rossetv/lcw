@@ -58,11 +58,11 @@ Only you consult the advisor. Agents never do, and their own files tell them so:
 
 ## Starting, or carrying on
 
-If the session-start context named a run for this session, or you were just compacted, or the session restarted: run `lcw status`, read the stage file for the stage it shows, and carry on from its next step and the ledger. For a sweep, `lcw status` also shows the charter's pull request choice, the round, each wave (shipped, running or queued) and the totals; with charter.md, that is all you need to carry on. Once the run has a worktree (`lcw status` shows it), make sure you are working in it; if not, call EnterWorktree with its path first. Do not start again and do not ask the human what was happening.
+If the session-start context named a run for this session, or you were just compacted, or the session restarted: run `lcw status`, read the stage file for the stage it shows, and carry on from its next step and the ledger. For a sweep, `lcw status` also shows the charter's pull request choice, the round, each wave (shipped, running or queued) and the totals; with charter.md, that is all you need to carry on. Once the run has a worktree (`lcw status` shows it), make sure you are working in it; if not, call EnterWorktree with its path first. If `lcw status` shows the run paused by the human, it stays paused until they say carry on: do not resume it yourself. Do not start again and do not ask the human what was happening.
 
 Otherwise start a run: `lcw start <name> --title "<one line>"` for a Build, `lcw start <name> --title "<one line>" --shape sweep` for a Sweep, where name is a short kebab-case slug of the change (it becomes the branch `lcw/<name>`). It prints the run folder, the paths of its records (below) and the artifacts folder.
 
-One session drives one run, of either shape. A sweep lives in this open session for all its waves; nothing carries it on in the background. For a second run at the same time, a Build or a Sweep, tell the human to open another session and ask there. A new session in the same repository takes a run over only when the person presses Resume on LCW's unfinished-run box (`lcw take <runId>`); then carry on from the run's next step in its worktree, as above.
+One session drives one run, of either shape, and `lcw start` refuses while the session drives an unfinished run. A sweep lives in this open session for all its waves; nothing carries it on in the background. For a second run at the same time, a Build or a Sweep, tell the human to open another session and ask there. A new session in the same repository takes a run over only when the person presses Resume on LCW's unfinished-run box (`lcw take <runId>`); then carry on from the run's next step in its worktree, as above.
 
 ## The stages
 
@@ -75,7 +75,7 @@ A Build: Brainstorm, Spec, Plan, Build, Review, Ship. A Sweep: Charter, Hunt, th
 | Charter | the human approves the charter: the one approval a Sweep needs |
 | Hunt | every finding is sorted into Fix, Park or Drop and the fixes are queued as waves; or nothing is left to fix, and the sweep finishes as the charter's stop line says |
 | Plan | plan.md is written, tasks are recorded and you are in the run's worktree |
-| Build | every task is done or parked and the run branch works |
+| Build | every task is done, parked or dropped and the run branch works |
 | Review | a review round leaves nothing you decide to change |
 | Ship | the draft pull request is open |
 
