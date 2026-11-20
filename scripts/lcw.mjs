@@ -742,12 +742,18 @@ const commands = {
     const repo = githubRepo(root) || fail('lcw merge needs a GitHub remote named origin. Nothing was merged.')
     const pr = String(wave.pr)
     try {
-      if (gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'isDraft', '--jq', '.isDraft') === 'true') gh(root, 'pr', 'ready', pr, '-R', repo)
-      gh(root, 'pr', 'merge', pr, '-R', repo, '--merge')
+      // merged earlier but never recorded: go on to the branch, do not merge twice
+      const view = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state,isDraft'))
+      if (view.state !== 'MERGED') {
+        if (view.isDraft) gh(root, 'pr', 'ready', pr, '-R', repo)
+        gh(root, 'pr', 'merge', pr, '-R', repo, '--merge')
+      }
     } catch (e) { fail(`gh could not merge #${pr}: ${firstLine(e)}. Nothing was recorded.`) }
-    // gh's --delete-branch would also touch the wave's local branch, which is checked out in the sweep's worktree
+    // gh's --delete-branch and git's push --delete would touch local refs, and the wave's branch is checked out in the sweep's worktree
     let left = ''
-    try { git(run.state.worktree || root, 'push', '-q', 'origin', '--delete', wave.branch) } catch (e) { left = `, its remote branch ${wave.branch} is left (${firstLine(e)})` }
+    try { gh(root, 'api', '-X', 'DELETE', `repos/${repo}/git/refs/heads/${wave.branch}`) } catch (e) {
+      if (!/Reference does not exist|HTTP 404/.test(String(e.stderr || e.message))) left = `, its remote branch ${wave.branch} is left (${firstLine(e)})`
+    }
     change(run, `wave ${n} merged: PR #${pr} with a merge commit${left || ', its remote branch deleted'}`, (st) => {
       st.sweep.waves.find((x) => x.n === n).merged = true
     })
