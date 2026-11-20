@@ -79,11 +79,11 @@ Before you report, settle the pull requests as the charter's PRs line says:
 
 - **merged as it goes**: this is the last pass, with no next one to retry on, so it waits where Ship's passes stop. Go through the waves not yet merged, in order, and for each:
   1. If `lcw merge` refused it because its base is not the default branch, run the `gh pr edit` command it printed; where the criteria name GitHub's checks, `gh pr close <number>` and `gh pr reopen <number>` so they run. Close and reopen the same way after a merge moves the next pull request onto the default branch.
-  2. Where the criteria name GitHub's checks, wait for those still running: `gh pr checks <number> -R <repo> --watch`.
+  2. Where the criteria name GitHub's checks, wait for those still running: `gh pr checks <number> -R <repo> --watch`. Right after a retarget or a close and reopen, GitHub may not have registered the new checks yet and the command exits with "no checks reported": that is not a failure, so wait until the checks appear, then watch them.
   3. If its merge is queued, wait until `gh pr view <number> -R <repo> --json state` shows it merged, or GitHub takes it out of the queue.
-  4. If it meets the criteria, run `lcw merge <wave>` again.
+  4. If it meets the criteria, run `lcw merge <wave>` again. If that is refused for the first time in this pass because the base is not the default branch (it prints a `gh pr edit` command) or because the merge is queued ("is not merged yet ... queued or waiting on checks"), do step 1 or step 3 for that same wave, then step 4 once more.
 
-  The first wave that still falls short of the criteria, or that `lcw merge` says was merged into another branch, is left open, and so is every wave after it: `lcw ledger "wave <n> left open: <why>"` for each, and the report below names them with the reason. Then `lcw finish`.
+  Only after that retry, the first wave that still falls short of the criteria, or that `lcw merge` says was merged into another branch, is left open, and so is every wave after it: `lcw ledger "wave <n> left open: <why>"` for each, and the report below names them with the reason. Then `lcw finish`.
 - **one at the end**: if any wave shipped, push the sweep's branch (`git push -u origin lcw/<name>`), load the `lcw:pull-request` skill and write the one draft pull request for everything as it says, open it against the default branch (`gh pr create --draft --head lcw/<name> --base <default branch> --title "<title>" --body-file <file>`), and `lcw finish --pr <url>`. With no remote or no way to push, `lcw finish --branch lcw/<name>`, and put the text in the conversation, as stages/ship.md says. If no wave shipped, there is nothing to open: `lcw finish`.
 - **stacked**: `lcw finish`.
 
