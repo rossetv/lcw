@@ -62,8 +62,6 @@
   .hd{fill:none;stroke-linecap:round;stroke-linejoin:round}
   .shape{fill:#1f2328;font-weight:650;font-size:26px;letter-spacing:-0.01em}
   .bar{fill:#1f2328}
-  .tg{fill:#fff8c5;stroke:#d4a72c}
-  .tgt{fill:#7d4e00;font-size:12px;font-weight:600}
   .key{fill:#59636e;font-size:12.5px;font-weight:600}
   .fa{fill:#fbeaf5;stroke:#d889bf}
   .fat{fill:#a8388c;font-size:10.5px;font-weight:600}
@@ -123,8 +121,6 @@
     .yc{fill:#1f6feb}
   
   .shape,.bar{fill:#e6edf3}
-  .tg{fill:#2a2110;stroke:#8a6d1f}
-  .tgt{fill:#e3b341}
   .key{fill:#9198a1}
   .fa{fill:#2b1626;stroke:#8a4a78}
   .fat{fill:#ee9bd6}
@@ -160,8 +156,6 @@
 <text class="fact" x="120" y="343" style="font-weight:600">You get one draft pull request.</text>
 <text class="cap" x="120" y="366">on the status bar: <tspan class="mono bar">◆ LCW Build · shared-lists</tspan></text>
 <text class="shape" x="950" y="296">Sweep</text>
-<rect class="tg" x="1042" y="277" width="76" height="22" rx="11"/>
-<text class="tgt" x="1080" y="292" text-anchor="middle">proposed</text>
 <text class="fact" x="950" y="322">An open goal, such as “fix all the backlog” or “any security holes”.</text>
 <text class="fact" x="950" y="343" style="font-weight:600">You get its fixes wave by wave, in pull requests as your charter says.</text>
 <text class="cap" x="950" y="366">on the status bar: <tspan class="mono bar">◆ LCW Sweep · backlog-sweep</tspan></text>
