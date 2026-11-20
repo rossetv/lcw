@@ -75,8 +75,8 @@ A wave builds as above, its areas in parallel, from the wave's plan, with charte
 - A fix to behaviour starts as a failing test written from its recipe, and is done when that test passes.
 - If it cannot make the test fail, it leaves that fix unbuilt and reports why.
 - A fix with nothing to test (a comment, a document, a pinned version, a setting) has no test.
-- A security fix in a public repository commits no test and no other proof of the hole; the proof stays in the sweep's records.
+- A security fix in a public repository commits no test and no other proof of the hole; the proof stays in the sweep's records. A fix findings.md marks "no proof in the repository" is briefed so: it commits no test or other proof of the hole, and keeps any proof outside the repository.
 
 When a worker cannot make a fix's test fail, the finding is dropped: `lcw req <F id> drop`, `lcw ledger "dropped <F id>: <the reason>"`, and move it to Drop in findings.md with that reason. It is never passed to a more capable model to try again. A task whose fixes are all dropped is `lcw task <id> dropped`.
 
-Every milestone of a wave gets the same check as a Build's. When the wave is done, checkpoint as Done says, naming the wave: `lcw checkpoint "Review: read stages/review.md and launch wave <n>'s reviewers, ..."`.
+Every milestone of a wave gets the same check as a Build's, but the fix tasks it adds are named X1, X2 and on, since F ids belong to the wave's fixes. When the wave is done, checkpoint as Done says, naming the wave: `lcw checkpoint "Review: read stages/review.md and launch wave <n>'s reviewers, ..."`.

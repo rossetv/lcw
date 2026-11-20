@@ -36,9 +36,11 @@ Leave the branch, `lcw finish --branch lcw/<name>`, and tell the human the branc
 
 Once the pull request is open, this machine holds nothing it needs: the branch is on GitHub. Clean up what the run left behind, and keep the run folder under ~/.lcw, since later runs read it.
 
+In a sweep this part runs once, when the sweep ends, never after a wave. Step 2 compares HEAD with the remote branch it was pushed to: `lcw/<name>` only in one at the end, and in stacked or merged as it goes, where `lcw/<name>` is never pushed, the last wave's branch `lcw/<name>-wave-<n>` and its remote. Step 3 removes every local wave branch too.
+
 1. Leave the worktree: call ExitWorktree with action "keep". The session is back in the main checkout, where a new run can start.
 2. Check that nothing would be lost. `git -C <worktree> status --porcelain --untracked-files=all` must print nothing, `git -C <worktree> ls-files --others --ignored --exclude-standard --directory` must print nothing (`git worktree remove` deletes ignored files, such as a `.env`, without asking), and `git -C <worktree> rev-parse HEAD` must equal `git rev-parse origin/lcw/<name>`. If any check fails, remove nothing, and tell the human what is left in the worktree.
-3. Remove the worktree with `git worktree remove <worktree>`, then the local branch with `git branch -D lcw/<name>`. The `-D` is needed because the branch is not in the local default branch yet; the pushed copy is the one that counts.
+3. Remove the worktree with `git worktree remove <worktree>`, then the local branch with `git branch -D lcw/<name>` (in a sweep, and each `lcw/<name>-wave-<n>`). The `-D` is needed because the branch is not in the local default branch yet; the pushed copy is the one that counts.
 4. Delete the temporary files the run made outside the repository, such as its scratchpad files and the pull request's body file.
 
 Tell the human it is cleaned up, and that `gh pr checkout <number>` brings the branch back if they want to look at it locally.
@@ -61,10 +63,10 @@ gh pr create --draft --head lcw/<name>-wave-<n> --base <base> --title "<title>" 
 lcw wave shipped --pr <number>
 ```
 
-Between the push and the pull request, check that `git rev-parse HEAD` equals `git rev-parse origin/lcw/<name>-wave-<n>`. The base is the previous wave's branch while its pull request is unmerged (`gh pr view <number> --json state`), else the default branch.
+Between the push and the pull request, check (here and anywhere else this file compares HEAD with a remote branch, in a sweep) that `git rev-parse HEAD` equals `git rev-parse origin/lcw/<name>-wave-<n>`. The base is the previous wave's branch while its pull request is unmerged (`gh pr view <number> --json state`), else the default branch.
 
 **Merged as it goes**, then: go through the waves not yet merged, in order, and merge each with `lcw merge <wave>` only when it meets the charter's criteria. Where the criteria name GitHub's checks, read them (`gh pr checks <number>`) and never merge before they pass, but never wait for them: a wave whose checks are still running, or not yet reported, stops the pass, and you look again, in order, each time a later wave ships and when the sweep ends. A wave that falls short of the criteria, failed checks included, is left open, and so is every wave after it, for the rest of the sweep: `lcw ledger "wave <n> left open: <why>"`. A merge moves the next pull request onto the default branch, which starts none of its checks: where the criteria name checks, `gh pr close <number>` and `gh pr reopen <number>` so they run. In every other case LCW does not read or act on CI.
 
-**One at the end**, or no GitHub remote: no push and no pull request; `lcw wave shipped`. With no remote, note it in the ledger; the end of the sweep tells the human.
+**One at the end**, or no GitHub remote: no push and no pull request, and no wave branch is pushed until the sweep ends; `lcw wave shipped`. With no remote, note it in the ledger; the end of the sweep tells the human.
 
-Then, if the charter's earlier end is reached (a number of waves, a share of the week from `lcw usage`), end the sweep as stages/hunt.md says under "Ending the sweep". Otherwise, if `lcw status` shows another wave queued, `lcw stage Plan` and `lcw checkpoint "Plan: read stages/plan.md and plan wave <n+1>"`; if none, `lcw stage Hunt` and `lcw checkpoint "Hunt: read stages/hunt.md and start round <r+1>"`. End your turn.
+Then, if the charter's earlier end is reached (a number of waves, a share of the week from `lcw usage`), go to stages/hunt.md and do "Ending the sweep"; it ends with "Afterwards: clean up" below. Otherwise, if `lcw status` shows another wave queued, `lcw stage Plan` and `lcw checkpoint "Plan: read stages/plan.md and plan wave <n+1>"`; if none, `lcw stage Hunt` and `lcw checkpoint "Hunt: read stages/hunt.md and start round <r+1>"`. End your turn.

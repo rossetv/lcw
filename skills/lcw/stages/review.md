@@ -41,4 +41,6 @@ and end your turn. Ship starts on a fresh context.
 
 A wave is reviewed once, as a whole, as above. Each reviewer gets charter.md, its fixes with their F ids and recipes in place of spec.md and requirement names, and the commit the wave started from in place of the run's (`lcw status` prints the wave's base as base): it reads only this wave's changes, never an earlier wave's. In a later round it gets the commit the round's fixes started from, as above. Each reviewer checks each of its fixes against the recipe: its test shows what the recipe describes and now passes, and for a fix with no test, the item is no longer true. The reviewer who runs the suites also reads the wave's whole change against charter.md: nothing in a no-go zone, no kind of change it does not allow, no anti-goal.
 
+The fix tasks you add to a wave are named X1, X2 and on (`lcw task add X1 "<fix>" ...`), never F ids, which belong to the wave's fixes.
+
 Your final check judges the wave against charter.md and the wave's findings in place of brainstorm.md. When the review passes, checkpoint as above, naming the wave: `lcw checkpoint "Ship: read stages/ship.md and ship wave <n>"`.
