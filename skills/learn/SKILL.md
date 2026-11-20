@@ -10,18 +10,20 @@ The person wants to understand LCW. Talk them through it: a short step, a diagra
 
 ## Facts, not guesses
 
-Teach LCW as it really works. From this skill's base directory, read `../lcw/SKILL.md` before your first reply, and read a stage's file in `../lcw/stages/` (`brainstorm.md`, `spec.md`, `plan.md`, `build.md`, `review.md`, `ship.md`) before you explain that stage or answer a question about it. The README beside the plugin (`../../README.md`) says what the card and the status rows show; the description of its picture sums up a run. If those do not answer a question, say you are not sure rather than guess. Do not read the files out to the person: pick what they need.
+Teach LCW as it really works. From this skill's base directory, read `../lcw/SKILL.md` before your first reply, and read a stage's file in `../lcw/stages/` (`brainstorm.md`, `spec.md`, `plan.md`, `build.md`, `review.md`, `ship.md` for a Build; `charter.md` and `hunt.md` for a Sweep) before you explain that stage or answer a question about it. The README beside the plugin (`../../README.md`) says what the card and the status rows show; the description of its picture sums up a run. If those do not answer a question, say you are not sure rather than guess. Do not read the files out to the person: pick what they need.
 
 ## The steps, in order
 
-1. **A run at a glance.** The stages and the one approval: draw the flow with the part done with the person and the part LCW does on its own.
+1. **The two shapes.** LCW has two: a Build for a defined large change, a Sweep for an open goal such as "fix all the backlog items". Claude picks from what the person asks; naming a shape wins. Draw both flows, with the part done with the person and the part LCW does on its own.
 2. **The card and the status rows.** What each shows and what the person can do with them, such as clicking an agent to talk to it.
 3. **Build.** Workers, milestones and reviewers: draw who does what.
 4. **Review and Ship.** How the work is checked against what was agreed, and what the draft pull request holds.
-5. **Pause, carry on, stop.** What the person can say at any time, and how a question for them shows.
-6. **The usage mark.** Where a run stops starting agents, how the person raises it, and when it carries on by itself.
+5. **Charter (a Sweep).** The rules agreed line by line with the person, and the one approval, typed as a reply: goals, non-goals, anti-goals, no-go zones, kinds of change, proof, what to park, when to stop, wave size, pull requests.
+6. **Hunt and waves (a Sweep).** Probes go to every area and bring back a recipe for each problem; each is sorted to Fix, Park (only the person can decide) or Drop (with the reason); fixes become waves, each run through Build's Plan, Build, Review and Ship, one at a time; a new round hunts again only where there were changes, until one finds nothing to fix. Say how the pull requests go as the charter chose: stacked, merged as it goes, or one at the end.
+7. **Pause, carry on, stop.** What the person can say at any time, and how a question for them shows.
+8. **The usage mark.** Where a run stops starting agents, how the person raises it, and when it carries on by itself.
 
-The first reply is step 1. After that go where the person leads: if they ask about Build, explain Build, then offer the next step. Leave out a step they have already understood.
+The first reply is step 1. After that go where the person leads: if they ask about Build or Sweep, explain that shape, then offer the next step. Leave out a step they have already understood.
 
 ## One step per turn
 
@@ -54,11 +56,15 @@ Next is Review, or ask me anything about Build.
 - Draw with box-drawing characters and plain arrows only: `─ │ ┌ ┐ └ ┘ ├ ┤ ╭ ╮ ╰ ╯ ─▶`. No emoji, no Powerline or Nerd Font glyphs, no colour codes: not every terminal draws them.
 - Real names in the boxes: Brainstorm, worker, milestone reviewer, draft PR. A made-up example only where the run gives none, and short.
 
-The look to aim for, for steps 1 and 3:
+The look to aim for, for steps 1, 3 and 6:
 
 ```
-you ─▶ Brainstorm ─▶ Spec ─▶ Plan ─▶ Build ─▶ Review ─▶ Ship ─▶ draft PR
-       ╰ with you ╯  ╰──────────────── on its own ─────────────╯
+Build  you ─▶ Brainstorm ─▶ Spec ─▶ Plan ─▶ Build ─▶ Review ─▶ Ship ─▶ draft PR
+              ╰ with you ╯  ╰──────────────── on its own ─────────────╯
+
+Sweep  you ─▶ Charter ─▶ Hunt ─▶ Plan ─▶ Build ─▶ Review ─▶ Ship ─▶ draft PRs
+              ╰ you ╯     ▲                                  │
+                          └──── next wave, or hunt again ────┘
 ```
 
 ```
@@ -66,4 +72,10 @@ Claude (plans, decides, never codes)
   ├─▶ worker  T1  date filters   ┐
   ├─▶ worker  T2  CSV order      ├─▶ milestone reviewer ─▶ fixes? ─▶ next
   └─▶ worker  T3  download       ┘
+```
+
+```
+areas ─▶ probes ─▶ findings ─┬─▶ Fix  ─▶ waves
+                             ├─▶ Park ─▶ for you
+                             └─▶ Drop ─▶ with a reason
 ```
