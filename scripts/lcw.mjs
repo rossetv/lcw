@@ -903,8 +903,8 @@ function listItem(cmd, field, statuses, make) {
   }
   if (cmd === 'req' && status === 'drop') {
     const item = find(list, 'id', id)
-    if (item.status === 'parked') fail(`${id} is parked for the person and stays parked; it is neither dropped nor fixed. Nothing was changed.`)
     change(run, `req ${id} dropped: ${item.name}`, (s) => {
+      if (item.status === 'parked') s.sweep.parked--
       s.requirements = s.requirements.filter((x) => x !== item)
       const wave = runningWave(s)
       if (wave) wave.dropped++

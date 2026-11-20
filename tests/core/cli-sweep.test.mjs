@@ -594,6 +594,7 @@ test('start is refused while this session drives an unfinished run of either sha
   const again = t.cli('start', 'second', '--title', 'Second')
   assert.equal(again.code, 1)
   assert.ok(again.out.includes(t.state().id) && /another session/.test(again.out), again.out)
+  assert.ok(!/lcw stop/.test(again.out), again.out)
   assert.equal(lcw(['runs'], t.o).out.trim().split('\n').length, 1)
   assert.equal(lcw(['start', 'other', '--title', 'Other'], { ...t.o, session: 's2' }).code, 0, 'another session is free to start')
   t.cli('finish')
@@ -619,19 +620,21 @@ test('finish and stop take a pull request as a bare number or a URL', () => {
   assert.equal(readJson(`${dir2}/state.json`).pr.number, 11)
 })
 
-test('a parked fix cannot also be passed, failed, reset or dropped, and parking it again is harmless', () => {
+test('a parked fix cannot also be passed, failed or reset, it can be dropped once, and parking it again is harmless', () => {
   const t = hunting()
   t.cli('wave', 'add', '1')
   t.cli('wave', 'start')
   t.cli('req', 'add', 'F1', 'fix one')
   t.cli('req', 'F1', 'park')
-  for (const s of ['pass', 'failing', 'todo', 'drop']) {
+  for (const s of ['pass', 'failing', 'todo']) {
     const r = t.cli('req', 'F1', s)
     assert.equal(r.code, 1, s)
     assert.match(r.out, /parked/)
   }
   assert.equal(t.cli('req', 'F1', 'park').code, 0)
   assert.deepEqual([t.state().requirements[0].status, t.state().sweep.parked, t.state().sweep.waves[0].dropped], ['parked', 1, 0])
+  assert.equal(t.cli('req', 'F1', 'drop').code, 0)
+  assert.deepEqual([t.state().requirements.length, t.state().sweep.parked, t.state().sweep.waves[0].dropped], [0, 0, 1])
 })
 
 test('a merge GitHub refuses says so when the pull request could not be put back to draft', () => {
@@ -639,14 +642,6 @@ test('a merge GitHub refuses says so when the pull request could not be put back
   const r = lcw(['merge', '1'], { ...t.o, env: fakeGh({ GH_FAIL: 'pr merge', GH_UNDO_FAIL: '1' }).env })
   assert.equal(r.code, 1)
   assert.match(r.out, /still marked ready/)
-})
-
-test('start inside a run this session drives does not invite stopping it', () => {
-  const t = sweep()
-  const r = t.cli('start', 'other', '--title', 'Other')
-  assert.equal(r.code, 1)
-  assert.match(r.out, /another session/)
-  assert.ok(!/lcw stop/.test(r.out), r.out)
 })
 
 test('stage Charter in Charter changes nothing, so an approval already asked stays', () => {

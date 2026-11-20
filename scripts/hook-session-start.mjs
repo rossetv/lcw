@@ -114,7 +114,7 @@ try {
       `Next step: ${next || 'see the ledger'}.`,
       !paused ? `Load the lcw:lcw skill and carry on (run "${cli} status" first).`
         : byYou ? `The user paused it, so it stays paused until they say carry on: do not resume it yourself. Load the lcw:lcw skill when they do.`
-          : `Load the lcw:lcw skill. It resumes once the limit has reset or the user raises the mark: check "${cli} usage"; if it still shows the mark, the run stays paused and you end your turn. Otherwise run "${cli} resume" and carry on.`,
+          : `Load the lcw:lcw skill. It resumes once the limit has reset or the user raises the mark: check "${cli} usage"; if it still says at the mark, the run stays paused and you end your turn. Otherwise run "${cli} resume" and carry on.`,
     )
   } else if (listRuns(runsDir(home(), repoKey(mainCheckout(cwd)))).length) {
     lines.push(`This repository has past LCW runs: "${cli} runs" lists them.`)
