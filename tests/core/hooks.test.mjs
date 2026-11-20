@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import { spawnSync } from 'node:child_process'
-import { tmp, makeRepo, run, lcw, started, readJson, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
+import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
 import * as gate from '../../scripts/lib/gate.mjs'
 
 process.env.TZ = 'Europe/Dublin'
@@ -119,6 +119,26 @@ test('session-start hook binds by place and does not take over from the main che
   assert.ok(!/Unfinished/.test(inMain.out))
   assert.match(inMain.out, /past LCW runs/)
   assert.ok(!fs.existsSync(`${t.home}/sessions/newcomer.json`))
+})
+
+test('a new session in the worktree of a run another open session drives neither carries it on nor takes it', async () => {
+  const t = started('busy')
+  const wt = t.cli('worktree').out.trim()
+  const claude = fakeClaude()
+  const driver = `${t.home}/sessions/s1.json`
+  fs.writeFileSync(driver, JSON.stringify({ ...readJson(driver), claudePid: claude.pid }))
+  const start = (id, env) => run(START_HOOK, [], { home: t.home, cwd: wt, input: JSON.stringify({ session_id: id, cwd: wt }), env })
+  try {
+    assert.ok(!/Unfinished/.test(start('second').out))
+    assert.equal(lcw(['task', 'add', 'T1', 'x'], { home: t.home, cwd: wt, session: 'second' }).code, 1, 'nor do its lcw calls drive it')
+    assert.equal(t.state().driver, 's1')
+    assert.equal(fs.existsSync(`${t.home}/sessions/second.json`), false)
+    // /clear: a new session id in the driver's own Claude Code process carries on
+    assert.match(start('cleared', { CLAUDE_PID: String(claude.pid) }).out, /Unfinished LCW run: \d{8}-busy/)
+  } finally { claude.kill() }
+  await new Promise((resolve) => (claude.exitCode !== null || claude.signalCode !== null ? resolve() : claude.once('exit', resolve)))
+  // once the driver's Claude Code has closed, a session in the worktree carries the run on
+  assert.match(start('later').out, /Unfinished LCW run: \d{8}-busy/)
 })
 
 test('session-start hook survives bad input', () => {

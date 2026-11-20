@@ -1,0 +1,84 @@
+import { expect, mock, test } from 'claude-code/testing'
+
+declare const setTimeout: (fn: (value?: unknown) => void, ms: number) => unknown
+
+const NOW = Date.parse('2026-11-18T12:00:00Z')
+const RUN = '/lcw/repos/r/runs/x'
+const STEP = 'launch milestone 2: T4 and T5'
+const files = (more: Record<string, string> = {}) => ({
+  '/lcw/sessions/s1.json': JSON.stringify({ runDir: RUN }),
+  [RUN + '/state.json']: JSON.stringify({ id: '20261118-x', name: 'x', status: 'running', stage: 'Build', stageSince: NOW - 60000, createdAt: NOW - 60000 }),
+  [RUN + '/mod-alive']: String(NOW - 1000), // a plugin reload, not a reopened session: no prompt of its own
+  ...more,
+})
+
+// The world beneath the mod: files in memory, a clock the test moves, compactions that can be refused, and the prompts sent.
+function engine(on: any, files: Record<string, string>, opts: { refuse?: number; slowWrites?: boolean } = {}) {
+  const clock = mock.clock(on, { now: NOW })
+  const prompts: string[] = []
+  const compacts: unknown[] = []
+  let refusals = opts.refuse ?? 0
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('session.id', () => ({ value: 's1' }))
+  on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
+  on('fs.read', (_: any, e: any) => {
+    if (e.path in files) return { value: files[e.path] }
+    throw new Error('ENOENT')
+  })
+  on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
+  on('fs.write', async (_: any, e: any) => {
+    if (opts.slowWrites) await new Promise((r) => setTimeout(r, 10))
+    files[e.path] = e.text
+    return { value: undefined }
+  })
+  on('turn.complete', (_: any, e: any) => ({ text: e.answer ?? '' }))
+  on('session.compact', (_: any, e: any) => {
+    compacts.push(e)
+    if (refusals-- > 0) throw new Error('a turn is running')
+    return { messages: [{ role: 'user', text: 'the summary', toolUses: [] }] }
+  })
+  on('prompt.submit', (_: any, e: any) => { prompts.push(e.text); return { text: e.text } })
+  on('agent.list', () => ({ value: [] }))
+  on('config.list', () => ({ value: [] }))
+  on('ui.invalidate', () => ({ value: undefined }))
+  return { clock, compacts, files, resumes: () => prompts.filter((p) => /LCW checkpoint/.test(p)) }
+}
+
+const start = ($: any) => $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+const turnEnds = ($: any, more: Record<string, unknown> = {}) =>
+  $.turn.complete({ answer: '', durationMs: 5, isAborted: false, reason: 'answer', turnId: 't', ...more })
+
+test('a checkpoint compacts the session when the turn ends, then empties its file and sends the next step', async ($, on) => {
+  const w = engine(on, files({ [RUN + '/checkpoint']: STEP }))
+  await start($)
+  await turnEnds($)
+  await w.clock.advance(1000)
+  expect(w.compacts.length).toBe(1)
+  expect(w.files[RUN + '/checkpoint']).toBe('')
+  expect(w.resumes().length).toBe(1)
+  expect(w.resumes()[0]).toContain(STEP)
+})
+
+test('a compaction refused because a turn has started keeps the checkpoint, and the next turn to end tries again', async ($, on) => {
+  const w = engine(on, files({ [RUN + '/checkpoint']: STEP }), { refuse: 1 })
+  await start($)
+  await turnEnds($)
+  await w.clock.advance(1000)
+  expect(w.compacts.length).toBe(1)
+  expect(w.files[RUN + '/checkpoint']).toBe(STEP)
+  expect(w.resumes().length).toBe(0)
+  await turnEnds($)
+  await w.clock.advance(1000)
+  expect(w.compacts.length).toBe(2)
+  expect(w.files[RUN + '/checkpoint']).toBe('')
+  expect(w.resumes().length).toBe(1)
+})
+
+test('two agents that finish at the same moment both count in the run\'s totals', async ($, on) => {
+  const w = engine(on, files({ [RUN + '/totals.json']: JSON.stringify({ agents: 0, tokens: 0, seen: {}, used: { main: 0, agents: 0 } }) }), { slowWrites: true })
+  await start($)
+  await w.clock.advance(1000)
+  const usage = { input_tokens: 100, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'm' }
+  await Promise.all([turnEnds($, { agentId: 'a1', turnId: 't1', usage }), turnEnds($, { agentId: 'a2', turnId: 't2', usage })])
+  expect(JSON.parse(w.files[RUN + '/totals.json']).used.agents).toBe(200)
+})

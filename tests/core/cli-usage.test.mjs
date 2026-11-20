@@ -275,10 +275,11 @@ test('lcw usage shows a failing spend command with the three figures adding up, 
   payg(home)
   const o = { home, cwd: tmp('x'), session: 's1' }
   atNow(() => lcw(['cap', '4000'], o))
-  // the reading is 2h old and LCW counted $85 since: 1239.6 and 85 round to $1,240 and $85, their sum 1324.6 to $1,325
+  // the reading is 2h old, so 2 of its 168 hours have dropped out: 1239.6 * 166/168 is 1224.8, and LCW counted $85
+  // since; the sum 1309.8 rounds to $1,310, and the parts shown add up to it
   withCommand(home, { usd: 1239.6, at: NOW - 2 * 3600000, fails: 3, failingSince: NOW - 35 * 60000, lastError: 'printed "401 Unauthorized"' })
   assert.equal(atNow(() => lcw(['usage'], o).out), [
-    'last 7 days: $1,325 spent ($1,240 from your spend command 2h ago, plus $85 LCW counted since) of a $4,000 cap',
+    'last 7 days: $1,310 spent ($1,225 of the $1,240 from your spend command 2h ago, plus $85 LCW counted since) of a $4,000 cap',
     'spend command: failing since 09:25, it printed "401 Unauthorized"',
     'today: $85 by 10:00, a rate of $204 a day',
     'mark: $3,000 (75%) · ok', ''].join('\n'))

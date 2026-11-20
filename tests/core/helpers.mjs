@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spawnSync, execFileSync } from 'node:child_process'
+import { spawn, spawnSync, execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
@@ -32,16 +32,27 @@ export function makeRepo() {
   return dir
 }
 
-export function run(script, args, { home, cwd, session, input } = {}) {
+export function run(script, args, { home, cwd, session, input, env: more = {} } = {}) {
   const env = { ...process.env, ...gitEnv, LCW_HOME: home }
   delete env.CLAUDE_CODE_SESSION_ID
   delete env.CLAUDE_PID // the hook would read the real Claude Code's command line
   if (session) env.CLAUDE_CODE_SESSION_ID = session
+  Object.assign(env, more)
   const r = spawnSync('node', [script, ...args], { cwd, env, input, encoding: 'utf8' })
   return { code: r.status, out: r.stdout, err: r.stderr }
 }
 
 export const lcw = (args, opts) => run(CLI, args, opts)
+
+/** A live process whose program is named claude, as Claude Code's is: node under a link of that name. Kill it when done. */
+export function fakeClaude() {
+  const bin = `${tmp('bin')}/claude`
+  fs.symlinkSync(process.execPath, bin)
+  const child = spawn(bin, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' })
+  child.unref()
+  for (let i = 0; i < 100 && !/claude/.test(execFileSync('ps', ['-o', 'args=', '-p', String(child.pid)], { encoding: 'utf8' })); i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)
+  return child
+}
 export const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'))
 
 /** A repo, a home and a started run; returns paths and a bound helper. */

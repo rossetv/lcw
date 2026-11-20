@@ -39,6 +39,14 @@ test('where --json names the main checkout, its key and the session\'s run, from
   assert.deepEqual(JSON.parse(none.out), { main: t.repo, key, run: null })
 })
 
+test('worktree records the commit the run branched from, and status prints it as base', () => {
+  const t = started()
+  const head = git(t.repo, 'rev-parse', 'HEAD')
+  t.cli('worktree')
+  assert.equal(t.state().base, head)
+  assert.match(t.cli('status').out, new RegExp(`  base: ${head}$`, 'm'))
+})
+
 test('commands without a run exit 1; usage and runs do not', () => {
   const home = tmp('home')
   const o = { home, cwd: makeRepo(), session: 'none' }

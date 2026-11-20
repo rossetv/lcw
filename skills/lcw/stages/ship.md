@@ -37,7 +37,7 @@ Leave the branch, `lcw finish --branch lcw/<name>`, and tell the human the branc
 Once the pull request is open, this machine holds nothing it needs: the branch is on GitHub. Clean up what the run left behind, and keep the run folder under ~/.lcw, since later runs read it.
 
 1. Leave the worktree: call ExitWorktree with action "keep". The session is back in the main checkout, where a new run can start.
-2. Check that nothing would be lost. `git -C <worktree> status --porcelain` must print nothing, and `git -C <worktree> rev-parse HEAD` must equal `git rev-parse origin/lcw/<name>`. If either check fails, remove nothing, and tell the human what is left in the worktree.
+2. Check that nothing would be lost. `git -C <worktree> status --porcelain --untracked-files=all` must print nothing, `git -C <worktree> ls-files --others --ignored --exclude-standard --directory` must print nothing (`git worktree remove` deletes ignored files, such as a `.env`, without asking), and `git -C <worktree> rev-parse HEAD` must equal `git rev-parse origin/lcw/<name>`. If any check fails, remove nothing, and tell the human what is left in the worktree.
 3. Remove the worktree with `git worktree remove <worktree>`, then the local branch with `git branch -D lcw/<name>`. The `-D` is needed because the branch is not in the local default branch yet; the pushed copy is the one that counts.
 4. Delete the temporary files the run made outside the repository, such as its scratchpad files and the pull request's body file.
 

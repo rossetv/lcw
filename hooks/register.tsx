@@ -76,6 +76,8 @@ const S = {
   // The facts the shown box was last chosen from; the run folders found finished or stopped, never read again.
   facts: null as BannerFacts | null,
   closedRuns: new Set<string>(),
+  // A checkpoint's compaction is on its way: the turns that end meanwhile do not start another.
+  compacting: false,
   weeklyAt: 0,
   weeklyText: '',
   mark: { since: 0, below: 0 },
@@ -230,13 +232,14 @@ async function countTurn($: EngineInterface, e: { usage?: any; agentId?: string;
   if (!run || !countsTurn(run.state, now - (e.durationMs ?? 0))) return
   const same = S.run?.runDir === run.runDir
   const totals = addUsage(same ? S.totals : (await readJson($, totalsFile(run.runDir))) || {}, e.usage, !!e.agentId)
-  await $.fs.write(totalsFile(run.runDir), JSON.stringify(totals))
+  // kept before the write: another agent's turn that ends meanwhile then adds to these totals, not to the old ones
   if (same) {
     S.totals = totals
     S.totalsChanged = false
     S.totalsAt = now
     S.dirty = true
   }
+  await $.fs.write(totalsFile(run.runDir), JSON.stringify(totals))
 }
 
 // A file's text and what it parses to: missing is null; caught mid-write (it does not parse) is undefined.
@@ -510,12 +513,15 @@ async function checkpoint($: EngineInterface) {
   const run = await readRun($, await $.clock.now())
   if (!run) return
   const step = String((await $.fs.read(run.paths.checkpoint).catch(() => '')) ?? '').trim()
-  if (!step) return
-  await $.fs.write(run.paths.checkpoint, '')
+  if (!step || S.compacting) return
+  S.compacting = true
+  // The step stays in its file until the compaction has happened: one refused because a turn has started is
+  // tried again when a turn next ends.
   $.clock.after(700, () => void (async () => {
     await $.session.compact({ instructions: compactInstructions(run.state, run.runDir, step) })
+    await $.fs.write(run.paths.checkpoint, '')
     await $.prompt.submit({ text: resumePrompt($.plugin.root, step) })
-  })().catch(() => {}))
+  })().catch(() => {}).finally(() => { S.compacting = false }))
 }
 
 // The person pressed Stop on a running turn. No Stop hook fires for that, so the turn the mascot shows as

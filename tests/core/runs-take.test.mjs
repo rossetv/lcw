@@ -1,23 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { spawn, execFileSync } from 'node:child_process'
-import { tmp, makeRepo, git, lcw, readJson, started } from './helpers.mjs'
+import { tmp, makeRepo, git, lcw, readJson, started, fakeClaude } from './helpers.mjs'
 
 // Claude Code's own session files are read from here, never from the person's real ones
 const claudeDir = tmp('claude')
 process.env.CLAUDE_CONFIG_DIR = claudeDir
 fs.mkdirSync(`${claudeDir}/sessions`)
-
-// A live process whose program is named claude, as Claude Code's is: node under a link of that name
-const fakeClaude = () => {
-  const bin = `${tmp('bin')}/claude`
-  fs.symlinkSync(process.execPath, bin)
-  const child = spawn(bin, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' })
-  child.unref()
-  for (let i = 0; i < 100 && !/claude/.test(execFileSync('ps', ['-o', 'args=', '-p', String(child.pid)], { encoding: 'utf8' })); i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)
-  return child
-}
 
 // A run no session has shown for 20 minutes: its state, its ledger and the mod's mark of drawing it all look old.
 function leftAlone(dir) {
@@ -60,6 +49,14 @@ test('take binds this session to a run left alone, makes it the driver and print
   assert.equal(lcw(['where'], t.other).out.trim(), t.dir)
   assert.equal(lcw(['where'], t.o).code, 1, 'the session that drove it before no longer finds it')
   assert.equal(lcw(['take', t.id], { ...t.other, session: 's3' }).code, 1, 'the take itself shows the run, so a second click elsewhere is refused')
+})
+
+test('take by the session that already drives the run keeps it bound to the run', () => {
+  const t = abandoned()
+  const r = lcw(['take', t.id], t.o)
+  assert.equal(r.code, 0, r.out)
+  assert.equal(readJson(`${t.home}/sessions/s1.json`).runDir, t.dir)
+  assert.equal(lcw(['status'], t.o).code, 0)
 })
 
 test('take and abandon refuse a run whose driving session\'s Claude Code is still running', () => {

@@ -37,6 +37,19 @@ test('install, status, uninstall round trip', () => {
   assert.match(setup(home, settings, 'status').out, /another command/)
 })
 
+test('an uninstall that cannot write the settings keeps its records, so a later one still restores them', { skip: process.getuid?.() === 0 }, () => {
+  const home = tmp('home'), dir = tmp('s'), settings = dir + '/settings.json'
+  const prev = { type: 'command', command: 'my-line' }
+  fs.writeFileSync(settings, JSON.stringify({ statusLine: prev, attribution: { commit: 'mine' } }))
+  assert.equal(setup(home, settings, 'install').code, 0)
+  fs.chmodSync(dir, 0o555) // the settings file cannot be replaced
+  try { assert.notEqual(setup(home, settings, 'uninstall').code, 0) } finally { fs.chmodSync(dir, 0o755) }
+  assert.deepEqual(read(home + '/previous-statusline.json'), prev)
+  assert.ok(fs.existsSync(home + '/previous-attribution.json'))
+  assert.equal(setup(home, settings, 'uninstall').code, 0)
+  assert.deepEqual(read(settings).statusLine, prev)
+})
+
 test('install creates a missing settings file and keeps an existing depth', () => {
   const home = tmp('home'), dir = tmp('s'), settings = dir + '/new/settings.json'
   assert.equal(setup(home, settings, 'install').code, 0)

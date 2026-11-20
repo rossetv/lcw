@@ -17,7 +17,9 @@ const spent = (usd: number) => JSON.stringify({ v: 1, base: 0, max: usd, q: { [M
 const usdGate = (retryAt: number) =>
   JSON.stringify({ reason: 'mark', unit: 'usd', markUsd: 3000, usedUsd: 3050, retryAt, retried: false, at: NOW - DAY })
 const setting = (command = CMD) => JSON.stringify({ v: 1, command, setAt: NOW - 3 * DAY })
-// A reading taken two days ago, before what LCW counted.
+// A reading taken two days ago, before what LCW counted. Five of its seven days still count: of $4,000, $2,857,
+// and with the $150 LCW counted since, $3,007 reaches the $3,000 mark, which LCW's count alone does not.
+const OVER = 4000
 const reading = (usd: number, extra: object = {}, command = CMD) =>
   JSON.stringify({ v: 1, command, usd, at: NOW - 2 * DAY, fails: 0, failingSince: null, lastError: null, triedAt: NOW - 2 * DAY, ...extra })
 
@@ -58,7 +60,7 @@ const json = (text?: string) => JSON.parse(text ?? 'null')
 
 test('the dollar gate trips on the command\'s reading plus what LCW counted since, though LCW\'s count alone is under the mark', async ($, on) => {
   const w = engine(on, {
-    ...base('running'), '/lcw/spend-command.json': setting(), '/lcw/spend-reading.json': reading(2900), [SPEND + '/s1.json']: spent(150),
+    ...base('running'), '/lcw/spend-command.json': setting(), '/lcw/spend-reading.json': reading(OVER), [SPEND + '/s1.json']: spent(150),
   })
   await start($)
   await measure($, 150)
@@ -67,7 +69,7 @@ test('the dollar gate trips on the command\'s reading plus what LCW counted sinc
 })
 
 test('without a command the same spend stays under the mark and no gate is written', async ($, on) => {
-  const w = engine(on, { ...base('running'), '/lcw/spend-reading.json': reading(2900), [SPEND + '/s1.json']: spent(150) })
+  const w = engine(on, { ...base('running'), '/lcw/spend-reading.json': reading(OVER), [SPEND + '/s1.json']: spent(150) })
   await start($)
   await measure($, 150)
   expect(RUN + '/gate' in w.files).toBe(false)
@@ -75,17 +77,17 @@ test('without a command the same spend stays under the mark and no gate is writt
 
 test('a reading made for another command is ignored', async ($, on) => {
   const w = engine(on, {
-    ...base('running'), '/lcw/spend-command.json': setting('other-command'), '/lcw/spend-reading.json': reading(2900), [SPEND + '/s1.json']: spent(150),
+    ...base('running'), '/lcw/spend-command.json': setting('other-command'), '/lcw/spend-reading.json': reading(OVER), [SPEND + '/s1.json']: spent(150),
   })
   await start($)
   await measure($, 150)
   expect(RUN + '/gate' in w.files).toBe(false)
 })
 
-test('a run paused at the mark is not woken at 08:00 while the command fails, its figure never dropping', async ($, on) => {
+test('a run paused at the mark is not woken at 08:00 while the command fails, its figure counting from the reading', async ($, on) => {
   const w = engine(on, {
     ...base('paused'), [RUN + '/gate']: usdGate(NOW + 5000), '/lcw/spend-command.json': setting(),
-    '/lcw/spend-reading.json': reading(2900, { fails: 4, failingSince: NOW - DAY, lastError: 'exit 1' }), [SPEND + '/s1.json']: spent(150),
+    '/lcw/spend-reading.json': reading(OVER, { fails: 4, failingSince: NOW - DAY, lastError: 'exit 1' }), [SPEND + '/s1.json']: spent(150),
   })
   await start($)
   await w.clock.advance(7000)

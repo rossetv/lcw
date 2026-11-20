@@ -85,6 +85,8 @@ try {
   lines.push(`LCW command line: ${cli} (add --session <id> only if CLAUDE_CODE_SESSION_ID is not set)`)
   // A resumed session is known by its transcript's name, as in the other hooks.
   const ids = sessionIds(input)
+  // before the run is looked for: after /clear, the run's driver is this same Claude Code process
+  ids.forEach(noteClaudePid) // a resumed payload names two ids; either may be the live one
   let run = null
   for (const id of ids.length ? ids : [undefined]) {
     run = findRun({ sessionId: id, cwd })
@@ -92,7 +94,7 @@ try {
   }
   const now = Number(process.env.LCW_NOW) || Date.now()
   const billing = ids.length ? settleBilling(ids[0]) : 'unclear'
-  if (ids.length) { noteAdvisor(ids[0]); ids.forEach(noteClaudePid) } // a resumed payload names two ids; either may be the live one
+  if (ids.length) noteAdvisor(ids[0])
   const money = billing === 'payg' ? readMoney({ sessionId: ids, now }) : null
   const mark = run ? run.state.markPercent ?? DEFAULT_MARK : sessionMark(ids)
   if (money) lines.push(...paygLines(cli, money))

@@ -40,7 +40,7 @@ req <id> rename "<name>" and req <id> drop change a requirement when what is bui
 take <runId> makes this session take over a run of this repository that no session has shown for 15 minutes; abandon <runId> stops such a run for good and removes its worktree when nothing in it is uncommitted, keeping its branch.
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
 flags: --session <id> (any command); start --title; task --model --effort; ask --waiting; finish --pr --branch; where --json; awake --check
-spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure holds at its last reading plus what LCW counted since, and lcw usage says what went wrong.
+spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
 const refuse = (msg) => { console.log(msg); process.exit(1) }
 const help = () => { console.log(USAGE); process.exit(0) }
@@ -207,7 +207,7 @@ const commands = {
     out(
       `Run ${s.id}: ${s.title}`,
       `stage: ${s.stage}  status: ${s.status}${s.pausedReason ? ` (${s.pausedReason})` : ''}  health: ${s.health}`,
-      `mark: ${money ? moneyMark(money) : `${s.markPercent}%`}${s.worktree ? `  worktree: ${s.worktree}  branch: ${s.branch}` : ''}`,
+      `mark: ${money ? moneyMark(money) : `${s.markPercent}%`}${s.worktree ? `  worktree: ${s.worktree}  branch: ${s.branch}` : ''}${s.base ? `  base: ${s.base}` : ''}`,
       'tasks:', ...(s.tasks.length ? s.tasks.map((t) => `  ${t.id} [${t.status}] ${t.title}`) : ['  none']),
       'asks:', ...(s.asks.length ? s.asks.map((a) => `  ${a.n}. ${a.text}`) : ['  none']),
       `folder: ${run.dir}`, `brainstorm: ${p.brainstorm}`, `spec: ${p.spec}`, `plan: ${p.plan}`, `ledger: ${p.ledger}`,
@@ -388,8 +388,11 @@ const commands = {
       if (cmd?.failing) {
         const total = Math.round(view.spentUsd)
         const reading = Math.round(cmd.readingUsd)
+        const since = Math.round(cmd.sinceUsd)
+        // the reading's oldest days drop out of the 7 days as it ages, so less of it counts than it said
+        const left = total - since < reading ? `${dollars(total - since)} of the ${dollars(reading)}` : dollars(reading)
         return out(
-          `last 7 days: ${dollars(total)} spent (${dollars(reading)} from your spend command ${ageText(at - cmd.at)} ago, plus ${dollars(total - reading)} LCW counted since) ${cap}`,
+          `last 7 days: ${dollars(total)} spent (${left} from your spend command ${ageText(at - cmd.at)} ago, plus ${dollars(since)} LCW counted since) ${cap}`,
           `spend command: failing${cmd.failingSince == null ? '' : ` since ${sinceText(cmd.failingSince, at)}`}${cmd.lastError ? `, it ${cmd.lastError}` : ''}`,
           todayLine, markLine)
       }
@@ -466,7 +469,8 @@ const commands = {
     const text = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : ''
     if (!text.split('\n').includes('.claude/worktrees/')) fs.appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}.claude/worktrees/\n`)
     const real = fs.realpathSync(dir)
-    change(run, `worktree ${real} on ${branch}`, (st) => { st.worktree = real; st.branch = branch })
+    const base = git(real, 'rev-parse', 'HEAD') // the commit the run branched from: reviewers read the change from it
+    change(run, `worktree ${real} on ${branch} from ${base}`, (st) => { st.worktree = real; st.branch = branch; st.base = base })
     writeJson(placeFile(home(), real), { runDir: run.dir })
     out(real, ...(caughtUp ? [`note: ${caughtUp}`] : []))
   },
@@ -507,7 +511,7 @@ const commands = {
   take() {
     const run = need()
     bindSession(sessionId, run.dir)
-    unbindSession(run.from, run.dir) // the session that drove it no longer does, even if it comes back
+    if (run.from !== sessionId) unbindSession(run.from, run.dir) // the session that drove it no longer does, even if it comes back
     change(run, 'taken over by this session (Resume)', () => {})
     out(`took over ${run.state.id}`)
     commands.status()

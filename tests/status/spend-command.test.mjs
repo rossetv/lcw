@@ -65,7 +65,7 @@ test('a command that failed 3 times in a row replaces the right part with its ag
   const home = payg({ 12: 100, 4: 146 }) // $46 after the reading, which is 2 hours old
   setting(home); reading(home, { agoMs: 2 * HOUR, fails: 3 }); lock(home)
   const { raw, rows } = tick(home)
-  assert.equal(spent(rows), '$1,286', rows.join('\n'))
+  assert.equal(spent(rows), '$1,271', rows.join('\n')) // 2 of the reading's 168 hours have dropped out: $1,225, and $46
   assert.match(rows[1], /\|[▰▱]* \$3,000 +spend command failing · 2h old$/)
   assert.ok(!/spare|short|rolling/.test(rows[1]), rows[1])
   assert.ok(raw.includes(CAUTION + 'spend command failing · 2h old'), 'in the caution colour')
@@ -75,7 +75,7 @@ test('a command that has failed only twice is not yet called failing', () => {
   const home = payg({ 12: 100, 4: 146 })
   setting(home); reading(home, { agoMs: 2 * HOUR, fails: 2 }); lock(home)
   const { rows } = tick(home)
-  assert.equal(spent(rows), '$1,286')
+  assert.equal(spent(rows), '$1,271')
   assert.match(rows[1], /rolling 7d/)
   assert.ok(!rows.join('').includes('failing'))
 })
@@ -135,7 +135,7 @@ test('the agent gate counts the command\'s figure: refused at the mark with it, 
   setting(home); reading(home, { usd: 3100, agoMs: 2 * HOUR }); lock(home)
   const refused = gate(home)
   assert.equal(refused.status, 2)
-  assert.match(refused.stderr, /\$3,100 was spent in the last 7 days and the mark is \$3,000/)
+  assert.match(refused.stderr, /\$3,063 was spent in the last 7 days and the mark is \$3,000/) // the $3,100 reading, 2 hours old
 })
 
 test('a failing note shows at every width where one fits, whole where it fits, and no row passes the width', () => {

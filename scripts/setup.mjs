@@ -164,12 +164,13 @@ if (cmd === 'install') {
   }
 } else if (cmd === 'uninstall') {
   const s = load()
+  const done = [] // the records of what install changed, removed only once the settings are saved without them
   if (mine(s.statusLine)) {
     const prev = readJson(prevFile)
-    if (prev) { s.statusLine = prev; out('restored your previous statusLine'); fs.rmSync(prevFile, { force: true }) }
+    if (prev) { s.statusLine = prev; out('restored your previous statusLine') }
     else { delete s.statusLine; out('removed statusLine') }
   }
-  fs.rmSync(prevFile, { force: true }) // a saved line the person has since replaced is not kept for a later install
+  done.push(prevFile) // a saved line the person has since replaced is not kept for a later install
   if (s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === '5') {
     delete s.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH
     if (!Object.keys(s.env).length) delete s.env
@@ -181,17 +182,18 @@ if (cmd === 'install') {
     if (!Object.keys(s.permissions).length) delete s.permissions
     out(`removed ${lcw} from permissions.additionalDirectories`)
   }
-  fs.rmSync(addedDirFile, { force: true })
+  done.push(addedDirFile)
   if (fs.existsSync(attributionFile)) {
     const prev = JSON.parse(fs.readFileSync(attributionFile, 'utf8'))
     if (prev === undefined || prev === null) delete s.attribution
     else s.attribution = prev
     out('restored your previous attribution setting')
-    fs.rmSync(attributionFile, { force: true })
+    done.push(attributionFile)
   }
   if (fs.existsSync(advisorFile) && s.advisorModel === 'fable') { delete s.advisorModel; out('removed advisorModel') }
-  fs.rmSync(advisorFile, { force: true })
+  done.push(advisorFile)
   if (fs.existsSync(settingsPath)) save(s)
+  for (const f of done) fs.rmSync(f, { force: true })
   if (fs.existsSync(shim)) { fs.rmSync(shim); out(`deleted ${shim}`) }
   // neither the status rows nor the attribution come back by themselves, until the person says "set up LCW"
   writeJson(noticesFile(lcw), { ...readJson(noticesFile(lcw)), auto: 'off' })

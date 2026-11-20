@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { sessionFile, placeFile, runPaths } from '../../lib/key.mjs'
 import { home, readJson, writeJson, loadState } from './store.mjs'
+import { claudeAlive } from './awake.mjs'
 
 export const open = (runDir) => {
   if (!runDir) return null
@@ -25,7 +26,21 @@ export function unbindSession(sessionId, runDir) {
   if (bound === runDir) writeJson(file, rest)
 }
 
-/** The unfinished run a session drives: its binding first, else a place pointer at or above cwd. */
+/**
+ * Whether another session drives the run and its Claude Code is still open. /clear starts a new session id in the
+ * same Claude Code process: that process is this session's own, not another's.
+ */
+export function drivenElsewhere(state, sessionId) {
+  const driver = state?.driver
+  if (!driver || driver === sessionId) return false
+  const pid = readJson(sessionFile(home(), driver))?.claudePid
+  return claudeAlive(pid) && pid !== (sessionId ? readJson(sessionFile(home(), sessionId))?.claudePid : undefined)
+}
+
+/**
+ * The unfinished run a session drives: its binding first, else a place pointer at or above cwd. A session in a run's
+ * folder takes it up only when no other open session drives it; taking a run over is lcw take's (Resume's).
+ */
 export function findRun({ sessionId, cwd }) {
   const h = home()
   if (sessionId) {
@@ -34,6 +49,7 @@ export function findRun({ sessionId, cwd }) {
   }
   for (let dir = path.resolve(cwd || process.cwd()); ; dir = path.dirname(dir)) {
     const run = open(readJson(placeFile(h, dir))?.runDir)
+    if (run && drivenElsewhere(run.state, sessionId)) return null
     if (run) {
       bindSession(sessionId, run.dir)
       return run

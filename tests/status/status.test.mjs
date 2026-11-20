@@ -106,12 +106,15 @@ test('gate is written at the mark and removed below it', () => {
 test('card shows under the rows when mod-alive is stale, not when fresh', () => {
   const { home, dir, input } = startRun(10)
   const rows = (o) => o.trim().split('\n').length
-  const none = line(input, { home })
-  const stale = line(input, { home })
-  fs.writeFileSync(dir + '/mod-alive', String(Date.now()))
-  const fresh = line(input, { home })
-  fs.writeFileSync(dir + '/mod-alive', String(Date.now() - 60000))
-  const old = line(input, { home })
+  // one clock for every tick: the card counts the stage's time in seconds, so two ticks a moment apart could differ
+  const now = Date.now() + 5000
+  const env = { LCW_NOW: String(now) }
+  const none = line(input, { home, env })
+  const stale = line(input, { home, env })
+  fs.writeFileSync(dir + '/mod-alive', String(now))
+  const fresh = line(input, { home, env })
+  fs.writeFileSync(dir + '/mod-alive', String(now - 60000))
+  const old = line(input, { home, env })
   assert.ok(rows(none.out) > rows(fresh.out))
   assert.equal(rows(old.out), rows(none.out))
   // The creature left of the two rows moves with the clock, so two runs a moment apart may draw it differently.
@@ -213,7 +216,7 @@ test('the mascot worries within five points of the usage mark and cries once the
   const face = (used) => {
     const input = JSON.stringify({ session_id: 'pet-' + used, cwd: tmp('cwd'), rate_limits: { seven_day: { used_percentage: used, resets_at: now / 1000 + 3 * 86400 } } })
     // Only the creature's cells at the start of each row: the folder name further along can hold a T too.
-    const out = bare(line(input, { env: { LCW_NOW: String(now) } }).out).split('\n').map((row) => [...row].slice(0, 6).join('')).join('\n')
+    const out = bare(line(input, { env: { LCW_NOW: String(now), TZ: 'UTC' } }).out) // the creature yawns at night, local time.split('\n').map((row) => [...row].slice(0, 6).join('')).join('\n')
     return (out.match(/T/g) ?? []).length === 2 ? 'crying' : /ó/.test(out) && /ò/.test(out) ? 'worried' : 'neither'
   }
   assert.equal(face(60), 'neither') // the mark is 75 unless the person moves it
@@ -223,11 +226,14 @@ test('the mascot worries within five points of the usage mark and cries once the
 
 test('the mascot is angry while its run has a stalled agent, as long as the mod that counts them is alive', () => {
   const { home, dir, input } = startRun(10)
-  const angry = () => { const out = bare(line(input, { home }).out).split('\n').slice(0, 2).join('\n'); return /ò/.test(out) && /ó/.test(out) }
-  fs.writeFileSync(dir + '/quiet-agents.json', JSON.stringify({ quiet: 0, stalled: 1, at: Date.now() }))
-  fs.writeFileSync(dir + '/mod-alive', String(Date.now()))
+  // noon UTC today, in UTC: no night-time yawn and the same frame as the test above, whenever and wherever it runs
+  const now = Math.floor(Date.now() / 86400000) * 86400000 + 12 * 3600000
+  const env = { LCW_NOW: String(now), TZ: 'UTC' }
+  const angry = () => { const out = bare(line(input, { home, env }).out).split('\n').slice(0, 2).join('\n'); return /ò/.test(out) && /ó/.test(out) }
+  fs.writeFileSync(dir + '/quiet-agents.json', JSON.stringify({ quiet: 0, stalled: 1, at: now }))
+  fs.writeFileSync(dir + '/mod-alive', String(now))
   assert.equal(angry(), true)
-  fs.writeFileSync(dir + '/mod-alive', String(Date.now() - 60000))
+  fs.writeFileSync(dir + '/mod-alive', String(now - 60000))
   assert.equal(angry(), false, 'a count nobody keeps is not believed')
 })
 
