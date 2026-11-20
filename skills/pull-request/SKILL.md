@@ -22,9 +22,19 @@ Nothing else goes in. A sensible choice the human would most likely have made to
 
 ## Short
 
-What, Why and How together stay under 150 words; the pictures carry the rest. Keep a sentence only if the reader would decide something differently because of it. No greeting, no summary at the end, no list of files (the diff has it), no account of what the agents did, no AI attribution (no "Generated with Claude Code" line or anything like it), and nothing a reader cannot open: no local path (~/.lcw, the run folder, the ledger, a scratch file) and no pointer to what only this machine holds, such as "see the ledger". Write as the `lcw:docs` skill says.
+What, Why and How together stay under 150 words; the pictures carry the rest. Keep a sentence only if the reader would decide something differently because of it. No greeting, no summary at the end, no list of files (the diff has it), no account of what the agents did, no AI attribution (no "Generated with Claude Code" line or anything like it), and nothing a reader cannot open: no local path (~/.lcw, the run folder, the ledger, a scratch file) and no pointer to what only this machine holds, such as "see the ledger". No requirement, task or fix id (R3, T7, F1) either. Write as the `lcw:docs` skill says.
 
 The pull request holds no record of the run's work: no list or table of each thing removed, renamed or measured, as a section or in a `<details>` block, even where the spec says the pull request lists it. Say what the record shows in one line of How, such as "41 settings are removed, each one read by nothing". Review checked the record itself, so the pull request neither repeats it nor points to it.
+
+## In a sweep
+
+A sweep's pull request covers fixes, not one change, so its What is the list of what it fixes, and that list is the one exception to the rule above. Under What, one sentence on what the sweep was for, then a `### <area>` heading for each area, and under it one line for each fix: what was wrong, as the person it hurt meets it, and how it is proven, by the test that now passes or, for a fix with no test, by what was checked. The list does not count toward the 150 words. Why says what the sweep was for, from the charter. How has its diagram only where a fix changes how the parts fit together, and What has no picture unless a fix changes what a person sees.
+
+What the pull request covers follows the charter's choice:
+
+- **Stacked:** one for each wave, holding that wave's fixes only. Its first line, the one thing above What, says it is to be merged in order, after the wave before it, with a merge commit, and its branch deleted once merged so the next one retargets to the default branch.
+- **Merged as it goes:** one for each wave, holding that wave's fixes only.
+- **One at the end:** one for every wave that shipped.
 
 ## The pictures
 
