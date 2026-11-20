@@ -67,3 +67,16 @@ lcw checkpoint "Review: read stages/review.md and launch the round's reviewers, 
 ```
 
 and end your turn. The review starts on a fresh context.
+
+## In a sweep
+
+A wave builds as above, its areas in parallel, from the wave's plan, with charter.md and the wave's findings wherever this file says the spec or the brainstorm. A worker's brief takes, in their place: each of its fixes with its F id and its recipe; which of them are security fixes, whether the repository is public, and whether the charter lets such fixes be published; the charter's no-go zones and the kinds of change it allows; and the paths of charter.md and findings.md for reference. Tell it:
+
+- A fix to behaviour starts as a failing test written from its recipe, and is done when that test passes.
+- If it cannot make the test fail, it leaves that fix unbuilt and reports why.
+- A fix with nothing to test (a comment, a document, a pinned version, a setting) has no test.
+- A security fix in a public repository commits no test and no other proof of the hole; the proof stays in the sweep's records.
+
+When a worker cannot make a fix's test fail, the finding is dropped: `lcw req <F id> drop`, `lcw ledger "dropped <F id>: <the reason>"`, and move it to Drop in findings.md with that reason. It is never passed to a more capable model to try again. A task whose fixes are all dropped is `lcw task <id> dropped`.
+
+Every milestone of a wave gets the same check as a Build's. When the wave is done, checkpoint as Done says, naming the wave: `lcw checkpoint "Review: read stages/review.md and launch wave <n>'s reviewers, ..."`.
