@@ -4,12 +4,12 @@ You are the orchestrator. Drive the plan to completion on your own, from the run
 
 ## Launching a milestone
 
-Take the milestones in the order plan.md gives them, one at a time. A milestone's tasks all run in parallel, so launch them together, in one go. Run `lcw usage` first, then `lcw set milestone="<n> of <total>"` (its place among the milestones plan.md gives), so the unfinished-run box can say where the build stands, and record the commit the milestone starts from, `lcw ledger "milestone <n> starts from <git rev-parse HEAD in the run's worktree>"`: its reviewer reads the milestone's change from it, and the ledger keeps it across a compaction. Then, for each task of the milestone:
+Take the milestones in the order plan.md gives them. A milestone's tasks all run in parallel, so launch them together, in one go. Run `lcw usage` first, then `lcw set milestone="<n> of <total>"` (its place among the milestones plan.md gives), so the unfinished-run box can say where the build stands, and record the commit the milestone starts from, `lcw ledger "milestone <n> starts from <git rev-parse HEAD in the run's worktree>"`: its reviewer reads the milestone's change from it, and the ledger keeps it across a compaction. Then, for each task of the milestone:
 
 1. `lcw task <task> running`.
 2. Launch the worker agent with the model and effort chosen for the task (you may change them now), a plain description of the task, and no name. Do not pass `isolation` to the Agent tool. The worker works in the run's worktree, which is its working directory, so it needs no path to change into.
 
-Workers share the run's worktree, and a milestone's tasks own separate files; that is what lets them run together. Start nothing from the next milestone until this one is checked (see Milestones).
+Workers share the run's worktree, and a milestone's tasks own separate files; that is what lets them run together. The next milestone starts as soon as this one's tasks are all done or parked: its check runs alongside (see Milestones). Build never runs more than one milestone ahead of a clean check: milestone 3 waits until milestone 1's check is clean, its fixes included.
 
 A worker never saw the brainstorm, so its brief is all it knows of the intent. Give it:
 
@@ -45,9 +45,13 @@ Ask the human only as SKILL.md allows. Only the tasks that depend on the answer 
 
 ## Milestones
 
-When a milestone's tasks are all done or parked, launch the milestone-reviewer agent, the blind correctness review of the milestone's code, on the model plan.md gives that milestone (effort high). Give it the milestone's tasks with the files each one owns, the commit the milestone started from, and its tasks' own test commands from plan.md, never the whole suites, and nothing about the spec or the run's decisions. It reads the code for what would go wrong, runs the tests the milestone touched, checks that each task kept to its own files, and looks for what will not last and for anything over-built. You do not repeat its work.
+When a milestone's tasks are all done or parked, record where it ends: `lcw ledger "milestone <n> ends at <git rev-parse HEAD in the run's worktree>"`. Then, in one go, launch its check and the next milestone, as Launching a milestone says. The check does not hold the next milestone back; only the check before it does, until it is clean.
 
-It has not seen the run's decisions, so it may challenge one. Make the call on each problem, as stages/review.md says under Judging: accept it as it is, with the reason in the ledger, or make it a task for a worker (`lcw task add F1 "<fix>" --model sonnet --effort medium`). Launch the fixes together, and once they are done a fresh milestone-reviewer, on the same model, checks the fixes only: give it the fix tasks with the files each owns, the commit the fixes started from, and their own test commands. It runs those tests and checks those changes, not the rest of the milestone again. When a check comes back clean: `lcw ledger "milestone <n>: <what works now>"`, then, unless it was the last milestone (see Done), `lcw checkpoint "<the next milestone and its tasks>"` and end your turn. The next milestone starts on a fresh context.
+The check is the milestone-reviewer agent, the blind correctness review of the milestone's code, on the model plan.md gives that milestone (effort high). Give it the milestone's tasks with the files each one owns, the commit the milestone started from and the one it ended at, its tasks' own test commands from plan.md, never the whole suites, how plan.md makes a throwaway worktree ready to run them, and nothing about the spec or the run's decisions. It reads the milestone's commits for what would go wrong, runs those tests at the end commit in a throwaway worktree, since the run's worktree has moved on, checks that each task kept to its own files, and looks for what will not last and for anything over-built. You do not repeat its work.
+
+It has not seen the run's decisions, so it may challenge one. Make the call on each problem, as stages/review.md says under Judging: accept it as it is, with the reason in the ledger, or make it a task for a worker (`lcw task add F1 "<fix>" --model sonnet --effort medium`). The next milestone is building by then, so place each fix. One in a file that a running task owns goes to that task's worker (SendMessage to its id) and is checked with that worker's milestone, or waits until the task is done. The rest launch together, at once. If a fix changes something the next milestone builds on, tell the workers it affects. Once those fixes are done a fresh milestone-reviewer, on the same model, checks the fixes only: give it the fix commits by their ids, the files each fix task owns and their own test commands. It runs those tests and checks those changes, not the rest of the milestone again.
+
+When a check comes back clean: `lcw ledger "milestone <n>: <what works now>"`, then, unless it was the last milestone (see Done), `lcw checkpoint "<the milestone now building, its tasks and its agents' ids, and any check still out>"` and end your turn. The agents still running report to the fresh context.
 
 ## At the usage mark
 
@@ -55,7 +59,7 @@ When `lcw usage` says `at the mark`, or the launch hook refuses an agent: launch
 
 ## Done
 
-When every task is done or parked and the last milestone's check is clean:
+When every task is done or parked and every milestone's check is clean:
 
 ```
 lcw stage Review

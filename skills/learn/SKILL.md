@@ -28,13 +28,13 @@ The first reply is step 1. After that go where the person leads: if they ask abo
 - Replies are this long: two lines, one small diagram (three rows here), two lines, then the offer. No bullet lists, no second diagram. Detail (stuck workers, limits, edge cases) only when asked. Plain words; no filler, no selling, no summary.
 
 ```
-Build runs in milestones. In each one, workers build their tasks side by side, then a
-reviewer who never saw the plan checks the code.
+Build runs in milestones. In each one, workers build their tasks side by side. Then a
+reviewer who never saw the plan checks the code, while the next milestone starts.
 
   Claude (plans, decides, never codes)
-    ├─▶ worker  T1  date filters      ┐
-    ├─▶ worker  T2  CSV header order  ├─▶ milestone reviewer ─▶ fixes? ─▶ next milestone
-    └─▶ worker  T3  download button   ┘
+    ├─▶ worker  T1  date filters      ┐  ┌─▶ milestone reviewer ─▶ fixes?
+    ├─▶ worker  T2  CSV header order  ├──┤
+    └─▶ worker  T3  download button   ┘  └─▶ next milestone
 
 Each worker is an agent on the card above the prompt; click one to talk to it. If one is
 stuck for 15 minutes, Claude asks it what is wrong and, if needed, hands its task on.
