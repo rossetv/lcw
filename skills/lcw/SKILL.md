@@ -87,7 +87,7 @@ The run folder lives outside the repository (under ~/.lcw), so nothing in it is 
 
 The ledger is how a later you knows what was done and what is left. Every command that changes state adds a line; add your own with `lcw ledger "<text>"` for each decision you make on the human's behalf, with its reason.
 
-Keep `health` current with a few plain words of what is happening, such as `lcw set health="on track"` or `lcw set health="2 tasks wait on your answer, the rest carry on"`. Leave times out of it; the bar shows those.
+Keep `health` current with a few plain words of what is happening, such as `lcw set health="on track"` or `lcw set health="2 tasks wait on your answer, the rest carry on"`. Leave times out of it; the bar shows those. In a sweep, while an ask about an earlier wave is open, every `lcw set health` keeps "wave <m> waits on your answer; " in front of its words; after `lcw answer`, set the words again without it.
 
 ## Compaction
 
