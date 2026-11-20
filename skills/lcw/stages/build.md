@@ -79,7 +79,9 @@ A wave builds as above, its areas in parallel, from the wave's plan, with charte
 
 When a worker reports a dropped fix, it has recorded the drop itself: run none of those commands again. Move the finding to Drop in findings.md with the worker's reason. It is never passed to a more capable model to try again.
 
-When a worker reports a fix it skipped because it needs a no-go zone or a kind of change the charter does not allow, run `lcw req <F id> park` (and `lcw task <id> parked` if all the task's fixes were skipped), move the finding to Park in findings.md with the reason, and add it to parked.md in plain words: where it is, why it was parked, and what the human decides. It is never retried or moved up a tier, and Review does not check it.
+When a worker reports a fix it skipped because it needs a no-go zone or a kind of change the charter does not allow, run `lcw req <F id> park` (and `lcw task <id> parked` if no fix of the task was built and the rest were dropped or skipped), move the finding to Park in findings.md with the reason, and add it to parked.md in plain words: where it is, why it was parked, and what the human decides. It is never retried or moved up a tier, and Review does not check it.
+
+The task for files every area shares is dropped (`lcw task <id> dropped`) when no fix of the wave was built, so an empty wave stays empty. A wave with no commits goes from Build straight to Ship (`lcw stage Ship`); there is nothing to review.
 
 Name each fix findings.md marks "no proof in the repository" in the brief of every milestone check and of any X task, and say it has no test by design.
 
