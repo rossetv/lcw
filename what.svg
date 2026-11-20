@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 524" width="830" height="524" role="img"><title>A sweep's status card, approved and built</title><style>
+.bg{fill:#fff;stroke:#d0d7de}
+.cap{fill:#1f2328;font-size:14px;font-weight:600}
+.lab{fill:#59636e;font-size:13px;font-weight:600}
+.note{fill:#59636e;font-size:12px}
+.term{fill:#1c1b19;stroke:#d0d7de}
+.tbar{stroke:#2e2c29;stroke-width:1}
+.tdot{fill:#4a4742}
+text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif}
+.mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+@media (prefers-color-scheme:dark){
+.bg{fill:#0d1117;stroke:#30363d}
+.cap{fill:#e6edf3}
+.lab,.note{fill:#9198a1}
+.term{stroke:#30363d}
+}
+</style><rect class="bg" x="0.5" y="0.5" width="829" height="523" rx="12"/>
+<text class="cap" x="22.7" y="38">A sweep’s card: the title says LCW Sweep, and a waves row shows shipped, running and queued waves</text>
+<text class="lab" x="22.7" y="73">Approved</text>
+<rect class="term" x="22.7" y="82" width="784.6" height="175" rx="9"/>
+<path class="tbar" d="M23.2 108H806.8000000000001"/>
+<circle class="tdot" cx="37.7" cy="95" r="5"/>
+<circle class="tdot" cx="54.7" cy="95" r="5"/>
+<circle class="tdot" cx="71.7" cy="95" r="5"/>
+<path d="M40.6 130.5Q40.6 125.5 45.6 125.5H784.4Q789.4 125.5 789.4 130.5V234.5Q789.4 239.5 784.4 239.5H45.6Q40.6 239.5 40.6 234.5Z" fill="none" stroke="#3a3732" stroke-width="1.2"/>
+<path d="M40.6 163.5H789.4" stroke="#3a3732" stroke-width="1.2"/>
+<rect x="52.3" y="119.5" width="23.4" height="12" fill="#1c1b19"/>
+<text class="mono" x="60.1" y="130.2" fill="#e0906f" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">◆</text>
+<rect x="67.9" y="119.5" width="101.4" height="12" fill="#1c1b19"/>
+<text class="mono" x="75.7" y="130.2" fill="#8c8880" textLength="85.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">LCW Sweep ·</text>
+<rect x="161.5" y="119.5" width="117.0" height="12" fill="#1c1b19"/>
+<text class="mono" x="169.3" y="130.2" fill="#e9e6df" font-weight="700" textLength="101.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">backlog-sweep</text>
+<rect x="668.5" y="119.5" width="109.2" height="12" fill="#1c1b19"/>
+<text class="mono" x="676.3" y="130.2" fill="#8c8880" textLength="93.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">22m in Build</text>
+<text class="mono" x="52.3" y="149.2" fill="#8fce8b" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">●</text>
+<text class="mono" x="67.9" y="149.2" fill="#e9e6df" textLength="54.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">running</text>
+<text class="mono" x="130.3" y="149.2" fill="#8c8880" textLength="429.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">· wave 2: Billing and Panel fixes building side by side</text>
+<text class="mono" x="637.3" y="149.2" fill="#b3aea4" textLength="140.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">≈ 12% of your week</text>
+<text class="mono" x="52.3" y="187.2" fill="#8c8880" textLength="39.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">waves</text>
+<text class="mono" x="99.1" y="187.2" fill="#8fce8b" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▰</text>
+<text class="mono" x="106.9" y="187.2" fill="#e0906f" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▰</text>
+<text class="mono" x="114.7" y="187.2" fill="#8c8880" textLength="31.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▱▱▱▱</text>
+<text class="mono" x="161.5" y="187.2" fill="#e9e6df" textLength="70.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">1 shipped</text>
+<text class="mono" x="239.5" y="187.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="255.1" y="187.2" fill="#e0906f" textLength="70.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">1 running</text>
+<text class="mono" x="333.1" y="187.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="348.7" y="187.2" fill="#b3aea4" textLength="62.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">4 queued</text>
+<text class="mono" x="442.3" y="187.2" fill="#e9e6df" textLength="54.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">round 1</text>
+<text class="mono" x="504.7" y="187.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="520.3" y="187.2" fill="#e9e6df" textLength="62.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">27 fixed</text>
+<text class="mono" x="590.5" y="187.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="606.1" y="187.2" fill="#e6c173" textLength="70.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">14 parked</text>
+<text class="mono" x="684.1" y="187.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="699.7" y="187.2" fill="#b3aea4" textLength="78.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">22 dropped</text>
+<text class="mono" x="52.3" y="206.2" fill="#8fce8b" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">✓</text>
+<text class="mono" x="67.9" y="206.2" fill="#b3aea4" textLength="54.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Charter</text>
+<text class="mono" x="138.1" y="206.2" fill="#8fce8b" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">✓</text>
+<text class="mono" x="153.7" y="206.2" fill="#b3aea4" textLength="31.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Hunt</text>
+<text class="mono" x="200.5" y="206.2" fill="#8fce8b" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">✓</text>
+<text class="mono" x="216.1" y="206.2" fill="#b3aea4" textLength="31.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Plan</text>
+<text class="mono" x="262.9" y="206.2" fill="#e0906f" font-weight="700" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">›</text>
+<text class="mono" x="278.5" y="206.2" fill="#e9e6df" font-weight="700" textLength="39.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Build</text>
+<text class="mono" x="333.1" y="206.2" fill="#8c8880" textLength="62.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">○ Review</text>
+<text class="mono" x="411.1" y="206.2" fill="#8c8880" textLength="46.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">○ Ship</text>
+<text class="mono" x="52.3" y="225.2" fill="#8c8880" textLength="39.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">tasks</text>
+<text class="mono" x="99.1" y="225.2" fill="#8fce8b" textLength="62.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▰▰▰▰▰▰▰▰</text>
+<text class="mono" x="161.5" y="225.2" fill="#e0906f" textLength="46.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▰▰▰▰▰▰</text>
+<text class="mono" x="208.3" y="225.2" fill="#8c8880" textLength="78.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▱▱▱▱▱▱▱▱▱▱</text>
+<text class="mono" x="301.9" y="225.2" fill="#e9e6df" textLength="46.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">9 done</text>
+<text class="mono" x="356.5" y="225.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="372.1" y="225.2" fill="#e0906f" textLength="70.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">7 running</text>
+<text class="mono" x="450.1" y="225.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="465.7" y="225.2" fill="#b3aea4" textLength="54.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">11 left</text>
+<text class="mono" x="528.1" y="225.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="543.7" y="225.2" fill="#b3aea4" textLength="70.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">1 dropped</text>
+<text class="lab" x="22.7" y="292">Built</text>
+<rect class="term" x="22.7" y="301" width="784.6" height="175" rx="9"/>
+<path class="tbar" d="M23.2 327H806.8000000000001"/>
+<circle class="tdot" cx="37.7" cy="314" r="5"/>
+<circle class="tdot" cx="54.7" cy="314" r="5"/>
+<circle class="tdot" cx="71.7" cy="314" r="5"/>
+<path d="M40.6 349.5Q40.6 344.5 45.6 344.5H784.4Q789.4 344.5 789.4 349.5V453.5Q789.4 458.5 784.4 458.5H45.6Q40.6 458.5 40.6 453.5Z" fill="none" stroke="#3a3732" stroke-width="1.2"/>
+<path d="M40.6 382.5H789.4" stroke="#3a3732" stroke-width="1.2"/>
+<rect x="52.3" y="338.5" width="23.4" height="12" fill="#1c1b19"/>
+<text class="mono" x="60.1" y="349.2" fill="#e0906f" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">◆</text>
+<rect x="67.9" y="338.5" width="101.4" height="12" fill="#1c1b19"/>
+<text class="mono" x="75.7" y="349.2" fill="#8c8880" textLength="85.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">LCW Sweep ·</text>
+<rect x="161.5" y="338.5" width="117.0" height="12" fill="#1c1b19"/>
+<text class="mono" x="169.3" y="349.2" fill="#e9e6df" font-weight="700" textLength="101.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">backlog-sweep</text>
+<rect x="668.5" y="338.5" width="109.2" height="12" fill="#1c1b19"/>
+<text class="mono" x="676.3" y="349.2" fill="#8c8880" textLength="93.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">22m in Build</text>
+<text class="mono" x="52.3" y="368.2" fill="#8fce8b" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">●</text>
+<text class="mono" x="67.9" y="368.2" fill="#e9e6df" textLength="54.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">running</text>
+<text class="mono" x="130.3" y="368.2" fill="#8c8880" textLength="429.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">· wave 2: Billing and Panel fixes building side by side</text>
+<text class="mono" x="637.3" y="368.2" fill="#b3aea4" textLength="140.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">≈ 12% of your week</text>
+<text class="mono" x="52.3" y="406.2" fill="#8c8880" textLength="39.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">waves</text>
+<text class="mono" x="99.1" y="406.2" fill="#8fce8b" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▰</text>
+<text class="mono" x="106.9" y="406.2" fill="#e0906f" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▰</text>
+<text class="mono" x="114.7" y="406.2" fill="#8c8880" textLength="31.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▱▱▱▱</text>
+<text class="mono" x="161.5" y="406.2" fill="#e9e6df" textLength="70.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">1 shipped</text>
+<text class="mono" x="239.5" y="406.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="255.1" y="406.2" fill="#e0906f" textLength="70.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">1 running</text>
+<text class="mono" x="333.1" y="406.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="348.7" y="406.2" fill="#b3aea4" textLength="62.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">4 queued</text>
+<text class="mono" x="442.3" y="406.2" fill="#e9e6df" textLength="54.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">round 1</text>
+<text class="mono" x="504.7" y="406.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="520.3" y="406.2" fill="#e9e6df" textLength="62.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">27 fixed</text>
+<text class="mono" x="590.5" y="406.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="606.1" y="406.2" fill="#e6c173" textLength="70.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">14 parked</text>
+<text class="mono" x="684.1" y="406.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="699.7" y="406.2" fill="#b3aea4" textLength="78.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">22 dropped</text>
+<text class="mono" x="52.3" y="425.2" fill="#8fce8b" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">✓</text>
+<text class="mono" x="67.9" y="425.2" fill="#b3aea4" textLength="54.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Charter</text>
+<text class="mono" x="138.1" y="425.2" fill="#8fce8b" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">✓</text>
+<text class="mono" x="153.7" y="425.2" fill="#b3aea4" textLength="31.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Hunt</text>
+<text class="mono" x="200.5" y="425.2" fill="#8fce8b" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">✓</text>
+<text class="mono" x="216.1" y="425.2" fill="#b3aea4" textLength="31.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Plan</text>
+<text class="mono" x="262.9" y="425.2" fill="#e0906f" font-weight="700" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">›</text>
+<text class="mono" x="278.5" y="425.2" fill="#e9e6df" font-weight="700" textLength="39.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Build</text>
+<text class="mono" x="333.1" y="425.2" fill="#8c8880" textLength="62.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">○ Review</text>
+<text class="mono" x="411.1" y="425.2" fill="#8c8880" textLength="46.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">○ Ship</text>
+<text class="mono" x="52.3" y="444.2" fill="#8c8880" textLength="39.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">tasks</text>
+<text class="mono" x="99.1" y="444.2" fill="#8fce8b" textLength="62.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▰▰▰▰▰▰▰▰</text>
+<text class="mono" x="161.5" y="444.2" fill="#e0906f" textLength="46.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▰▰▰▰▰▰</text>
+<text class="mono" x="208.3" y="444.2" fill="#8c8880" textLength="78.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▱▱▱▱▱▱▱▱▱▱</text>
+<text class="mono" x="301.9" y="444.2" fill="#e9e6df" textLength="46.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">9 done</text>
+<text class="mono" x="356.5" y="444.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="372.1" y="444.2" fill="#e0906f" textLength="70.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">7 running</text>
+<text class="mono" x="450.1" y="444.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="465.7" y="444.2" fill="#b3aea4" textLength="54.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">11 left</text>
+<text class="mono" x="528.1" y="444.2" fill="#8c8880" textLength="7.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">·</text>
+<text class="mono" x="543.7" y="444.2" fill="#b3aea4" textLength="70.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">1 dropped</text>
+<text class="note" x="22.7" y="504">The two match, row for row. Both are cut to the card’s top rows, with 24 columns of blank padding taken out of each row to fit.</text>
+</svg>

@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 906" width="830" height="906" role="img"><title>How a sweep is built</title><style>
+.bg{fill:#fff;stroke:#d0d7de}
+.fillb{fill:#f6f8fa}
+.edge{fill:none;stroke:#afb8c1;stroke-width:1.2}
+.name{fill:#1f2328;font-weight:600;font-size:15px}
+.ot{fill:#1f2328;font-weight:600;font-size:13px}
+.wc{fill:#59636e;font-size:12.5px}
+.al{fill:#59636e;font-size:12px}
+.you{fill:#0969da;font-weight:600;font-size:12.5px}
+.mt{fill:#1f2328;font-size:12px}
+.tnew{fill:#1a7f37;font-size:12px;font-weight:600}
+.tchg{fill:#59636e;font-size:12px;font-weight:600}
+.l{stroke:#8c959f;stroke-width:1.5;fill:none}
+.fi{stroke:#59636e;stroke-width:1.1;fill:none;stroke-linejoin:round}
+.tl{stroke:#afb8c1;stroke-width:1.1;fill:none;stroke-linecap:round}
+.endc{fill:none;stroke:#59636e;stroke-width:1.5}
+text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;dominant-baseline:auto}
+.mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){
+.bg{fill:#0d1117;stroke:#30363d}
+.fillb{fill:#161b22}
+.edge{stroke:#484f58}
+.name,.ot,.mt{fill:#e6edf3}
+.wc,.al,.tchg{fill:#9198a1}
+.you{fill:#58a6ff}
+.tnew{fill:#3fb950}
+.l{stroke:#6e7681}
+.fi{stroke:#9198a1}
+.tl{stroke:#484f58}
+.endc{stroke:#9198a1}
+}
+</style><rect class="bg" x="0.5" y="0.5" width="829" height="905" rx="12"/>
+<rect class="fillb" x="258" y="20" width="270" height="72" rx="8"/>
+<path class="edge" d="M332.3 20H520a8 8 0 0 1 8 8V84a8 8 0 0 1 -8 8H266a8 8 0 0 1 -8 -8V28a8 8 0 0 1 8 -8H270"/>
+<text class="tchg" x="277" y="24.5">changed</text>
+<text class="name" x="274" y="46">Claude, the main session</text>
+<text class="wc" x="274" y="66">reads the ask, picks Build or Sweep;</text>
+<text class="wc" x="274" y="83">drives every stage; writes no code</text>
+<rect class="fillb" x="600" y="20" width="210" height="100" rx="8"/>
+<path class="edge" d="M674.3 20H802a8 8 0 0 1 8 8V112a8 8 0 0 1 -8 8H608a8 8 0 0 1 -8 -8V28a8 8 0 0 1 8 -8H612"/>
+<text class="tchg" x="619" y="24.5">changed</text>
+<text class="name" x="614" y="46">The lcw command line</text>
+<text class="wc" x="614" y="66">records state; new commands:</text>
+<text class="mt mono" x="614" y="86" textLength="137.2" lengthAdjust="spacingAndGlyphs">lcw wave · lcw hunt</text>
+<text class="mt mono" x="614" y="106" textLength="187.7" lengthAdjust="spacingAndGlyphs">lcw req … park · lcw merge</text>
+<path class="l" d="M528 56H599"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M594 52L599 56L594 60"/>
+<text class="al" x="564.0" y="50" text-anchor="middle">commands</text>
+<rect class="fillb" x="600" y="160" width="210" height="90" rx="8"/>
+<path class="edge" d="M674.3 160H802a8 8 0 0 1 8 8V242a8 8 0 0 1 -8 8H608a8 8 0 0 1 -8 -8V168a8 8 0 0 1 8 -8H612"/>
+<text class="tchg" x="619" y="164.5">changed</text>
+<text class="name" x="614" y="186">The status card</text>
+<text class="mt mono" x="614" y="206" textLength="144.4" lengthAdjust="spacingAndGlyphs">◆ LCW Sweep · &lt;name&gt;</text>
+<text class="mt mono" x="614" y="224" textLength="144.4" lengthAdjust="spacingAndGlyphs">◆ LCW Build · &lt;name&gt;</text>
+<text class="wc" x="614" y="242">and a waves row</text>
+<path class="l" d="M705.0 120V159"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M701.0 154L705.0 159L709.0 154"/>
+<text class="al" x="713.0" y="144">state</text>
+<rect class="fillb" x="258" y="132" width="270" height="62" rx="8"/>
+<path class="edge" d="M304.7 132H520a8 8 0 0 1 8 8V186a8 8 0 0 1 -8 8H266a8 8 0 0 1 -8 -8V140a8 8 0 0 1 8 -8H270"/>
+<text class="tnew" x="277" y="136.5">new</text>
+<text class="name" x="274" y="158">Charter</text>
+<text class="you" x="512" y="158" text-anchor="end">with you</text>
+<text class="wc" x="274" y="178">ends on your one typed approval</text>
+<path class="l" d="M393.0 92V131"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M389.0 126L393.0 131L397.0 126"/>
+<text class="al" x="401.0" y="116">a Sweep</text>
+<rect class="fillb" x="258" y="244" width="270" height="92" rx="8"/>
+<path class="edge" d="M304.7 244H520a8 8 0 0 1 8 8V328a8 8 0 0 1 -8 8H266a8 8 0 0 1 -8 -8V252a8 8 0 0 1 8 -8H270"/>
+<text class="tnew" x="277" y="248.5">new</text>
+<text class="name" x="274" y="270">Hunt</text>
+<text class="wc" x="274" y="290">probes go to each area and bring</text>
+<text class="wc" x="274" y="307">back a recipe for each problem;</text>
+<text class="wc" x="274" y="324">Claude sorts each: Fix, Park or Drop</text>
+<path class="l" d="M393.0 194V243"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M389.0 238L393.0 243L397.0 238"/>
+<text class="al" x="401.0" y="223">approved charter</text>
+<path class="l" d="M528 268H627"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M622 264L627 268L622 272"/>
+<text class="al" x="579.0" y="261" text-anchor="middle">nothing to fix</text>
+<circle class="endc" cx="634" cy="268" r="6"/>
+<text class="ot" x="648" y="273">the sweep ends</text>
+<rect class="fillb" x="258" y="388" width="270" height="176" rx="8"/>
+<path class="edge" d="M332.3 388H520a8 8 0 0 1 8 8V556a8 8 0 0 1 -8 8H266a8 8 0 0 1 -8 -8V396a8 8 0 0 1 8 -8H270"/>
+<text class="tchg" x="277" y="392.5">changed</text>
+<text class="name" x="274" y="414">A wave</text>
+<text class="ot" x="274" y="436" style="font-size:14px">Plan → Build → Review → Ship</text>
+<text class="wc" x="274" y="455">the same four stages as a Build</text>
+<text class="wc" x="274" y="478">each fix starts as a failing test</text>
+<text class="wc" x="274" y="495">from its recipe; review once,</text>
+<text class="wc" x="274" y="512">reading only that wave’s changes</text>
+<text class="wc" x="274" y="535">a fix whose test will not fail: dropped</text>
+<text class="wc" x="274" y="552">one that needs a no-go zone: parked</text>
+<path class="l" d="M393.0 336V387"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M389.0 382L393.0 387L397.0 382"/>
+<text class="al" x="385.0" y="366" text-anchor="end">fixes, in waves</text>
+<path class="l" d="M528 504H552a8 8 0 0 0 8 -8V372a8 8 0 0 0 -8 -8H496a8 8 0 0 0 -8 8V387"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M484 382L488 387L492 382"/>
+<text class="al" x="554" y="358" text-anchor="end">next wave</text>
+<path class="l" d="M528 528H576a8 8 0 0 0 8 -8V328a8 8 0 0 0 -8 -8H529"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M534 316L529 320L534 324"/>
+<text class="al" x="594" y="458">queue empty:</text>
+<text class="al" x="594" y="475">a new round of Hunt</text>
+<rect class="fillb" x="20" y="132" width="160" height="352" rx="8"/>
+<path class="edge" d="M66.7 132H172a8 8 0 0 1 8 8V476a8 8 0 0 1 -8 8H28a8 8 0 0 1 -8 -8V140a8 8 0 0 1 8 -8H32"/>
+<text class="tnew" x="39" y="136.5">new</text>
+<text class="name" x="34" y="158" style="font-size:14px">The sweep’s records</text>
+<text class="wc" x="34" y="178">outside the repository</text>
+<path class="fi" d="M48 205.5h5.5l3.5 3.5v8.5h-9zM53.5 205.5v3.5h3.5"/>
+<text class="mt mono" x="66" y="216" textLength="72.2" lengthAdjust="spacingAndGlyphs">charter.md</text>
+<path class="fi" d="M48 235.5h5.5l3.5 3.5v8.5h-9zM53.5 235.5v3.5h3.5"/>
+<text class="mt mono" x="66" y="246" textLength="79.4" lengthAdjust="spacingAndGlyphs">findings.md</text>
+<path class="fi" d="M48 265.5h5.5l3.5 3.5v8.5h-9zM53.5 265.5v3.5h3.5"/>
+<text class="mt mono" x="66" y="276" textLength="65.0" lengthAdjust="spacingAndGlyphs">parked.md</text>
+<path class="fi" d="M48 296h4.5l1.5 2h6v7.5h-12z"/>
+<text class="mt mono" x="66" y="306" textLength="43.3" lengthAdjust="spacingAndGlyphs">waves/</text>
+<path class="fi" d="M66 326h4.5l1.5 2h6v7.5h-12z"/>
+<text class="mt mono" x="84" y="336" textLength="28.9" lengthAdjust="spacingAndGlyphs">&lt;n&gt;/</text>
+<path class="fi" d="M84 355.5h5.5l3.5 3.5v8.5h-9zM89.5 355.5v3.5h3.5"/>
+<text class="mt mono" x="102" y="366" textLength="50.5" lengthAdjust="spacingAndGlyphs">plan.md</text>
+<path class="fi" d="M84 385.5h5.5l3.5 3.5v8.5h-9zM89.5 385.5v3.5h3.5"/>
+<text class="mt mono" x="102" y="396" textLength="65.0" lengthAdjust="spacingAndGlyphs">ledger.md</text>
+<path class="tl" d="M38 198V296Q38 301 43 301H46M38 211H46M38 241H46M38 271H46"/>
+<path class="tl" d="M54 309V326Q54 331 59 331H64"/>
+<path class="tl" d="M72 339V386Q72 391 77 391H82M72 361H82"/>
+<path class="l" d="M258 172H181"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M186 168L181 172L186 176"/>
+<text class="al" x="219.0" y="166" text-anchor="middle">charter</text>
+<path class="l" d="M258 310H181"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M186 306L181 310L186 314"/>
+<text class="al" x="219.0" y="289" text-anchor="middle">findings,</text>
+<text class="al" x="219.0" y="304" text-anchor="middle">parked list</text>
+<path class="l" d="M258 452H181"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M186 448L181 452L186 456"/>
+<text class="al" x="219.0" y="446" text-anchor="middle">plan, ledger</text>
+<path class="l" d="M258 528H108.0a8 8 0 0 1 -8 -8V485"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M96.0 490L100.0 485L104.0 490"/>
+<text class="al" x="26" y="546">parked and dropped fixes</text>
+<rect class="fillb" x="258" y="614" width="270" height="112" rx="8"/>
+<path class="edge" d="M304.7 614H520a8 8 0 0 1 8 8V718a8 8 0 0 1 -8 8H266a8 8 0 0 1 -8 -8V622a8 8 0 0 1 8 -8H270"/>
+<text class="tnew" x="277" y="618.5">new</text>
+<text class="name" x="274" y="640">Git branches</text>
+<text class="wc" x="274" y="660">each wave is cut as</text>
+<text class="mt mono" x="274" y="678" textLength="137.2" lengthAdjust="spacingAndGlyphs">lcw/&lt;name&gt;-wave-&lt;n&gt;</text>
+<text class="wc" x="274" y="698">from the sweep’s branch</text>
+<text class="mt mono" x="425" y="698" textLength="72.2" lengthAdjust="spacingAndGlyphs">lcw/&lt;name&gt;</text>
+<text class="wc" x="497.2" y="698">,</text>
+<text class="wc" x="274" y="716">which moves on when the wave ships</text>
+<path class="l" d="M393.0 564V613"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M389.0 608L393.0 613L397.0 608"/>
+<text class="al" x="385.0" y="594" text-anchor="end">the wave’s commits</text>
+<rect class="fillb" x="258" y="776" width="552" height="108" rx="8"/>
+<path class="edge" d="M304.7 776H802a8 8 0 0 1 8 8V876a8 8 0 0 1 -8 8H266a8 8 0 0 1 -8 -8V784a8 8 0 0 1 8 -8H270"/>
+<text class="tnew" x="277" y="780.5">new</text>
+<text class="name" x="274" y="802">GitHub</text>
+<text class="wc" x="338" y="802">draft pull requests, in the one way the charter picks</text>
+<text class="mt mono" x="458" y="848" textLength="65.0" lengthAdjust="spacingAndGlyphs">lcw merge</text>
+<text class="wc" x="522.98" y="848">, merge commits,</text>
+<text class="ot" x="274" y="830">stacked</text>
+<text class="wc" x="274" y="848">one per wave, each on</text>
+<text class="wc" x="274" y="865">the one before</text>
+<text class="ot" x="458" y="830">merged as it goes</text>
+<text class="wc" x="458" y="848"></text>
+<text class="wc" x="458" y="865">only when your criteria are met</text>
+<text class="ot" x="678" y="830">one at the end</text>
+<text class="wc" x="678" y="848">one pull request</text>
+<text class="wc" x="678" y="865">for the whole sweep</text>
+<path class="l" d="M393.0 726V775"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M389.0 770L393.0 775L397.0 770"/>
+<text class="al" x="385.0" y="756" text-anchor="end">the wave’s branch</text>
+<path class="l" d="M258 832H236a8 8 0 0 1 -8 -8V554a8 8 0 0 1 8 -8H257"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M252 542L257 546L252 550"/>
+<text class="al" x="218" y="608" text-anchor="end">criteria not met:</text>
+<text class="al" x="218" y="625" text-anchor="end">the wave stays open,</text>
+<text class="al" x="218" y="642" text-anchor="end">looked at again after</text>
+<text class="al" x="218" y="659" text-anchor="end">the next wave and</text>
+<text class="al" x="218" y="676" text-anchor="end">at the end</text>
+</svg>
