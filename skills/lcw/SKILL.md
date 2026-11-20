@@ -44,6 +44,8 @@ Whoever writes a document for people, you or a worker, loads the `lcw:docs` skil
 
 If this session has an advisor (the human turns it on with `claude --advisor fable`), consult it at every stage: before a big step, when you are stuck, and before you call anything done. That means before the playback you ask the human to approve, before you take the spec, the plan, the build or the review as finished, and before you open the pull request. Weigh what it says as a senior colleague's view: act on what is real, and write in the ledger any decision it changed. With no advisor, carry on without one.
 
+Only you consult the advisor. Agents never do, and their own files tell them so: a call of theirs sends the agent's whole context to the advisor and holds the agent up for minutes. A doubt in an agent's report is yours to settle, with the advisor when it is a hard call.
+
 ## Starting, or carrying on
 
 If the session-start context named a run for this session, or you were just compacted, or the session restarted: run `lcw status`, read the stage file for the stage it shows, and carry on from its next step and the ledger. Once the run has a worktree (`lcw status` shows it), make sure you are working in it; if not, call EnterWorktree with its path first. Do not start again and do not ask the human what was happening.
