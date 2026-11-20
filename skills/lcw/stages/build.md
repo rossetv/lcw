@@ -35,7 +35,7 @@ If two workers did touch the same file, launch a worker to settle the result fro
 
 ## Keep pushing
 
-After every report ask: is anything stuck? Is this going well? How can we speed this up: more in parallel, a task split, a cheaper model where a test can check the work? How can we improve this? Act on the answers, and keep health current (`lcw set health="on track, T7 done"`; in a wave, keep the wave's words in front: `health="wave <n>: <areas> fixes building side by side, T7 done"`).
+After every report ask: is anything stuck? Is this going well? How can we speed this up: more in parallel, a task split, a cheaper model where a test can check the work? How can we improve this? Act on the answers, and keep health current (`lcw set health="on track, T7 done"`; in a wave, keep the wave's words in front, and "wave <m> waits on your answer; " before them while an earlier wave's ask is open: `health="wave <n>: <areas> fixes building side by side, T7 done"`).
 
 A task that has failed twice, or is going round in circles, moves up a tier with what was learned (see models.md); it is not simply retried. A task that cannot be done is parked, `lcw task <task> parked`, with the reason in the ledger; it goes in the pull request.
 
@@ -79,7 +79,7 @@ and end your turn. The review starts on a fresh context.
 
 When a worker reports a dropped fix, it has recorded the drop itself: run none of those commands again. Move the finding to Drop in findings.md with the worker's reason. It is never passed to a more capable model to try again.
 
-When a worker reports a fix it skipped because it needs a no-go zone or a kind of change the charter does not allow, run `lcw req <F id> park` (and `lcw task <id> parked` if no fix of the task was built and the rest were dropped or skipped), move the finding to Park in findings.md with the reason, and add it to parked.md in plain words: where it is, why it was parked, and what the human decides. It is never retried or moved up a tier, and Review does not check it.
+When a worker, or an extra orchestrator for its workers, reports a fix it skipped because it needs a no-go zone or a kind of change the charter does not allow, run `lcw req <F id> park` (and `lcw task <id> parked` if no fix of the task was built and the rest were dropped or skipped), move the finding to Park in findings.md with the reason, and add it to parked.md in plain words: where it is, why it was parked, and what the human decides. It is never retried or moved up a tier, and Review does not check it.
 
 The task for files every area shares is dropped (`lcw task <id> dropped`) when no fix of the wave was built, so an empty wave stays empty. A wave with no commits goes from Build straight to Ship (`lcw stage Ship`); there is nothing to review.
 

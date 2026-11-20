@@ -44,7 +44,7 @@ Take the lines in this order, one at a time. While you ask a line, `lcw set heal
 For the PRs line, always ask: may Claude ever merge a pull request on its own, and if so, on what criteria? Then settle one of three:
 
 - **stacked**: one draft pull request for each wave, each on top of the one before; the sweep merges none of them;
-- **merged as it goes**: one pull request for each wave, merged by the sweep when the wave meets the human's criteria; a wave that does not is left open, and so is every wave after it;
+- **merged as it goes**: one pull request for each wave, merged by the sweep when the wave meets the human's criteria; a wave that does not stays open, with every wave after it, until it meets them;
 - **one at the end**: nothing is opened until the sweep is over, then one draft pull request for everything.
 
 Write their criteria in their own words. The sweep reads GitHub's checks only if the criteria name them. If they do, tell the human that the sweep's pull requests stay drafts until it merges them, so in a repository that skips its checks on draft pull requests such criteria are never met.
