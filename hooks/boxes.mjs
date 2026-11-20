@@ -33,7 +33,24 @@ export function runFact(state, kept) {
     pausedAt: state.pausedAt ?? undefined, runningSince: state.runningSince ?? undefined, ...taskCounts(state),
     asks: asks.filter((a) => Number.isFinite(a?.n)).map((a) => ({ n: a.n, text: String(a.text ?? ''), waiting: a.waiting, at: a.at })).sort((a, b) => a.n - b.n),
     awake: !!kept, guide: state.guide === true, firstOnMachine: state.firstOnMachine === true,
+    approval: approvalOf(state),
   }
+}
+
+/** The approval the Brainstorm's playback asks for (lcw approval), while the run is still with the person in it; else undefined. */
+function approvalOf(state) {
+  const a = state.approval
+  if (state.stage !== 'Brainstorm' || state.status !== 'with-you' || !Number.isFinite(a?.at)) return undefined
+  const go = (Array.isArray(a.go) ? a.go : []).map((g) => String(g ?? '').replace(/\s+/g, ' ').trim().slice(0, 20)).filter(Boolean).slice(0, 3)
+  const meaning = String(a.meaning ?? '').replace(/\s+/g, ' ').trim()
+  return { go: go.length ? go : ['Go'], meaning: meaning || 'build it as played back', at: a.at }
+}
+
+/** What a reply on the approval box puts in the prompt: Go's label as it is, the other two ready for the person's words. */
+export function approveText(banner, option) {
+  if (option === 'but') return 'Yes, but '
+  if (option === 'else') return 'Something else: '
+  return banner.options.find(([id]) => id === option)?.[1]
 }
 
 /** Whether the keep-awake box can apply: the run runs on its own, past the Brainstorm. */
@@ -204,6 +221,7 @@ export function discussPrompt(root, cleanup, cleanupPath) {
  * - prompt: submitted ({ text, asUser }); when it cannot be, the box stays and the person is told;
  * - notices: written into notices.json (the machine's "never again" choices);
  * - fill: the ask number Answer now puts in the prompt;
+ * - fillText: the reply the approval box puts in an empty prompt, never sent (the person presses Enter);
  * - dismiss: the box's occurrence is hidden for this session;
  * - toast: said at the end; 'output' says the last command's output.
  * null when the box does not offer option. facts are those the box was chosen from; ctx: { root, sessionId, repoKey, cleanupPath }.
@@ -217,6 +235,8 @@ export function pressPlan(banner, option, facts, ctx) {
   const run = facts?.run
   if (option === 'later' || option === 'wait') return close
   switch (banner.kind) {
+    case 'approve':
+      return { fillText: approveText(banner, option), dismiss: true }
     case 'answer':
       return { fill: run?.asks?.[0]?.n, dismiss: true }
     case 'mark': {

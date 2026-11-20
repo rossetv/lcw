@@ -1,7 +1,7 @@
 import type { Row } from '../hooks/lcw-mod.mjs'
 
 export type BannerKind =
-  | 'answer' | 'mark' | 'spendfail' | 'unfinished' | 'awake' | 'restart' | 'update' | 'whatsnew' | 'guide' | 'cleanup' | 'statusline'
+  | 'answer' | 'approve' | 'mark' | 'spendfail' | 'unfinished' | 'awake' | 'restart' | 'update' | 'whatsnew' | 'guide' | 'cleanup' | 'statusline'
   | 'advisor' | 'cap' | 'spend'
 
 /** One box: its kind, the occurrence key (a dismissal is "kind:key"), the title, plain lines, bullets, and [id, label] options. */
@@ -12,6 +12,10 @@ export interface Banner {
   lines: string[]
   bullets: string[]
   options: [string, string][]
+  /** The approval box: its own tag, its replies in a column (ids of options, and what each means), and a note at the foot. */
+  tag?: string
+  choices?: { ids: string[]; meaning: string }[]
+  note?: string
 }
 
 /** A time as milliseconds, or an ISO string. */
@@ -22,6 +26,8 @@ export interface BannerRun {
   /** at: when the question was asked; numbers come back once their question is answered, times do not. */
   done?: number; left?: number; asks?: { n: number; text: string; waiting?: number; at?: Time }[]
   awake?: boolean; guide?: boolean; firstOnMachine?: boolean
+  /** The Brainstorm's playback waits for approval: Go's labels (one, or one per variant), what Go builds, and when it asked. */
+  approval?: { go: string[]; meaning: string; at: number }
 }
 
 /** Every fact is optional; a missing one means the box it feeds does not apply. */
@@ -51,6 +57,8 @@ export interface BannerFacts {
   } | null
   statusLine?: { command?: string; mine?: boolean } | null
   cleanup?: { at: Time; title: string; bullets?: string[]; items?: unknown } | null
+  /** When the person last sent a prompt in this session: one sent after the approval asked ends that box. */
+  repliedAt?: number
   /** 'failed' after Answer now could not fill the prompt. */
   answerFill?: 'failed'
 }
@@ -59,5 +67,8 @@ export const BANNERS: Record<'advisor' | 'cap' | 'spend', { title: string; body:
 export function bannerFor(facts?: BannerFacts): Banner | null
 /** The answer box's key for a run with open questions: the run and when its newest open question was asked. */
 export function answerKey(run: BannerRun): string
+/** The approval box's key: the run and when the playback asked. */
+export function approveKey(run: BannerRun & { approval: NonNullable<BannerRun['approval']> }): string
 /** overCard: a run's card is drawn under it, at the full cols, so the box is as wide. */
-export function bannerRows(banner: Banner | null, cols: number, overCard?: boolean): Row[]
+/** tight: the approval box without its plain line and blank rows, for where the full one does not fit. */
+export function bannerRows(banner: Banner | null, cols: number, overCard?: boolean, tight?: boolean): Row[]

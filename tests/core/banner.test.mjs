@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { bannerFor, bannerRows } from '../../lib/banner.mjs'
 import * as S from './banner-samples.mjs'
+import { runFact } from '../../hooks/boxes.mjs'
 
 const kindOf = (facts) => bannerFor(facts)?.kind ?? null
 const textOf = (b) => [b.title, ...b.bullets, ...b.lines, ...b.options.map((o) => o[1])].join('\n')
@@ -247,4 +248,54 @@ test('a word longer than the box is cut rather than breaking the border', () => 
   const long = 'x'.repeat(200)
   const b = bannerFor({ ...S.N, cleanup: { ...S.N.cleanup, bullets: [long] } })
   assert.deepEqual([...new Set(bannerRows(b, 96).map(cells))], [92])
+})
+
+// A run at the end of its Brainstorm, its playback asking for approval at time 5.
+const approving = (approval = { go: [], meaning: '', at: 5 }, over = {}) => ({
+  advisorModel: 'fable', run: runFact({ id: 'r1', name: 'phone-rows', stage: 'Brainstorm', status: 'with-you', approval, ...over }),
+})
+
+test('the approval box shows from the playback until the person sends anything, and only in a Brainstorm with them', () => {
+  const b = bannerFor(approving())
+  assert.equal(b.kind, 'approve')
+  assert.equal(b.title, 'Is this what you want built?')
+  assert.deepEqual(b.options, [['go1', 'Go'], ['but', 'Yes, but …'], ['else', 'Something else']])
+  assert.equal(b.choices[0].meaning, 'build it as played back')
+  assert.equal(bannerFor({ ...approving(), repliedAt: 4 })?.kind, 'approve', 'a prompt sent before the playback asked')
+  assert.equal(bannerFor({ ...approving(), repliedAt: 6 }), null, 'a reply typed by hand ends it')
+  assert.equal(bannerFor({ ...approving(), dismissed: new Set(['approve:r1:5']) }), null, 'a pressed button ends it')
+  assert.equal(bannerFor({ ...approving({ go: [], at: 7 }), dismissed: new Set(['approve:r1:5']) })?.kind, 'approve', 'a playback sent again asks again')
+  assert.equal(bannerFor(approving(undefined, { stage: 'Spec', status: 'running' })), null)
+  assert.equal(bannerFor(approving(undefined, { status: 'stopped' })), null)
+})
+
+test('the approval box comes after the run\'s open questions and before every other box', () => {
+  const facts = { ...approving(), advisorModel: undefined, run: { ...approving().run, asks: [{ n: 1, text: 'q', at: 1 }] } }
+  assert.deepEqual(chain(facts), ['answer', 'approve', 'advisor'])
+})
+
+test('the approval box draws its replies in a column, Go variants on one row, every row as wide as the box', () => {
+  const b = bannerFor(approving({ go: ['Go (a)', 'Go (b)'], meaning: 'build it as played back, with (a) wrapped or (b) short rows on a phone', at: 5 }))
+  for (const cols of [44, 74, 100]) {
+    for (const tight of [false, true]) {
+      const rows = bannerRows(b, cols, true, tight)
+      assert.ok(rows.length > 0)
+      for (const row of rows) assert.equal(cells(row), cols)
+    }
+  }
+  const long = bannerFor(approving({ go: ['Go with wrapped rows', 'Go with short rows!!', 'Go with no rows at a'], at: 5 }))
+  for (const cols of [44, 74, 100]) for (const row of bannerRows(long, cols, true)) assert.equal(cells(row), cols, 'long labels at ' + cols)
+  assert.deepEqual(bannerRows(long, 44, true), [], 'buttons that cannot fit draw no box')
+  const lone = bannerRows(bannerFor(approving()), 74, true).flatMap((r) => r.filter((s) => s.id))
+  assert.equal(new Set(lone.map((s) => [...s.t].length)).size, 1, 'a lone Go is as wide as the grey buttons')
+  const rows = bannerRows(b, 74, true)
+  const goRow = rows.find((r) => r.some((s) => s.id === 'banner:approve:go1'))
+  assert.ok(goRow.some((s) => s.id === 'banner:approve:go2'), 'both Go buttons on one row')
+  assert.deepEqual(goRow.filter((s) => s.id).map((s) => s.bg), ['Fable', 'Fable'])
+  const ids = rows.flatMap((r) => r.filter((s) => s.id).map((s) => s.id))
+  assert.deepEqual(ids, ['banner:approve:go1', 'banner:approve:go2', 'banner:approve:but', 'banner:approve:else'])
+  const at = (id) => rows.findIndex((r) => r.some((s) => s.id === id))
+  assert.equal(cells(rows[at('banner:approve:but') - 1].slice(1, -1).filter((s) => s.t.trim())), 0, 'a blank row between replies')
+  assert.ok(bannerRows(b, 74, true, true).length < rows.length, 'the tight form is shorter')
+  assert.match(rows.map((r) => r.map((s) => s.t).join('')).join('\n'), /It fills your prompt; Enter sends\./)
 })

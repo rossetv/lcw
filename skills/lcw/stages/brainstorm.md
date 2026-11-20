@@ -76,9 +76,17 @@ Open the message with the question, in bold: is this what they want built? Then,
 2. **Yes, but**: with the change they want.
 3. **Something else**: drop this and pick again.
 
+Just before you send the playback, put the same question in LCW's box above their prompt:
+
+```
+lcw approval
+```
+
+If Go comes in variants, as when the playback leaves them one choice to make, name each and say what Go builds: `lcw approval "Go (a)" "Go (b)" --meaning "build it as played back, with (a) wrapped or (b) short rows on a phone"`. Run it again whenever you send the playback again. The box goes once they send anything; a new stage clears it. The box can be hidden (no room, a narrow window, nobody watching), so the message still ends with the question and the three replies.
+
 If they choose something else, the run you started is named for the wrong change: `lcw stop` it, then `lcw start` a new run named for what they pick, and carry on the brainstorm there.
 
-A typed reply counts, a number or their own words, because typing it is a deliberate answer. Never put the approval in a question dialog, where one key press on a preselected answer would approve the whole run.
+A typed reply counts, a number or their own words, because typing it is a deliberate answer. So does one the box put in their prompt and they sent with Enter: its buttons only fill the prompt. Never put the approval in a question dialog, where one key press on a preselected answer would approve the whole run.
 
 Send nothing else until they answer. If something you learn meanwhile changes the playback, send the whole playback again with what changed marked, not a note beside the old one.
 

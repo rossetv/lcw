@@ -24,6 +24,8 @@ import type { Plan, RunSeen } from './boxes.mjs'
 const TOP_GAP = 1
 // The rows a run's card keeps before a banner may be drawn above it.
 const CARD_ROOM = 10
+// Where a prompt the person sent comes from: typed at the prompt, from a phone or the web, or from an app driving the session.
+const PERSON = ['composer', 'bridge', 'sdk']
 // How long the band is drawn without buttons after its box changed: see the ui.render hook.
 const UNFOCUS_MS = 300
 
@@ -86,6 +88,8 @@ const S = {
   // The box last drawn ('kind:key', '' for none), and until when the band is drawn without buttons since it changed.
   drawnBox: '',
   unfocusUntil: 0,
+  // When the person last sent a prompt: one sent after the Brainstorm's playback asked for approval ends that box.
+  repliedAt: 0,
 }
 
 const totalsFile = (runDir: string) => `${runDir}/totals.json`
@@ -303,6 +307,7 @@ async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
     statusLine: statusLineFact(statusLine, home),
     cleanup: cleanup?.at && cleanup?.title ? cleanup : null,
     answerFill: asked && S.banner.answerFill === asked ? 'failed' : undefined,
+    repliedAt: S.repliedAt,
   }
 }
 
@@ -440,6 +445,18 @@ async function fillAnswer($: EngineInterface, n: number | undefined) {
   return !!filled?.isFilled
 }
 
+// A reply from the approval box put in the prompt, never sent. Only into an empty prompt: a draft the person typed is
+// neither replaced nor added to, and they are told to type the reply themselves.
+async function fillReply($: EngineInterface, text: string) {
+  if ((await draft($)).trim()) {
+    $.ui.toast(`Your prompt has text in it. Clear it and press the button again, or type "${text.trim()}" yourself.`, { timeoutMs: 10000 })
+    return false
+  }
+  const filled = await $.prompt.fill({ text }).catch(() => null)
+  if (!filled?.isFilled) $.ui.toast(`LCW could not fill your prompt. Type "${text.trim()}" there and press Enter.`, { timeoutMs: 10000 })
+  return !!filled?.isFilled
+}
+
 // A press's plan carried out: its commands in order (the first that fails says why and the box stays), then the
 // prompt (one that cannot be sent keeps the box), the notices, the fill, and the box hidden for this occurrence.
 async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
@@ -460,6 +477,7 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
     const file = noticesFile(await lcwHome($))
     await $.fs.write(file, JSON.stringify({ ...((await readJson($, file)) || {}), ...plan.notices }))
   }
+  if (plan.fillText !== undefined && !(await fillReply($, plan.fillText))) return
   if ('fill' in plan && !(await fillAnswer($, plan.fill))) {
     S.banner.answerFill = String(banner.key)
     S.dirty = true
@@ -594,6 +612,17 @@ export const register: Register = (on) => {
     return result
   })
 
+  // A prompt the person sent (not a slash command, nor one the engine or a plugin sent for them) is their reply to the approval box, if it shows.
+  on('prompt.submit', async ($, e, next) => {
+    const result = await next(e)
+    const kind = (e as any).origin?.kind
+    if (!e.isMeta && !e.command && (!kind || PERSON.includes(kind)) && !(result as any)?.drop) {
+      S.repliedAt = await $.clock.now().catch(() => S.repliedAt)
+      void readBanner($).catch(() => {})
+    }
+    return result
+  })
+
   on('session.stop', async ($, e, next) => {
     const result = await next(e)
     if (e.isTurnRunning) await noteStopped($).catch(() => {})
@@ -642,7 +671,7 @@ export const register: Register = (on) => {
       const cols = e.props.bodyColumns
       const room = e.props.maxRows - TOP_GAP - (e.props.view.agentId ? 1 : 0)
       // Over a run's card the box is as wide as the card, which takes the whole width.
-      const drawn = shown && !e.props.hasSurvey ? bannerRows(shown, cols, !!run) : []
+      let drawn = shown && !e.props.hasSurvey ? bannerRows(shown, cols, !!run) : []
       let banner = drawn
       if ((!run && !banner.length) || e.props.hasSurvey) {
         if (S.hideRows) { S.hideRows = false; S.dirty = true }
@@ -664,6 +693,8 @@ export const register: Register = (on) => {
         }
         const markBox = drawn.length > 0 && shown?.kind === 'mark'
         card = draw(room, markBox)
+        // The approval box has a tight form for where the full one would have to wait for room above the card.
+        if (shown?.kind === 'approve' && drawn.length && room - drawn.length - 1 < Math.min(CARD_ROOM, card.length)) banner = drawn = bannerRows(shown, cols, true, true)
         // Where both do not fit, the card keeps the rows it needs (up to CARD_ROOM) and the box waits: the card
         // carries what is waiting on the person.
         if (drawn.length && room - drawn.length - 1 < Math.min(CARD_ROOM, card.length)) {

@@ -225,3 +225,20 @@ test('the unfinished run box says it removes a worktree only for a run that has 
   assert.equal(abandon({ worktree: '/repo/.claude/worktrees/old-run', branch: 'lcw/old-run' }), 'Abandon stops it for good and removes its worktree; its branch stays, so no work is lost.')
   assert.equal(abandon({}), 'Abandon stops it for good.')
 })
+
+test('the approval reaches the boxes only while the run is with the person in its Brainstorm, labels tidied, at most three', () => {
+  const state = (over) => ({ id: 'r1', stage: 'Brainstorm', status: 'with-you', approval: { go: [' Go  (a) ', '', 'Go (b)', 'c', 'd'], meaning: '', at: 5 }, ...over })
+  assert.deepEqual(runFact(state()).approval, { go: ['Go (a)', 'Go (b)', 'c'], meaning: 'build it as played back', at: 5 })
+  assert.deepEqual(runFact(state({ approval: { go: ['Go with the long rows of a phone'], at: 5 } })).approval.go, ['Go with the long row'])
+  assert.equal(runFact(state({ status: 'paused' })).approval, undefined)
+  assert.equal(runFact(state({ stage: 'Spec', status: 'running' })).approval, undefined)
+  assert.equal(runFact(state({ approval: { go: [] } })).approval, undefined, 'no time, no box')
+})
+
+test('a reply on the approval box only fills the prompt: no command, no prompt sent', () => {
+  const facts = { now: NOW, advisorModel: 'fable', run: runFact({ id: 'r1', stage: 'Brainstorm', status: 'with-you', approval: { go: ['Go (a)', 'Go (b)'], at: 5 } }) }
+  assert.deepEqual(press(facts, 'go2'), { fillText: 'Go (b)', dismiss: true })
+  assert.deepEqual(press(facts, 'but'), { fillText: 'Yes, but ', dismiss: true })
+  assert.deepEqual(press(facts, 'else'), { fillText: 'Something else: ', dismiss: true })
+  assert.equal(press(facts, 'go3'), null)
+})

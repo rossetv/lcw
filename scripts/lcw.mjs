@@ -21,25 +21,26 @@ const fail = (msg) => { throw new Fail(msg) }
 const now = () => (Number.isFinite(Number(process.env.LCW_NOW)) && process.env.LCW_NOW !== '' ? Number(process.env.LCW_NOW) : Date.now())
 
 // flags each command takes (all take a value); --session is accepted everywhere
-const COMMAND_FLAGS = { start: ['title'], task: ['model', 'effort'], ask: ['waiting'], finish: ['pr', 'branch'] }
+const COMMAND_FLAGS = { start: ['title'], task: ['model', 'effort'], ask: ['waiting'], approval: ['meaning'], finish: ['pr', 'branch'] }
 // flags that take no value
 const SWITCHES = { where: ['json'], awake: ['check'] }
-const MUTATING = ['stage', 'set', 'task', 'req', 'ask', 'answer', 'mark', 'pause', 'resume', 'stop', 'finish', 'worktree', 'take', 'abandon']
+const MUTATING = ['stage', 'set', 'task', 'req', 'ask', 'answer', 'approval', 'mark', 'pause', 'resume', 'stop', 'finish', 'worktree', 'take', 'abandon']
 // commands that name their run by its id, rather than acting on the run this session drives
 const BY_ID = ['take', 'abandon']
 // a run no session has shown for this long is no longer open anywhere
 const SHOWN_WITHIN_MS = 15 * 60000
 const STAGES = ['Brainstorm', 'Spec', 'Plan', 'Build', 'Review', 'Ship']
-const PROTECTED = ['id', 'version', 'tasks', 'asks', 'requirements', 'driver']
+const PROTECTED = ['id', 'version', 'tasks', 'asks', 'requirements', 'driver', 'approval']
 
 const flags = {}
 const args = []
 const argv = process.argv.slice(2)
-const USAGE = `lcw commands: ${'start status stage set task req ask answer ledger checkpoint mark cap spend-command usage pause resume stop finish worktree pictures runs where take abandon awake'}
+const USAGE = `lcw commands: ${'start status stage set task req ask answer approval ledger checkpoint mark cap spend-command usage pause resume stop finish worktree pictures runs where take abandon awake'}
 req <id> rename "<name>" and req <id> drop change a requirement when what is built changes.
+approval ["<Go label>" ...] [--meaning "<what Go builds>"] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. Asked again, it replaces the last; a new stage clears it.
 take <runId> makes this session take over a run of this repository that no session has shown for 15 minutes; abandon <runId> stops such a run for good and removes its worktree when nothing in it is uncommitted, keeping its branch.
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
-flags: --session <id> (any command); start --title; task --model --effort; ask --waiting; finish --pr --branch; where --json; awake --check
+flags: --session <id> (any command); start --title; task --model --effort; ask --waiting; approval --meaning; finish --pr --branch; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
 const refuse = (msg) => { console.log(msg); process.exit(1) }
@@ -227,6 +228,7 @@ const commands = {
       }
       s.stage = stage
       s.stageSince = now()
+      s.approval = null // asked for the playback of this Brainstorm only
       s.milestone = null // the build sets it again for each milestone it launches
       if (stage === 'Brainstorm') s.status = 'with-you'
       else s.status = 'running'
@@ -280,6 +282,19 @@ const commands = {
       s.asks = s.asks.filter((a) => a.n !== n)
     })
     out(`answered ${n}; ${run.state.asks.length} open`)
+  },
+
+  approval() {
+    const run = need()
+    if (run.state.stage !== 'Brainstorm') fail(`approval is the Brainstorm's question; this run is in ${run.state.stage}`)
+    const go = rest.map((g) => g.replace(/\s+/g, ' ').trim()).filter(Boolean)
+    if (go.length > 3) fail('At most 3 Go labels, such as "Go (a)" "Go (b)"')
+    if (go.some((g) => [...g].length > 20)) fail('A Go label is at most 20 characters, such as "Go (a)"; say what it builds with --meaning')
+    const meaning = String(flags.meaning ?? '').replace(/\s+/g, ' ').trim()
+    change(run, `approval asked${go.length ? ': ' + go.join(' / ') : ''}${meaning ? ' (' + meaning + ')' : ''}`, (s) => {
+      s.approval = { go, meaning, at: now() }
+    })
+    out('approval: the box shows above the prompt until the person replies')
   },
 
   ledger() {

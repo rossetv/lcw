@@ -163,3 +163,22 @@ test('runningSince is when the run last started running, kept across stage chang
   at(T + 180000, 'resume')
   assert.deepEqual([t.state().pausedAt, t.state().runningSince], [null, iso(3)])
 })
+
+test('approval puts the Brainstorm question in the state for LCW\'s box; asked again it replaces it; a new stage clears it', () => {
+  const t = started()
+  assert.equal(t.cli('approval').code, 0)
+  const first = t.state().approval
+  assert.deepEqual([first.go, first.meaning], [[], ''])
+  assert.ok(Number.isFinite(first.at))
+  const r = t.cli('approval', 'Go (a)', 'Go (b)', '--meaning', 'build it, with (a) wrapped or (b) short rows')
+  assert.equal(r.code, 0)
+  assert.deepEqual(t.state().approval.go, ['Go (a)', 'Go (b)'])
+  assert.equal(t.state().approval.meaning, 'build it, with (a) wrapped or (b) short rows')
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /approval asked: Go \(a\) \/ Go \(b\)/)
+  assert.equal(t.cli('approval', 'a', 'b', 'c', 'd').code, 1, 'at most three Go labels')
+  assert.equal(t.cli('approval', 'build it as played back, wrapped').code, 1, 'a label is short; the meaning goes in --meaning')
+  assert.equal(t.cli('set', 'approval={"go":["Go"],"at":1}').code, 1, 'only lcw approval sets it')
+  t.cli('stage', 'Spec')
+  assert.equal(t.state().approval, null)
+  assert.equal(t.cli('approval').code, 1, 'only in the Brainstorm')
+})
