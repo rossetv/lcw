@@ -1,6 +1,6 @@
 ---
 name: weekly
-description: The briefs for LCW's weekly check prompts, the update check and the cleanup check. Load only when a prompt that starts "LCW weekly check" says to.
+description: The briefs for LCW's check prompts, the update check (asked when a session finds a newer LCW) and the weekly cleanup check. Load only when a prompt that starts "LCW weekly check" says to.
 user-invocable: false
 ---
 

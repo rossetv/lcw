@@ -372,6 +372,26 @@ test('two minutes into an idle session the due weekly check is submitted, once',
   expect(w.runs.filter((a) => a.at(-1) === 'due').length).toBe(1)
 })
 
+const UPDATE = "LCW weekly check: load the lcw:weekly skill and run its update check. Scripts: '/p/scripts'."
+const updateAnswer = (a: string[]) => (a.at(-1) === 'update' ? { exitCode: 0, stdout: UPDATE + '\n' } : a.at(-1) === 'due' ? { exitCode: 0, stdout: WEEKLY + '\n' } : undefined)
+const updateLooks = (runs: string[][]) => runs.filter((a) => a.at(-1) === 'update').length
+
+test('a session looks for an update once, at its start, even with something typed; the prompt waits for two idle minutes', async ($, on) => {
+  let typed = 'half a thought'
+  const w = engine(on, {}, { answer: updateAnswer, draft: () => typed })
+  await start($)
+  await w.clock.advance(2000)
+  expect(updateLooks(w.runs)).toBe(1)
+  await w.clock.advance(130000)
+  expect(w.prompts.length).toBe(0)
+  typed = ''
+  await w.clock.advance(2000)
+  expect(w.prompts.map((p) => p.text)).toEqual([UPDATE])
+  await w.clock.advance(5 * 60000)
+  expect(updateLooks(w.runs)).toBe(1)
+  expect(w.prompts.map((p) => p.text)).toEqual([UPDATE, WEEKLY])
+})
+
 test('no weekly check is asked while the person has something typed', async ($, on) => {
   const typed = engine(on, {}, { answer: weeklyAnswer, draft: 'half a thought' })
   await start($)
@@ -394,10 +414,11 @@ test('a check found while the person started typing waits until the prompt is em
   expect(w.prompts.map((p) => p.text)).toEqual([WEEKLY])
 })
 
-test('a session driving a run is never asked for a weekly check', async ($, on) => {
-  const w = engine(on, bound({}), { answer: weeklyAnswer })
+test('a session driving a run is never asked for a weekly check, nor looks for an update', async ($, on) => {
+  const w = engine(on, bound({}), { answer: updateAnswer })
   await start($)
   await w.clock.advance(3 * 60000)
+  expect(updateLooks(w.runs)).toBe(0)
   expect(w.runs.some((a) => a.at(-1) === 'due')).toBe(false)
 })
 

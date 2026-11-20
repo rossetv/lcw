@@ -82,6 +82,9 @@ const S = {
   compacting: false,
   weeklyAt: 0,
   weeklyText: '',
+  // The update check is looked for once in each session; a prompt it gives waits here until weeklyText is free.
+  updateAsked: false,
+  updateText: '',
   mark: { since: 0, below: 0 },
   autoDone: false,
   pressing: false,
@@ -407,14 +410,26 @@ async function checkSleep($: EngineInterface) {
 // What the person has typed and not sent; anything unreadable counts as typed, so nothing is submitted over it.
 const draft = ($: EngineInterface) => $.prompt.read().then((b) => String(b?.text ?? '')).catch(() => '?')
 
-// The weekly checks: while the session is idle (quiet, nothing typed, no run, not at the mark), weekly.mjs says which
-// is due (it records the ask) and its prompt is submitted. A prompt that cannot go yet (a turn started, something was
-// typed, a run is driven, the submit failed) is kept for this session and sent at the next idle tick.
+// The checks' prompts. Once at the start of every watched session, without waiting for it to be idle, weekly.mjs update
+// compares the installed LCW with its marketplace in code; it gives a prompt only when a newer version needs the banner's
+// bullets written. A session driving a run looks once it no longer does: the banner shows no update during a run.
+// The weekly ones are asked for only while the session is idle (quiet, nothing typed, no run, not at the mark):
+// weekly.mjs due says which is due and records the ask. A prompt is submitted while the session is idle; one that
+// cannot go yet (a turn started, something was typed, a run is driven, the submit failed) is kept for this session and
+// sent at the next idle tick.
 async function weekly($: EngineInterface, now: number) {
+  if (!S.updateAsked && !S.run) {
+    S.updateAsked = true
+    // Not awaited: the marketplace refresh can take up to 120 s, and the other slow facts do not wait for it.
+    void $.process.run(['node', `${$.plugin.root}/scripts/weekly.mjs`, 'update'], { timeoutMs: 150000 })
+      .then((r) => { if (r?.exitCode === 0) S.updateText = String(r.stdout ?? '').trim() })
+      .catch(() => {})
+  }
   const idle = {
     interactive: S.interactive, turnRunning: S.turnRunning, driving: !!S.run, atMark: !!S.facts?.usage?.atMark,
     startedAt: S.startedAt, turnEndedAt: S.turnEndedAt, now,
   }
+  if (!S.weeklyText && S.updateText) { S.weeklyText = S.updateText; S.updateText = '' }
   if (!S.weeklyText) {
     if (!weeklyDue({ ...idle, askedAt: S.weeklyAt })) return
     if ((await draft($)).trim()) return
