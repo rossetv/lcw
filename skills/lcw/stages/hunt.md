@@ -75,18 +75,26 @@ and end your turn.
 
 The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it.
 
-Before you report, settle the pull requests as the charter's PRs line says:
+Before you report, settle the pull requests as the charter's PRs line says. Whichever it is, run `lcw status` just before `lcw finish` and keep what it prints, the totals and each wave's pull request: once the run is finished, the session is no longer bound to it.
 
-- **merged as it goes**: this is the last pass, with no next one to retry on, so it waits where Ship's passes stop. Go through the waves not yet merged, in order, and for each:
-  1. If `lcw merge` refused it because its base is not the default branch, run the `gh pr edit` command it printed; where the criteria name GitHub's checks, `gh pr close <number>` and `gh pr reopen <number>` so they run. Close and reopen the same way after a merge moves the next pull request onto the default branch.
-  2. Where the criteria name GitHub's checks, wait for those still running: `gh pr checks <number> -R <repo> --watch`. Right after a retarget or a close and reopen, GitHub may not have registered the new checks yet and the command exits with "no checks reported": that is not a failure, so wait until the checks appear, then watch them.
-  3. If its merge is queued, wait until `gh pr view <number> -R <repo> --json state` shows it merged, or GitHub takes it out of the queue.
-  4. If it meets the criteria, run `lcw merge <wave>` again. If that is refused for the first time in this pass because the base is not the default branch (it prints a `gh pr edit` command) or because the merge is queued ("is not merged yet ... queued or waiting on checks"), do step 1 or step 3 for that same wave, then step 4 once more.
+- **merged as it goes**: this is the last pass, with no next one to try again on, so it waits where Ship's passes stop. Where the criteria name GitHub's checks, a pass after a wave ships only looks (`gh pr checks <number> -R <repo>`, never `--watch`) and never waits; at the end, watch them (`gh pr checks <number> -R <repo> --watch`) in Bash calls of up to 10 minutes each, at most an hour in all; checks not reported 10 minutes after the pull request was opened or reopened count as none, and none run, or all skipped, is not passed.
 
-  Only after that retry, the first wave that still falls short of the criteria, or that `lcw merge` says was merged into another branch, is left open, and so is every wave after it: `lcw ledger "wave <n> left open: <why>"` for each, and the report below names them with the reason. Then `lcw finish`.
-- **one at the end**: if any wave shipped, push the sweep's branch (`git push -u origin lcw/<name>`), load the `lcw:pull-request` skill and write the one draft pull request for everything as it says, open it against the default branch (`gh pr create --draft --head lcw/<name> --base <default branch> --title "<title>" --body-file <file>`), and `lcw finish --pr <url>`. With no remote or no way to push, `lcw finish --branch lcw/<name>`, and put the text in the conversation, as stages/ship.md says. If no wave shipped, there is nothing to open: `lcw finish`.
+  Go through the shipped waves not yet merged, in order (a queued wave never ran and has no pull request), passing over a wave with no commits (`lcw status` shows it empty). For each:
+  1. If its push or pull request still waits on the human's answer, it stays open.
+  2. Where the criteria name checks, wait for them as above.
+  3. If it falls short of the criteria, failed checks included, it stays open. Otherwise `lcw merge <wave>`, and act on what it says:
+     - **merged**: where the criteria name checks, `gh pr close <number>` and `gh pr reopen <number>` the next pull request, which is now against the default branch and has started none of its checks; then go on to the next wave.
+     - **based on another branch**: run the `gh pr edit` command it prints, close and reopen the pull request where the criteria name checks, and go back to step 2 for this wave.
+     - **not merged yet** (a merge queue, or GitHub waiting on checks): wait, within the same hour, until `gh pr view <number> -R <repo> --json state` shows it merged or GitHub takes it out of the queue, then go back to step 2 for this wave; `lcw merge <wave>` records it once GitHub shows it merged.
+     - **gh could not merge**: if the ledger shows it failed so in an earlier pass, it stays open; if not, `lcw ledger "wave <n>: gh could not merge: <gh's words>"` and go back to step 2 for this wave, once.
+     - **merged into another branch**: its changes have not landed and it needs the human; it stays open.
+
+  The first wave that stays open ends the pass: it and every wave after it are left open for the human, each with its reason (gh's words where gh could not merge) for the report. Then `lcw finish`.
+- **one at the end**: if any wave shipped, push the sweep's branch (`git push -u origin lcw/<name>`), load the `lcw:pull-request` skill and write the one draft pull request for everything as it says, open it against the default branch (`gh pr create --draft --head lcw/<name> --base <default branch> --title "<title>" --body-file <file>`), and `lcw finish --pr <url>`. With no GitHub remote or no way to push, `lcw finish --branch lcw/<name>`, tell the human the work is on `lcw/<name>` and why there is no pull request, and put the text in the conversation, as stages/ship.md says. If no wave shipped, there is nothing to open: `lcw finish`.
 - **stacked**: `lcw finish`.
+
+In stacked or merged as it goes, a wave whose push still waits on the human's answer ends the sweep unpushed, with every wave after it: the report says so, and clean-up's checks keep the worktree and its branches.
 
 Then clean up as stages/ship.md says under "Afterwards: clean up", for the sweep's worktree and its local branches.
 
-Tell the human, short: how many fixes were made, parked and dropped; which pull requests exist and in what state (open as drafts, merged, or left open because they missed the criteria, and which); and where parked.md is.
+Tell the human, short, from what `lcw status` printed and findings.md: what was fixed, area by area, not only how many; what was parked and what was dropped; which pull requests exist and in what state (open as drafts, merged, or left open, and why); and where parked.md is.
