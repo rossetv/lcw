@@ -693,7 +693,7 @@ export const register: Register = (on) => {
         }
         const markBox = drawn.length > 0 && shown?.kind === 'mark'
         card = draw(room, markBox)
-        // The approval box has a tight form for where the full one would have to wait for room above the card.
+        // The approval box has a tight form, one row shorter, for where the full one would have to wait for room above the card.
         if (shown?.kind === 'approve' && drawn.length && room - drawn.length - 1 < Math.min(CARD_ROOM, card.length)) banner = drawn = bannerRows(shown, cols, true, true)
         // Where both do not fit, the card keeps the rows it needs (up to CARD_ROOM) and the box waits: the card
         // carries what is waiting on the person.

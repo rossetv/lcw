@@ -70,5 +70,5 @@ export function answerKey(run: BannerRun): string
 /** The approval box's key: the run and when the playback asked. */
 export function approveKey(run: BannerRun & { approval: NonNullable<BannerRun['approval']> }): string
 /** overCard: a run's card is drawn under it, at the full cols, so the box is as wide. */
-/** tight: the approval box without its plain line and blank rows, for where the full one does not fit. */
+/** tight: the approval box without its plain line, for where the full one does not fit. */
 export function bannerRows(banner: Banner | null, cols: number, overCard?: boolean, tight?: boolean): Row[]

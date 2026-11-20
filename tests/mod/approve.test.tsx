@@ -86,7 +86,7 @@ test('where the prompt cannot be filled, the person is told to type the reply', 
 test('where the full box does not fit above the card, the tight one is drawn', async ($, on) => {
   engine(on, approving())
   await start($)
-  const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 17 } })
+  const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 18 } })
   expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /The playback is in the chat above/ })).toBeUndefined()
   expect(await band.find({ type: 'Text', text: /in Brainstorm/ })).toBeDefined()
