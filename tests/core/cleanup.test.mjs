@@ -345,19 +345,21 @@ test('without gh a squash-merged branch is not listed', () => {
   } finally { process.env.PATH = withGh; delete process.env.GH_STUB }
 })
 
-test('a worktree whose folder was deleted by hand is offered, with its branch when that is merged, and Clean Up removes them', () => {
+test('a worktree whose folder was deleted by hand is offered, with its branch when that is merged, and Clean Up removes them; one holding a commit nothing else has stays', () => {
   const repo = makeRepo()
   const h = tmp('home')
   branch(repo, 'old-fix', { merge: true })
   branch(repo, 'wip')
   const merged = worktree(repo, 'old-fix')
   const unmerged = worktree(repo, 'wip')
-  for (const dir of [merged, unmerged]) fs.rmSync(dir, { recursive: true, force: true })
+  const loose = worktree(repo, '--detach')
+  commit(loose, 'only-here.txt') // a commit no branch holds: git's record of the worktree is its only reference
+  for (const dir of [merged, unmerged, loose]) fs.rmSync(dir, { recursive: true, force: true })
   const list = candidates(repo, h)
   assert.deepEqual(names(list), ['branch:old-fix', `worktree:${merged}`, `worktree:${unmerged}`].sort())
   assert.equal(list.find((i) => i.path === merged).why, 'its folder is gone')
   record(repo, h, { title: 'old-fix is merged and two worktree folders are gone', bullets: [`${merged} and ${unmerged} no longer exist`], items: ['branch:old-fix', `worktree:${merged}`, `worktree:${unmerged}`] })
   assert.equal(apply(repo, h).removed.length, 3)
   assert.deepEqual(branches(repo).sort(), ['main', 'wip'])
-  assert.equal(git(repo, 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).length, 1)
+  assert.deepEqual(git(repo, 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).map((l) => l.slice(9)).sort(), [repo, loose].sort())
 })
