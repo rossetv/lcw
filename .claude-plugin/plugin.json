@@ -1,6 +1,6 @@
 {
   "name": "lcw",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "Say what you want built. Claude works out what you mean, then plans, builds, reviews and opens a draft pull request on its own, with a status bar to watch it.",
   "author": {
     "name": "rossetv"

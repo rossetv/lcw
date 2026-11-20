@@ -478,10 +478,8 @@ test('at a mark of the whole week or the full cap the stop text does not offer "
 test('session start removes the temp files a stopped writer left an hour ago or more, and nothing else', () => {
   const home = tmp('home')
   const repo = makeRepo()
-  const runDir = `${home}/repos/k/runs/r1`
-  fs.mkdirSync(`${home}/cache`, { recursive: true })
-  fs.mkdirSync(runDir, { recursive: true })
-  const old = [`${home}/usage.json.123.tmp`, `${home}/cache/diff-a.json.456.tmp`, `${runDir}/state.json.789.tmp`]
+  for (const dir of ['cache', 'bin']) fs.mkdirSync(`${home}/${dir}`, { recursive: true })
+  const old = [`${home}/usage.json.123.tmp`, `${home}/cache/diff-a.json.456.tmp`, `${home}/bin/statusline.mjs.789.tmp`]
   const fresh = `${home}/usage.json.321.tmp` // a writer may be between its write and its rename right now
   const others = [`${home}/usage.json`, `${home}/notes.tmp`]
   for (const f of [...old, fresh, ...others]) fs.writeFileSync(f, '{}')

@@ -19,14 +19,15 @@ export const writeJson = (file, value) => writeAtomic(file, JSON.stringify(value
 
 /**
  * Removes what writeAtomic leaves when its process is stopped between the write and the rename: files named
- * <file>.<pid>.tmp, in the folders LCW writes to, once they are an hour old. Nothing else is touched.
+ * <file>.<pid>.tmp, once they are an hour old, in LCW's home folder and the folders in it that the status line,
+ * the hooks and setup write to. Run folders are left alone: a temp file there is rare, and listing every run at
+ * each session start would cost more with every run.
  */
 export function sweepTemp(lcwHome, now = Date.now()) {
-  const ls = (dir) => { try { return fs.readdirSync(dir) } catch { return [] } }
-  const repos = ls(`${lcwHome}/repos`).map((key) => `${lcwHome}/repos/${key}`)
-  const runs = repos.flatMap((repo) => ls(`${repo}/runs`).map((id) => `${repo}/runs/${id}`))
-  for (const dir of [lcwHome, ...['cache', 'sessions', 'spend', 'activity', 'places'].map((d) => `${lcwHome}/${d}`), ...repos, ...runs]) {
-    for (const name of ls(dir)) {
+  for (const dir of [lcwHome, ...['bin', 'cache', 'sessions', 'spend', 'activity', 'places'].map((d) => `${lcwHome}/${d}`)]) {
+    let names = []
+    try { names = fs.readdirSync(dir) } catch { continue }
+    for (const name of names) {
       if (!/\.\d+\.tmp$/.test(name)) continue
       try { if (now - fs.statSync(`${dir}/${name}`).mtimeMs >= 3600_000) fs.rmSync(`${dir}/${name}`, { force: true }) } catch {}
     }
