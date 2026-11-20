@@ -743,12 +743,15 @@ const commands = {
     const pr = String(wave.pr)
     try {
       if (gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'isDraft', '--jq', '.isDraft') === 'true') gh(root, 'pr', 'ready', pr, '-R', repo)
-      gh(root, 'pr', 'merge', pr, '-R', repo, '--merge', '--delete-branch')
+      gh(root, 'pr', 'merge', pr, '-R', repo, '--merge')
     } catch (e) { fail(`gh could not merge #${pr}: ${firstLine(e)}. Nothing was recorded.`) }
-    change(run, `wave ${n} merged: PR #${pr} with a merge commit, its remote branch deleted`, (st) => {
+    // gh's --delete-branch would also touch the wave's local branch, which is checked out in the sweep's worktree
+    let left = ''
+    try { git(run.state.worktree || root, 'push', '-q', 'origin', '--delete', wave.branch) } catch (e) { left = `, its remote branch ${wave.branch} is left (${firstLine(e)})` }
+    change(run, `wave ${n} merged: PR #${pr} with a merge commit${left || ', its remote branch deleted'}`, (st) => {
       st.sweep.waves.find((x) => x.n === n).merged = true
     })
-    out(`merged wave ${n}: #${pr}`)
+    out(`merged wave ${n}: #${pr}${left}`)
   },
 }
 

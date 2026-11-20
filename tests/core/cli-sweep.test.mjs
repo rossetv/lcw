@@ -39,6 +39,7 @@ function fakeGh(more = {}) {
   const log = `${bin}/calls`
   fs.writeFileSync(`${bin}/gh`, `#!/bin/sh
 echo "$*" >> "${log}"
+case "$*" in *--delete-branch*) echo "gh must not delete the branch" >&2; exit 1;; esac
 if [ "$1 $2" = "$GH_FAIL" ]; then echo "GraphQL: not mergeable" >&2; exit 1; fi
 if [ "$1 $2" = "pr view" ]; then echo "\${GH_DRAFT:-true}"; fi
 exit 0
@@ -271,12 +272,37 @@ test('merge readies a draft, merges it with a merge commit on the GitHub remote,
   assert.deepEqual(gh.calls(), [
     'pr view 12 -R acme/widgets --json isDraft --jq .isDraft',
     'pr ready 12 -R acme/widgets',
-    'pr merge 12 -R acme/widgets --merge --delete-branch',
+    'pr merge 12 -R acme/widgets --merge',
   ])
   assert.deepEqual(t.state().sweep.waves.map((w) => w.merged), [true, false])
   assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1 merged/)
   assert.equal(lcw(['merge', '1'], { ...t.o, env: gh.env }).code, 1, 'merged already')
   assert.equal(gh.calls().length, 3)
+})
+
+test('merge deletes only the remote wave branch; the local branch and the worktree stay', () => {
+  const t = shippedWaves()
+  const bare = tmp('bare')
+  git(bare, 'init', '-q', '--bare')
+  git(t.repo, 'config', `url.${bare}.pushInsteadOf`, 'https://github.com/acme/widgets.git')
+  const wt = t.cli('worktree').out.trim()
+  git(wt, 'checkout', '-q', '-b', 'lcw/tidy-wave-1')
+  git(wt, 'push', '-q', 'origin', 'lcw/tidy-wave-1')
+  assert.ok(git(bare, 'branch', '--list', 'lcw/tidy-wave-1'))
+  const r = lcw(['merge', '1'], { ...t.o, env: fakeGh().env })
+  assert.equal(r.code, 0, r.out)
+  assert.equal(git(bare, 'branch', '--list', 'lcw/tidy-wave-1'), '')
+  assert.equal(git(wt, 'rev-parse', '--abbrev-ref', 'HEAD'), 'lcw/tidy-wave-1')
+  assert.ok(fs.existsSync(wt))
+  assert.equal(t.state().sweep.waves[0].merged, true)
+})
+
+test('merge is recorded when the remote branch cannot be deleted, and says it is left', () => {
+  const t = shippedWaves()
+  const r = lcw(['merge', '1'], { ...t.o, env: fakeGh().env })
+  assert.equal(r.code, 0, r.out)
+  assert.match(r.out, /remote branch lcw\/tidy-wave-1 is left/)
+  assert.equal(t.state().sweep.waves[0].merged, true)
 })
 
 test('merge leaves a pull request that is no longer a draft as it is', () => {
