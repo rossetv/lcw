@@ -1,0 +1,286 @@
+// The facts the pinned boxes are chosen from, and what each of their buttons does. Pure: no Node APIs, the mod
+// imports it, so register.tsx only reads files, runs what a plan says and draws.
+import { thresholds as TH } from '../lib/theme.mjs'
+import { DEFAULT_CAP_USD } from '../lib/spend.mjs'
+import { dollars } from '../lib/format.mjs'
+
+/** A run no session has shown for this long is no longer open anywhere (lcw take and abandon use the same). */
+export const SHOWN_WITHIN_MS = 15 * 60000
+/** The weekly checks are asked for no sooner than this into a session, and at most this often. */
+export const WEEKLY_AFTER_MS = 2 * 60000
+export const WEEKLY_EVERY_MS = 15 * 60000
+/** The repository's runs are looked over this often; whether something else holds off sleep, this often. */
+export const RUNS_EVERY_MS = 30000
+export const AWAKE_EVERY_MS = 60000
+/** What Learn more sends, as the person: the words that load the teaching conversation. */
+export const LEARN_TEXT = 'Learn more about how LCW works'
+
+const OPEN = (s) => s && s.status !== 'finished' && s.status !== 'stopped'
+const count = (tasks, ...statuses) => tasks.filter((t) => statuses.includes(t?.status)).length
+
+/** The tasks done and left, or nothing while the run has no tasks (before Build). */
+function taskCounts(state) {
+  const tasks = Array.isArray(state?.tasks) ? state.tasks : []
+  return tasks.length ? { done: count(tasks, 'done'), left: count(tasks, 'todo', 'running') } : {}
+}
+
+/** The run this session drives, as the boxes read it; kept says LCW already keeps the computer awake for it. */
+export function runFact(state, kept) {
+  if (!state?.id) return null
+  const asks = OPEN(state) && Array.isArray(state.asks) ? state.asks : []
+  return {
+    id: state.id, title: state.name || state.id, stage: state.stage, status: state.status, pausedReason: state.pausedReason ?? undefined,
+    pausedAt: state.pausedAt ?? undefined, runningSince: state.runningSince ?? undefined, ...taskCounts(state),
+    asks: asks.filter((a) => Number.isFinite(a?.n)).map((a) => ({ n: a.n, text: String(a.text ?? ''), waiting: a.waiting, at: a.at })).sort((a, b) => a.n - b.n),
+    awake: !!kept, guide: state.guide === true, firstOnMachine: state.firstOnMachine === true,
+  }
+}
+
+/** Whether the keep-awake box can apply: the run runs on its own, past the Brainstorm. */
+export const awakeApplies = (state) => state?.status === 'running' && !!state.stage && state.stage !== 'Brainstorm'
+
+/**
+ * The week against the mark: the run's mark, else the session's, against usage.json's figure (one past its reset
+ * counts as no figure); with money (the session is billed per token), the dollars, whose own atMark decides.
+ */
+export function usageFact({ state, session, usage, money, now }) {
+  const week = usage?.sevenDay
+  const live = Number.isFinite(week?.percentUsed) && !(Date.parse(week.resetsAt ?? '') <= now)
+  const own = state ? state.markPercent : session?.markPercent
+  const markPercent = typeof own === 'number' ? own : TH.usageMarkPercent
+  const fact = {
+    usedPercent: live ? week.percentUsed : undefined, resetsAt: week?.resetsAt ?? undefined, markPercent,
+    atMark: live && week.percentUsed >= markPercent,
+  }
+  if (money) Object.assign(fact, { spentUsd: money.spentUsd, capUsd: money.capUsd, markUsd: money.markUsd, atMark: !!money.atMark })
+  return fact
+}
+
+/** How long the week must read below the mark before a climb back to it is another occurrence of the mark box. */
+export const BELOW_MARK_MS = 60000
+
+/**
+ * When the week reached the mark (since), carried from one reading to the next: kept until it has read below the
+ * mark for BELOW_MARK_MS (below: since when), so one low reading (a spend file caught mid-write) starts no new one.
+ */
+export function markSpell(prev, atMark, now) {
+  if (atMark) return { since: prev?.since || now, below: 0 }
+  if (!prev?.since) return { since: 0, below: 0 }
+  const below = prev.below || now
+  return now - below >= BELOW_MARK_MS ? { since: 0, below: 0 } : { since: prev.since, below }
+}
+
+/** Whether a command line, as ps -o args= prints it, is Claude Code's: its program, or the script node runs, is named claude (lcw judges a driver so). */
+export function claudeCommand(args) {
+  const [first = '', second = ''] = String(args ?? '').trim().split(/\s+/)
+  return /claude/i.test(/(^|\/)node(js)?$/.test(first) ? second : first)
+}
+
+/** The spend command's failures, from readingOf's reading; null when none is set or read. */
+export const spendFailingFact = (reading) => (reading ? { fails: reading.fails, since: reading.failingSince ?? undefined, lastError: reading.lastError } : null)
+
+/**
+ * The status line in the person's own user settings, as the boxes read it: mine when it is LCW's own (setup's shim),
+ * null when there is none. Another command there, one that replaced LCW's or one the person had before LCW, is what
+ * Put LCW's back changes; a project's status line is not, so it is never read here.
+ */
+export function statusLineFact(setting, lcwHome) {
+  const command = typeof setting?.command === 'string' ? setting.command.trim() : ''
+  return command ? { command, mine: command === `node ${lcwHome}/bin/statusline.mjs` } : null
+}
+
+/** The next step the run last recorded: its ledger's last checkpoint line, or null. */
+export function nextStepOf(ledger) {
+  const line = String(ledger ?? '').split('\n').reverse().find((l) => l.includes(' checkpoint: '))
+  return line ? line.split(' checkpoint: ').slice(1).join(' checkpoint: ').trim() || null : null
+}
+
+/**
+ * The runs of this repository the unfinished-run box may name, newest first: neither finished nor stopped, and shown
+ * by no session for SHOWN_WITHIN_MS (shownAt: the latest of mod-alive and the state and ledger files' times), and not
+ * dismissed this session (Not now on one lets an older one show).
+ */
+export function unfinishedCandidates(runs, now, ownDir, dismissed) {
+  return (runs ?? [])
+    .filter((r) => OPEN(r?.state) && r.dir !== ownDir && Number.isFinite(r.shownAt) && now - r.shownAt >= SHOWN_WITHIN_MS)
+    .filter((r) => !dismissed?.has('unfinished:' + r.state.id))
+    .sort((a, b) => b.shownAt - a.shownAt)
+}
+
+/** The unfinished-run box's facts for one candidate, with its ledger's text for the next step. */
+export function unfinishedFact(run, ledger) {
+  const s = run.state
+  // As Build records it with lcw set milestone=…: "2 of 3", or a bare number.
+  const milestone = s.milestone == null ? '' : String(s.milestone).trim()
+  return {
+    id: s.id, name: s.name || s.id, title: s.title || undefined, stage: s.stage, status: s.status, pausedReason: s.pausedReason ?? undefined,
+    ...(milestone ? { milestone } : {}), ...taskCounts(s), nextStep: nextStepOf(ledger) ?? undefined, stoppedAt: run.shownAt,
+    worktree: !!s.worktree, branch: !!s.branch,
+  }
+}
+
+/**
+ * Whether the session is idle enough for a weekly check's prompt: watched, no main-loop turn running, quiet for
+ * WEEKLY_AFTER_MS since it started and since its last turn ended (nothing typed: the draft is read by the caller),
+ * driving no run, and not at the usage mark (the agent gate would refuse the check's probe).
+ */
+export function weeklyIdle({ interactive, turnRunning, driving, atMark, startedAt, turnEndedAt, now }) {
+  return !!interactive && !turnRunning && !driving && !atMark && now - Math.max(startedAt, turnEndedAt ?? 0) >= WEEKLY_AFTER_MS
+}
+
+/** Whether to ask weekly.mjs for a due check now: the session is idle, and it was not asked within WEEKLY_EVERY_MS. */
+export const weeklyDue = (args) => weeklyIdle(args) && !(args.now - (args.askedAt ?? 0) < WEEKLY_EVERY_MS)
+
+/** Whether to ask lcw whether the computer can be kept awake: the box could show (not turned off, this occurrence not dismissed). */
+export const awakeCheckWanted = (state, notices, dismissed) =>
+  awakeApplies(state) && notices?.awake !== 'never' && !dismissed?.has('awake:' + state.id + ':' + state.runningSince)
+
+/** What dismissing a box adds to the session's dismissed set: its occurrence, and the bare kind for the three old boxes. */
+export const dismissKeys = (banner) => (String(banner.key) === banner.kind ? [banner.kind] : [banner.kind + ':' + banner.key])
+
+/**
+ * Whether a box drawn earlier is still the one that applies: same kind and occurrence, and it still offers option
+ * under the label that was drawn ("Run up to $3,600" runs 3,600 or nothing).
+ */
+export function sameBox(drawn, fresh, option) {
+  if (!drawn || !fresh || drawn.kind !== fresh.kind || String(drawn.key) !== String(fresh.key)) return false
+  const label = drawn.options.find(([id]) => id === option)?.[1]
+  return label !== undefined && fresh.options.some(([id, l]) => id === option && l === label)
+}
+
+const cli = (root) => `node "${root}/scripts/lcw.mjs"`
+const quote = (t) => '"' + String(t).replace(/\s+/g, ' ').trim() + '"'
+
+/** After a raise on a run paused at the mark: the run is resumed, carry on. */
+export function raisePrompt(root, sessionId, run, label) {
+  return `LCW: the person pressed "${label}" on the box for the run ${run.title} (${run.id}), which was paused at the usage mark. LCW has set this session's mark and resumed the run. Load the lcw:lcw skill with the Skill tool, run \`${cli(root)} status --session ${sessionId}\`, and carry on from its next step and the ledger.`
+}
+
+/**
+ * After Resume on the unfinished-run box: this session has taken the run over, and resumed it when it was paused by
+ * the person. A run paused at the usage mark stays paused: its mark box offers the raises.
+ */
+export function resumePrompt(root, sessionId, u, resumed) {
+  const atMark = u.status === 'paused' && u.pausedReason === 'mark'
+  return [
+    `LCW: the person pressed Resume on the box for the unfinished run ${u.name} (${u.id}) of this repository. LCW has made this session take it over${resumed ? ' and resumed it' : ''}, so this session now drives it.`,
+    ...(atMark ? ['It is paused at the usage mark and stays paused: do not resume it and do not raise the mark; LCW\'s box offers the person the raises.'] : []),
+    `Load the lcw:lcw skill with the Skill tool and run \`${cli(root)} status --session ${sessionId}\`. Once it names a worktree, call EnterWorktree with that path and work there.`,
+    `Then carry on from the run's next step${u.nextStep ? ' (' + quote(u.nextStep) + ')' : ''} and its ledger. Do not start again, and do not ask the person what was happening.`,
+  ].join(' ')
+}
+
+/** Fix it on the failing spend check. */
+export function fixSpendPrompt(root, sessionId, f) {
+  const said = f?.lastError ? ` The last time it ${String(f.lastError).replace(/\s+/g, ' ').trim()}.` : ''
+  return [
+    `LCW: the person pressed Fix it on the box saying their spend check is failing: the command LCW runs every 5 minutes to read their 7-day spend has failed ${f?.fails ?? 'several'} times in a row.${said}`,
+    `Help them find the problem and set a command that works. Run \`${cli(root)} spend-command --session ${sessionId}\` to see what is set, run that command yourself to see what it prints, and agree a fix with them.`,
+    `Set the working one with \`${cli(root)} spend-command <command line> --session ${sessionId}\`: it must print the dollars spent in the last 7 days as one number, exit 0 and finish within 30 seconds.`,
+    `If they would rather have no spend check, \`${cli(root)} spend-command off --session ${sessionId}\` turns it off. Change nothing else.`,
+  ].join(' ')
+}
+
+/** Discuss it on the cleanup box: go through the items with the person before anything is removed. */
+export function discussPrompt(root, cleanup, cleanupPath) {
+  const cleanupCli = `node "${root}/scripts/cleanup.mjs"`
+  const bullets = (cleanup?.bullets ?? []).map((b) => '- ' + b).join('\n')
+  return [
+    `LCW: the person pressed Discuss it on LCW's cleanup box for this repository. The box said: ${quote(cleanup?.title ?? '')}`,
+    ...(bullets ? [bullets] : []),
+    '',
+    `Go through these items with the person, one at a time, before anything is removed. \`${cleanupCli} list --recorded\` prints the items the box named, and \`${cleanupCli} list\` what is safe to remove now.`,
+    `For what they agree to remove that is still safe, record just those with \`${cleanupCli} record --title <title> --bullet <why> --item branch:<name> --item worktree:<path>\` and run \`${cleanupCli} apply\`, which checks each item again and removes only what is still safe, from this computer only.`,
+    'A branch on GitHub, or anything that is not merged, only on their explicit word for that item, never with a force flag, and only after saying what would be lost.',
+    `If they keep everything, run \`rm -f "${cleanupPath}"\` so the box does not come back. Never push, and change nothing else.`,
+  ].join('\n')
+}
+
+
+/**
+ * What pressing option on banner does, as a plan register.tsx carries out in this order:
+ * - steps: commands run one after another; the first that fails (or whose output matches its halt) ends the plan,
+ *   its output said in a toast, and the box stays;
+ * - prompt: submitted ({ text, asUser }); when it cannot be, the box stays and the person is told;
+ * - notices: written into notices.json (the machine's "never again" choices);
+ * - fill: the ask number Answer now puts in the prompt;
+ * - dismiss: the box's occurrence is hidden for this session;
+ * - toast: said at the end; 'output' says the last command's output.
+ * null when the box does not offer option. facts are those the box was chosen from; ctx: { root, sessionId, repoKey, cleanupPath }.
+ */
+export function pressPlan(banner, option, facts, ctx) {
+  if (!banner || !banner.options.some(([id]) => id === option)) return null
+  const { root, sessionId, repoKey, cleanupPath } = ctx
+  const lcw = (...args) => ({ argv: ['node', `${root}/scripts/lcw.mjs`, ...args, '--session', sessionId] })
+  const script = (name, ...args) => ({ argv: ['node', `${root}/scripts/${name}`, ...args] })
+  const close = { dismiss: true }
+  const run = facts?.run
+  if (option === 'later' || option === 'wait') return close
+  switch (banner.kind) {
+    case 'answer':
+      return { fill: run?.asks?.[0]?.n, dismiss: true }
+    case 'mark': {
+      const usage = facts?.usage ?? {}
+      const money = facts?.billing === 'payg' && usage.capUsd > 0 && usage.markUsd > 0
+      const share = option === 'r90' ? 0.9 : 1
+      const value = money ? Math.round(usage.capUsd * share) + 'usd' : String(share * 100)
+      const label = banner.options.find(([id]) => id === option)[1]
+      const mark = { ...lcw('mark', value), halt: /at the mark\s*$/ }
+      if (run) {
+        return {
+          steps: [mark, lcw('resume')], prompt: { text: raisePrompt(root, sessionId, run, label) },
+          promptFailed: 'LCW raised the mark and resumed the run. Say "carry on" to continue it.', dismiss: true,
+        }
+      }
+      return { steps: [mark], toast: 'output', dismiss: true }
+    }
+    case 'spendfail':
+      if (option === 'fix') return { prompt: { text: fixSpendPrompt(root, sessionId, facts?.spendFailing) }, dismiss: true }
+      return { steps: [lcw('spend-command', 'off')], notices: { spend: 'never' }, toast: 'output', dismiss: true }
+    case 'unfinished': {
+      const u = facts?.unfinished
+      if (!u) return null
+      if (option === 'abandon') return { steps: [lcw('abandon', u.id)], toast: 'output', dismiss: true }
+      // Paused at the mark it stays paused: only a Run up to press raises the mark.
+      const resumed = u.status === 'paused' && u.pausedReason !== 'mark'
+      return {
+        steps: [lcw('take', u.id), ...(resumed ? [lcw('resume')] : [])], prompt: { text: resumePrompt(root, sessionId, u, resumed) },
+        promptFailed: 'This session has taken the run over. Say "carry on" to continue it.', dismiss: true,
+      }
+    }
+    case 'awake':
+      if (option === 'never') return { notices: { awake: 'never' }, dismiss: true }
+      return { steps: [lcw('awake')], toast: 'output', dismiss: true }
+    case 'restart':
+      return close
+    case 'update':
+      return { steps: [{ ...script('update.mjs', 'apply'), timeoutMs: 180000 }], fail: 'LCW could not update: ', toast: 'output', dismiss: true }
+    case 'whatsnew':
+      return { notices: { ['whatsnew:' + banner.key]: 'never' }, dismiss: true }
+    case 'guide':
+      return { notices: { guide: 'never' }, ...(option === 'learn' ? { prompt: { text: LEARN_TEXT, asUser: true } } : {}), dismiss: true }
+    case 'cleanup':
+      if (option === 'never') return { notices: { ['cleanup:' + repoKey]: 'never' }, dismiss: true }
+      if (option === 'discuss') return { prompt: { text: discussPrompt(root, facts?.cleanup, cleanupPath) }, dismiss: true }
+      return { steps: [{ ...script('cleanup.mjs', 'apply'), timeoutMs: 120000 }], toast: 'output', dismiss: true }
+    case 'statusline':
+      if (option === 'keep') return { notices: { statusline: 'never' }, dismiss: true }
+      return { steps: [script('setup.mjs', 'statusline')], fail: "LCW could not put its status rows back: ", toast: "LCW's status rows are back.", dismiss: true }
+    case 'advisor':
+      if (option === 'never') return { notices: { advisor: 'never' }, dismiss: true }
+      return { steps: [script('setup.mjs', 'advisor')], fail: 'LCW could not turn the advisor on: ', toast: 'Fable advisor is on from your next session.', dismiss: true }
+    case 'cap':
+      if (option === 'set') return { prompt: { text: 'Set my weekly cap for LCW.', asUser: true }, dismiss: true }
+      return {
+        steps: [lcw('cap', String(DEFAULT_CAP_USD))], fail: 'LCW could not save the cap: ',
+        toast: `Weekly cap kept at ${dollars(DEFAULT_CAP_USD)}. Say "my weekly cap is ..." to change it.`, dismiss: true,
+      }
+    case 'spend':
+      if (option === 'never') return { notices: { spend: 'never' }, dismiss: true }
+      return { prompt: { text: 'Set up my LCW spend check.', asUser: true }, dismiss: true }
+  }
+  return null
+}
+
+/** What a command said, for a toast: its output's lines joined, stdout first. */
+export const said = (r) => [r?.stdout, r?.stderr].map((t) => String(t ?? '').trim()).filter(Boolean).join('\n').split('\n').map((l) => l.trim()).filter(Boolean).join(' · ')

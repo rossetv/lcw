@@ -1,0 +1,227 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+
+import { DEFAULT_CAP_USD } from '../../lib/spend.mjs'
+import { dollars } from '../../lib/format.mjs'
+import {
+  LEARN_TEXT, awakeCheckWanted, SHOWN_WITHIN_MS, claudeCommand, markSpell, dismissKeys, discussPrompt, fixSpendPrompt, nextStepOf, pressPlan, resumePrompt, runFact, sameBox,
+  statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue,
+} from '../../hooks/boxes.mjs'
+import { bannerFor } from '../../lib/banner.mjs'
+
+const NOW = Date.parse('2026-11-20T12:00:00Z')
+const MIN = 60000
+const CTX = { root: '/plug', sessionId: 's1', repoKey: 'repo-1', cleanupPath: '/lcw/repos/repo-1/cleanup.json' }
+const argvs = (plan) => (plan?.steps ?? []).map((s) => s.argv.slice(2).join(' '))
+const pausedRun = { id: 'r1', name: 'export-csv', status: 'paused', pausedReason: 'mark', pausedAt: '2026-11-20T03:00:00Z', stage: 'Build' }
+const press = (facts, option) => {
+  const box = bannerFor(facts)
+  return pressPlan(box, option, facts, CTX)
+}
+
+test('a raise on a run paused at the mark sets the mark for this session, resumes, and asks Claude to carry on', () => {
+  const facts = { now: NOW, run: runFact(pausedRun), usage: { usedPercent: 76, markPercent: 75, resetsAt: '2026-11-22T14:00:00Z' } }
+  const plan = press(facts, 'r90')
+  assert.deepEqual(argvs(plan), ['mark 90 --session s1', 'resume --session s1'])
+  assert.match('this session is at the mark', plan.steps[0].halt)
+  assert.match(plan.prompt.text, /lcw\.mjs" status --session s1/)
+})
+
+test('on pay-per-token billing a raise is in dollars of the cap', () => {
+  const facts = { now: NOW, billing: 'payg', run: runFact(pausedRun), usage: { spentUsd: 3050, capUsd: 4000, markUsd: 3000, atMark: true } }
+  assert.deepEqual(argvs(press(facts, 'r90')), ['mark 3600usd --session s1', 'resume --session s1'])
+  assert.deepEqual(argvs(press(facts, 'r100')), ['mark 4000usd --session s1', 'resume --session s1'])
+})
+
+test('a raise with no run only sets the mark and resumes nothing', () => {
+  const facts = { now: NOW, usage: { usedPercent: 80, markPercent: 75, atMark: true } }
+  const plan = press(facts, 'r100')
+  assert.deepEqual(argvs(plan), ['mark 100 --session s1'])
+  assert.equal(plan.prompt, undefined)
+})
+
+test('a button the box does not offer does nothing', () => {
+  const facts = { now: NOW, run: runFact(pausedRun), usage: { usedPercent: 92, markPercent: 75 } }
+  assert.equal(press(facts, 'r90'), null)
+})
+
+const unfinished = (status) => unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000, state: { id: 'r2', name: 'old-run', status, stage: 'Build' } },
+  '- t1 checkpoint: write the tests\n- t2 checkpoint: merge T3\n- t3 note')
+
+test('Resume takes the run over, resumes it only when it was paused, and hands Claude its next step', () => {
+  const running = press({ now: NOW, unfinished: unfinished('running') }, 'resume')
+  assert.deepEqual(argvs(running), ['take r2 --session s1'])
+  assert.match(running.prompt.text, /EnterWorktree/)
+  assert.match(running.prompt.text, /merge T3/)
+  assert.deepEqual(argvs(press({ now: NOW, unfinished: unfinished('paused') }, 'resume')), ['take r2 --session s1', 'resume --session s1'])
+  const atMark = unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000, state: { id: 'r2', name: 'old-run', status: 'paused', pausedReason: 'mark', stage: 'Build' } }, '')
+  const taken = press({ now: NOW, unfinished: atMark }, 'resume')
+  assert.deepEqual(argvs(taken), ['take r2 --session s1'])
+  assert.match(taken.prompt.text, /stays paused/)
+  assert.deepEqual(argvs(press({ now: NOW, unfinished: unfinished('running') }, 'abandon')), ['abandon r2 --session s1'])
+})
+
+test('the never buttons write the notice the box is kept off by', () => {
+  const cleanup = { at: 5, title: 'Two branches are merged', bullets: ['a'] }
+  assert.deepEqual(press({ now: NOW, repoKey: 'repo-1', cleanup }, 'never').notices, { 'cleanup:repo-1': 'never' })
+  const updated = { running: '0.2.0', updated: { to: '0.2.0', bullets: ['x'] } }
+  assert.deepEqual(press({ now: NOW, update: updated }, 'ok').notices, { 'whatsnew:0.2.0': 'never' })
+  assert.deepEqual(press({ now: NOW, statusLine: { command: 'starship', mine: false } }, 'keep').notices, { statusline: 'never' })
+  const off = press({ now: NOW, billing: 'payg', spendCommandSet: true, capSet: true, spendFailing: { fails: 3, since: NOW - MIN } }, 'off')
+  assert.deepEqual(off.notices, { spend: 'never' })
+  assert.deepEqual(argvs(off), ['spend-command off --session s1'])
+})
+
+test('Learn more sends the words as the person, and both guide buttons keep the guide off', () => {
+  const facts = { now: NOW, run: runFact({ id: 'r1', name: 'x', status: 'with-you', stage: 'Brainstorm', firstOnMachine: true }) }
+  const learn = press(facts, 'learn')
+  assert.deepEqual(learn.prompt, { text: LEARN_TEXT, asUser: true })
+  assert.deepEqual(learn.notices, { guide: 'never' })
+  assert.deepEqual(press(facts, 'ok').notices, { guide: 'never' })
+})
+
+test('Clean Up gives the removal two minutes, and Keep the default cap keeps the default cap', () => {
+  const clean = press({ now: NOW, repoKey: 'repo-1', cleanup: { at: 5, title: 'Merged', bullets: [] } }, 'clean')
+  assert.equal(clean.steps[0].timeoutMs, 120000)
+  const keep = press({ now: NOW, billing: 'payg', advisorModel: 'fable' }, 'keep')
+  assert.deepEqual(argvs(keep), [`cap ${DEFAULT_CAP_USD} --session s1`])
+  assert.ok(keep.toast.includes(dollars(DEFAULT_CAP_USD)))
+})
+
+test('Update now gives the update its 180 seconds', () => {
+  const plan = press({ now: NOW, update: { running: '0.1.0', available: { version: '0.2.0', from: '0.1.0' } } }, 'now')
+  assert.equal(plan.steps[0].timeoutMs, 180000)
+  assert.deepEqual(plan.steps[0].argv.slice(1), ['/plug/scripts/update.mjs', 'apply'])
+})
+
+test('Not now hides one occurrence of a new box, and the bare kind of an old one', () => {
+  assert.deepEqual(dismissKeys({ kind: 'answer', key: '1,2' }), ['answer:1,2'])
+  assert.deepEqual(dismissKeys({ kind: 'advisor', key: 'advisor' }), ['advisor'])
+  const run = (asks) => runFact({ id: 'r1', name: 'x', status: 'running', stage: 'Build', asks })
+  const set = { now: NOW, advisorModel: 'fable' }
+  const dismissed = new Set(dismissKeys(bannerFor({ ...set, run: run([{ n: 1, text: 'Which?', at: NOW - MIN }]) })))
+  assert.equal(bannerFor({ ...set, dismissed, run: run([{ n: 1, text: 'Which?', at: NOW - MIN }]) }), null)
+  assert.equal(bannerFor({ ...set, dismissed, run: run([{ n: 1, text: 'Which?', at: NOW - MIN }, { n: 2, text: 'And?', at: NOW }]) })?.kind, 'answer')
+  assert.equal(bannerFor({ ...set, dismissed, run: run([{ n: 1, text: 'Again?', at: NOW }]) })?.kind, 'answer', 'a new question under an old number')
+})
+
+test('a box is acted on only while it is the same occurrence and still offers the button', () => {
+  const box = { kind: 'mark', key: 'r1:a', options: [['r90', 'Run up to $3,600'], ['wait', 'Wait until 08:00']] }
+  assert.equal(sameBox(box, { ...box }, 'r90'), true)
+  assert.equal(sameBox(box, { ...box, key: 'r1:b' }, 'r90'), false)
+  assert.equal(sameBox(box, { ...box, options: [['wait', 'Wait until 08:00']] }, 'r90'), false)
+  assert.equal(sameBox(box, { ...box, options: [['r90', 'Run up to $4,500'], ['wait', 'Wait until 08:00']] }, 'r90'), false)
+  assert.equal(sameBox(box, null, 'r90'), false)
+})
+
+test('an unfinished run is one no session has shown for 15 minutes, open, not this session\'s, newest first', () => {
+  const r = (id, ago, status = 'running') => ({ dir: '/runs/' + id, shownAt: NOW - ago, state: { id, status } })
+  const list = unfinishedCandidates([
+    r('fresh', SHOWN_WITHIN_MS - 1000), r('old', 5 * 3600000), r('older', 9 * 3600000), r('done', 3600000, 'finished'),
+    r('stopped', 3600000, 'stopped'), r('mine', 3600000),
+  ], NOW, '/runs/mine')
+  assert.deepEqual(list.map((x) => x.state.id), ['old', 'older'])
+  assert.deepEqual(unfinishedCandidates([r('old', 5 * 3600000), r('older', 9 * 3600000)], NOW, null, new Set(['unfinished:old'])).map((x) => x.state.id), ['older'],
+    'Not now on the newest lets the older one show')
+})
+
+test('the milestone Build records is read as written', () => {
+  const fact = unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000, state: { id: 'r2', name: 'x', status: 'running', stage: 'Build', milestone: '2 of 3' } }, '')
+  assert.match(bannerFor({ now: NOW, unfinished: fact }).lines.join(' '), /in Build, milestone 2 of 3\./)
+  const none = unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000, state: { id: 'r2', name: 'x', status: 'running', stage: 'Build', milestone: null } }, '')
+  assert.doesNotMatch(bannerFor({ now: NOW, unfinished: none }).lines.join(' '), /milestone/)
+})
+
+test('the next step is the ledger\'s last checkpoint', () => {
+  assert.equal(nextStepOf('- a checkpoint: one\n- b checkpoint: two: with a colon\n- c stage: Build'), 'two: with a colon')
+  assert.equal(nextStepOf('- a stage: Build'), null)
+  assert.equal(nextStepOf(null), null)
+})
+
+test('the week is at the mark when used reaches the mark; a figure past its reset is not; dollars decide on pay-per-token', () => {
+  const usage = (percentUsed, resetsAt = '2026-11-22T14:00:00Z') => ({ sevenDay: { percentUsed, resetsAt } })
+  assert.equal(usageFact({ session: { markPercent: 80 }, usage: usage(79), now: NOW }).atMark, false)
+  assert.equal(usageFact({ session: { markPercent: 80 }, usage: usage(80), now: NOW }).atMark, true)
+  assert.equal(usageFact({ session: {}, usage: usage(76), now: NOW }).atMark, true)
+  assert.equal(usageFact({ session: {}, usage: usage(90, '2026-11-19T00:00:00Z'), now: NOW }).atMark, false)
+  assert.equal(usageFact({ state: { markPercent: 90 }, session: { markPercent: 50 }, usage: usage(80), now: NOW }).atMark, false)
+  assert.equal(usageFact({ session: {}, usage: usage(99), money: { spentUsd: 10, capUsd: 4000, markUsd: 3000, atMark: false }, now: NOW }).atMark, false)
+})
+
+test('the weekly check waits for a watched, idle session two minutes old that drives no run, and asks at most every 15 minutes', () => {
+  const idle = { interactive: true, turnRunning: false, driving: false, startedAt: NOW - 3 * MIN, askedAt: 0, now: NOW }
+  assert.equal(weeklyDue(idle), true)
+  assert.equal(weeklyDue({ ...idle, startedAt: NOW - MIN }), false)
+  assert.equal(weeklyDue({ ...idle, askedAt: NOW - 14 * MIN }), false)
+  assert.equal(weeklyDue({ ...idle, askedAt: NOW - 15 * MIN }), true)
+  assert.equal(weeklyDue({ ...idle, turnRunning: true }), false)
+  assert.equal(weeklyDue({ ...idle, driving: true }), false)
+  assert.equal(weeklyDue({ ...idle, interactive: false }), false)
+  assert.equal(weeklyDue({ ...idle, atMark: true }), false)
+  assert.equal(weeklyDue({ ...idle, turnEndedAt: NOW - MIN }), false)
+  assert.equal(weeklyDue({ ...idle, turnEndedAt: NOW - 2 * MIN }), true)
+})
+
+test('whether the computer can be kept awake is asked only while the box could show', () => {
+  const state = { id: 'r1', status: 'running', stage: 'Build', runningSince: 'T' }
+  assert.equal(awakeCheckWanted(state, {}, new Set()), true)
+  assert.equal(awakeCheckWanted(state, { awake: 'never' }, new Set()), false)
+  assert.equal(awakeCheckWanted(state, {}, new Set(['awake:r1:T'])), false)
+  assert.equal(awakeCheckWanted(state, {}, new Set(['awake:r1:earlier'])), true)
+  assert.equal(awakeCheckWanted({ ...state, stage: 'Brainstorm' }, {}, new Set()), false)
+})
+
+test("the status line is LCW's only when it is setup's shim; any other command is another one", () => {
+  assert.equal(statusLineFact(undefined, '/lcw'), null)
+  assert.deepEqual(statusLineFact({ type: 'command', command: 'node /lcw/bin/statusline.mjs' }, '/lcw'), { command: 'node /lcw/bin/statusline.mjs', mine: true })
+  assert.deepEqual(statusLineFact({ command: 'starship statusline' }, '/lcw'), { command: 'starship statusline', mine: false })
+})
+
+test('the run as the boxes read it: its name, its open asks oldest first, none once finished, and tasks only when there are some', () => {
+  const state = { id: 'r1', name: 'export-csv', status: 'running', stage: 'Build', asks: [{ n: 3, text: 'b' }, { n: 1, text: 'a' }],
+    tasks: [{ status: 'done' }, { status: 'running' }, { status: 'todo' }, { status: 'parked' }] }
+  const fact = runFact(state)
+  assert.equal(fact.title, 'export-csv')
+  assert.deepEqual(fact.asks.map((a) => a.n), [1, 3])
+  assert.deepEqual([fact.done, fact.left], [1, 2])
+  assert.deepEqual(runFact({ ...state, status: 'finished' }).asks, [])
+  assert.equal(runFact({ ...state, tasks: [] }).done, undefined)
+})
+
+test('the prompts a button submits name the commands in full, for a session that never loaded lcw:lcw', () => {
+  assert.match(resumePrompt('/plug', 's1', { id: 'r2', name: 'x' }, false), /node "\/plug\/scripts\/lcw\.mjs" status --session s1/)
+  const fix = fixSpendPrompt('/plug', 's1', { fails: 4, lastError: 'printed "401 Unauthorized"' })
+  assert.match(fix, /lcw\.mjs" spend-command <command line> --session s1/)
+  assert.match(fix, /The last time it printed "401 Unauthorized"\./)
+  const discuss = discussPrompt('/plug', { title: 'Two merged branches', bullets: ['fix-a was merged'] }, '/lcw/c.json')
+  assert.match(discuss, /cleanup\.mjs" list --recorded/)
+  assert.match(discuss, /fix-a was merged/)
+  assert.match(discuss, /rm -f "\/lcw\/c\.json"/)
+})
+
+test('a dip below the mark shorter than a minute keeps the occurrence; a minute below ends it', () => {
+  let spell = markSpell(null, true, NOW)
+  spell = markSpell(spell, false, NOW + 2000)
+  spell = markSpell(spell, true, NOW + 4000)
+  assert.equal(spell.since, NOW, 'one low reading')
+  spell = markSpell(spell, false, NOW + 6000)
+  assert.equal(markSpell(spell, false, NOW + 6000 + MIN - 1).since, NOW)
+  spell = markSpell(spell, false, NOW + 6000 + MIN)
+  assert.equal(markSpell(spell, true, NOW + 7 * MIN).since, NOW + 7 * MIN, 'a climb back after a minute below')
+})
+
+test('a process is taken for Claude Code only when its program, or the script node runs, is claude', () => {
+  assert.equal(claudeCommand('claude --continue'), true)
+  assert.equal(claudeCommand('/Users/a/.local/bin/claude'), true)
+  assert.equal(claudeCommand('node /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js'), true)
+  assert.equal(claudeCommand('/usr/bin/python3 server.py'), false, 'a reused pid')
+  assert.equal(claudeCommand('node /srv/app.js'), false)
+  assert.equal(claudeCommand(''), false)
+})
+
+test('the unfinished run box says it removes a worktree only for a run that has one, read from its state', () => {
+  const abandon = (over) => bannerFor({ now: NOW, advisorModel: 'fable', unfinished: unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000,
+    state: { id: 'r2', name: 'old-run', status: 'running', stage: 'Spec', worktree: null, branch: null, ...over } }, '') }).lines.at(-1)
+  assert.equal(abandon({ worktree: '/repo/.claude/worktrees/old-run', branch: 'lcw/old-run' }), 'Abandon stops it for good and removes its worktree; its branch stays, so no work is lost.')
+  assert.equal(abandon({}), 'Abandon stops it for good.')
+})

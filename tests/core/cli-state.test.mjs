@@ -1,0 +1,165 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import { fnv1a32hex } from '../../lib/key.mjs'
+import { spawn } from 'node:child_process'
+import { tmp, makeRepo, git, lcw, readJson, started, CLI } from './helpers.mjs'
+
+test('set milestone shows in the state, and a new stage clears it', () => {
+  const t = started()
+  t.cli('stage', 'Build')
+  assert.equal(t.cli('set', 'milestone=2 of 3').code, 0)
+  assert.equal(t.state().milestone, '2 of 3')
+  t.cli('stage', 'Review')
+  assert.equal(t.state().milestone, null)
+})
+
+test('stage, set, status', () => {
+  const t = started()
+  t.cli('stage', 'Spec')
+  assert.equal(t.state().stage, 'Spec')
+  assert.equal(t.state().status, 'running')
+  t.cli('set', 'health=on track', 'spec.requirements=9', 'intent.questionsOpen=2')
+  const s = t.state()
+  assert.equal(s.health, 'on track')
+  assert.equal(s.spec.requirements, 9)
+  assert.equal(s.intent.questionsOpen, 2)
+  for (const k of ['id=x', 'version=2', 'tasks=[]', 'asks=[]', 'requirements=[]']) assert.equal(t.cli('set', k).code, 1)
+  assert.equal(t.cli('stage', 'Nope').code, 1)
+  for (const k of ['status=working', 'stage=Build', 'status.x=1']) {
+    const r = t.cli('set', k)
+    assert.equal(r.code, 1)
+    assert.match(r.out, /lcw stage, lcw pause, lcw resume, lcw stop or lcw finish/)
+  }
+  assert.equal(t.state().status, 'running')
+  assert.equal(t.state().stage, 'Spec')
+  t.cli('stage', 'Brainstorm')
+  assert.equal(t.state().status, 'with-you')
+  t.cli('stage', 'Spec')
+  t.cli('checkpoint', 'write the plan')
+  const st = t.cli('status').out
+  assert.match(st, /stage: Spec/)
+  assert.match(st, /next step: write the plan/)
+  assert.match(st, /ledger \(last 15\)/)
+  assert.equal(fs.readFileSync(`${t.dir}/checkpoint`, 'utf8'), 'write the plan')
+})
+
+test('set writes no ledger line', () => {
+  const t = started()
+  const before = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
+  t.cli('set', 'health=fine')
+  assert.equal(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), before)
+})
+
+test('tasks and requirements', () => {
+  const t = started()
+  t.cli('task', 'add', 'T1', 'Build it', '--model', 'sonnet', '--effort', 'medium')
+  t.cli('task', 'T1', 'running')
+  t.cli('req', 'add', 'R1', 'rows')
+  t.cli('req', 'R1', 'pass')
+  const s = t.state()
+  assert.deepEqual(s.tasks[0], { id: 'T1', title: 'Build it', status: 'running', model: 'sonnet', effort: 'medium' })
+  assert.equal(s.requirements[0].status, 'pass')
+  assert.equal(t.cli('task', 'T9', 'done').code, 1)
+  assert.equal(t.cli('task', 'T1', 'weird').code, 1)
+})
+
+test('words passed as separate arguments are kept whole', () => {
+  const t = started()
+  t.cli('req', 'add', 'R1', 'over-disk', 'short', 'chunk', 'still', '413')
+  t.cli('task', 'add', 'T1', 'Build', 'it', '--model', 'sonnet')
+  assert.equal(t.state().requirements[0].name, 'over-disk short chunk still 413')
+  assert.equal(t.state().tasks[0].title, 'Build it')
+  assert.equal(t.cli('ledger', 'picked', 'the', 'import', 'item').out.trim(), 'ledger: written')
+  t.cli('checkpoint', 'write', 'the', 'plan')
+  assert.equal(fs.readFileSync(`${t.dir}/checkpoint`, 'utf8'), 'write the plan')
+  t.cli('ask', 'which', 'one?')
+  assert.equal(t.state().asks[0].text, 'which one?')
+  t.cli('answer', '1', 'the', 'first')
+  const ledger = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
+  assert.match(ledger, /picked the import item/)
+  assert.match(ledger, /Q: which one\? A: the first/)
+})
+
+test('leaving the brainstorm settles its checklist, and finishing clears the health line', () => {
+  const t = started()
+  t.cli('set', 'intent.settled=["why"]', 'intent.now=approval', 'intent.next=["edge cases"]', 'intent.questionsOpen=1')
+  t.cli('stage', 'Spec')
+  assert.deepEqual(t.state().intent, { settled: ['why', 'approval'], now: '', next: [], questionsOpen: 0 })
+  t.cli('set', 'health=opening the draft pull request')
+  t.cli('finish', '--pr', 'https://github.com/o/r/pull/1')
+  assert.equal(t.state().health, '')
+})
+
+test('an ask keeps its number until it is answered', () => {
+  const t = started()
+  assert.equal(t.cli('ask', 'first?').out.trim(), 'ask 1')
+  assert.equal(t.cli('ask', 'second?', '--waiting', '2').out.trim(), 'ask 2')
+  t.cli('ask', 'third?')
+  t.cli('answer', '1', 'yes')
+  t.cli('answer', '2', 'no')
+  assert.deepEqual(t.state().asks.map((a) => [a.n, a.text, a.waiting]), [[3, 'third?', 0]])
+  const ledger = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
+  assert.match(ledger, /Q: first\? A: yes/)
+  assert.match(ledger, /Q: second\? A: no/)
+  assert.equal(t.cli('answer', '7', 'x').code, 1)
+  assert.equal(t.cli('ask', 'fourth?').out.trim(), 'ask 4')
+})
+
+test('set cannot move the usage mark or the driving session', () => {
+  const t = started()
+  for (const k of ['markPercent=100', 'driver=other']) assert.equal(t.cli('set', k).code, 1)
+  assert.match(t.cli('set', 'markPercent=100').out, /lcw mark/)
+  assert.equal(t.state().markPercent, 75)
+  assert.equal(t.state().driver, 's1')
+})
+
+test('a requirement can be renamed and dropped', () => {
+  const t = started()
+  t.cli('req', 'add', 'R1', 'rows')
+  t.cli('req', 'add', 'R2', 'columns')
+  t.cli('req', 'R1', 'rename', 'rows', 'and', 'totals')
+  t.cli('req', 'R2', 'drop')
+  assert.deepEqual(t.state().requirements, [{ id: 'R1', name: 'rows and totals', status: 'todo' }])
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /req R2 dropped: columns/)
+  assert.equal(t.cli('req', 'R1', 'rename').code, 1)
+  assert.equal(t.cli('req', 'R9', 'drop').code, 1)
+  assert.equal(t.cli('task', 'add', 'T1', 'Build').code, 0)
+  assert.equal(t.cli('task', 'T1', 'drop').code, 1)
+})
+
+test('pause, resume, stop, finish', () => {
+  const t = started()
+  t.cli('stage', 'Build')
+  t.cli('pause', 'mark')
+  assert.deepEqual([t.state().status, t.state().pausedReason], ['paused', 'mark'])
+  t.cli('resume')
+  assert.deepEqual([t.state().status, t.state().pausedReason], ['running', null])
+  t.cli('finish', '--pr', 'https://github.com/o/r/pull/482')
+  const s = t.state()
+  assert.equal(s.status, 'finished')
+  assert.equal(s.stage, 'Ship')
+  assert.deepEqual(s.pr, { number: 482, url: 'https://github.com/o/r/pull/482' })
+  assert.ok(s.finishedAt)
+  const u = started('two')
+  u.cli('finish', '--branch', 'lcw/two')
+  assert.deepEqual(u.state().pr, { branch: 'lcw/two' })
+  const v = started('three')
+  v.cli('stop')
+  assert.equal(v.state().status, 'stopped')
+})
+
+test('runningSince is when the run last started running, kept across stage changes; pausedAt is when it paused, cleared on resume', () => {
+  const t = started()
+  const at = (ms, ...a) => { process.env.LCW_NOW = String(ms); try { return t.cli(...a) } finally { delete process.env.LCW_NOW } }
+  const T = Date.UTC(2026, 10, 19, 9)
+  const iso = (min) => new Date(T + min * 60000).toISOString()
+  assert.equal(t.state().runningSince, undefined, 'a brainstorm is with you, not running')
+  at(T, 'stage', 'Spec')
+  at(T + 60000, 'stage', 'Build')
+  assert.equal(t.state().runningSince, iso(0))
+  at(T + 120000, 'pause', 'human')
+  assert.deepEqual([t.state().pausedAt, t.state().runningSince], [iso(2), iso(0)])
+  at(T + 180000, 'resume')
+  assert.deepEqual([t.state().pausedAt, t.state().runningSince], [null, iso(3)])
+})

@@ -1,0 +1,13 @@
+{
+  "name": "lcw",
+  "owner": {
+    "name": "rossetv"
+  },
+  "plugins": [
+    {
+      "name": "lcw",
+      "source": "./",
+      "description": "Large Change Workflow"
+    }
+  ]
+}

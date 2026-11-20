@@ -1,0 +1,882 @@
+{
+  "note": "Sixteen sample states for the render tests: a session with no run, each stage, needs-you, paused, finished, narrow, light, many agents. They began as the data behind the boards of the status bar mock, which is kept in the first build's records. The tests check rules against them, not a fixed picture.",
+  "boards": {
+    "Main": {
+      "state": "no run",
+      "prompt": "fix the typo in the README",
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "main",
+        "weekUsedPercent": 31,
+        "weekElapsedPercent": 46,
+        "plannedPercent": 0
+      }
+    },
+    "StageBrainstorm": {
+      "run": "export-csv",
+      "stage": "Brainstorm",
+      "titleRight": "18m in Brainstorm",
+      "state": "with you",
+      "health": "working out what you want",
+      "sharePercent": 1,
+      "intent": {
+        "settled": [
+          "why",
+          "who for",
+          "what done means"
+        ],
+        "now": "edge cases",
+        "next": [
+          "priorities"
+        ],
+        "questionsOpen": 3
+      },
+      "agents": [
+        {
+          "reason": "Does the export API already page results?",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "18k",
+          "elapsed": "1m",
+          "state": "working"
+        },
+        {
+          "reason": "How do other exports handle time zones?",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "12k",
+          "elapsed": "40s",
+          "state": "working"
+        },
+        {
+          "reason": "Can the CSV writer stream 2M rows?",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "64k",
+          "elapsed": "3m",
+          "state": "working"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 12,
+        "branch": "main",
+        "weekUsedPercent": 40,
+        "weekElapsedPercent": 44,
+        "plannedPercent": 0
+      }
+    },
+    "StageSpec": {
+      "run": "export-csv",
+      "stage": "Spec",
+      "titleRight": "6m in Spec",
+      "state": "running",
+      "health": "a blind reviewer is explaining the spec back",
+      "sharePercent": 1,
+      "blindReview": {
+        "done": [
+          {
+            "reviewer": 1,
+            "caught": "row cap fixed"
+          }
+        ],
+        "now": {
+          "reviewer": 2
+        }
+      },
+      "spec": {
+        "requirements": 9,
+        "scenarios": 6
+      },
+      "agents": [
+        {
+          "reason": "Read the spec cold and explain it back",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "41k",
+          "elapsed": "2m",
+          "state": "working"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 21,
+        "branch": "main",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 45,
+        "plannedPercent": 0
+      }
+    },
+    "StagePlan": {
+      "run": "export-csv",
+      "stage": "Plan",
+      "titleRight": "9m in Plan",
+      "state": "running",
+      "health": "planning the build",
+      "sharePercent": 2,
+      "plan": {
+        "tasks": 20,
+        "atOnce": 6,
+        "wholeRunPercent": 14,
+        "models": {
+          "Sonnet": 14,
+          "Opus": 4,
+          "Haiku": 2
+        }
+      },
+      "agents": [
+        {
+          "reason": "Map the export code paths and their tests",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "52k",
+          "elapsed": "3m",
+          "state": "working"
+        },
+        {
+          "reason": "Find which tasks can run side by side",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "88k",
+          "elapsed": "5m",
+          "state": "working"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 9,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 42,
+        "weekElapsedPercent": 45,
+        "plannedPercent": 12
+      }
+    },
+    "RunningA": {
+      "run": "export-csv",
+      "stage": "Build",
+      "titleRight": "2h 14m in Build",
+      "state": "running",
+      "health": "on track · last commit 3m ago",
+      "sharePercent": 9,
+      "tasks": {
+        "done": 11,
+        "running": 3,
+        "left": 6
+      },
+      "agents": [
+        {
+          "reason": "Add from/to date filters to the export API",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "184k",
+          "elapsed": "12m",
+          "state": "working"
+        },
+        {
+          "reason": "Map DB columns to the CSV header order",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "7m",
+          "state": "working"
+        },
+        {
+          "reason": "Verify requirement 4 on the run branch",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "21k",
+          "elapsed": "1m",
+          "state": "working"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 52,
+        "weekElapsedPercent": 46,
+        "plannedPercent": 5
+      }
+    },
+    "StageReview": {
+      "run": "export-csv",
+      "stage": "Review",
+      "titleRight": "22m in Review",
+      "state": "running",
+      "health": "checking the result against the spec",
+      "sharePercent": 13,
+      "requirements": {
+        "pass": 7,
+        "failing": 1,
+        "toGo": 1,
+        "failingName": "R8 archived rows",
+        "barCells": 20
+      },
+      "agents": [
+        {
+          "reason": "Check requirement 8 against spec and diff",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "96k",
+          "elapsed": "6m",
+          "state": "working"
+        },
+        {
+          "reason": "Fix: archived rows are missing from the CSV",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "73k",
+          "elapsed": "4m",
+          "state": "working"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 31,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 57,
+        "weekElapsedPercent": 60,
+        "plannedPercent": 1
+      }
+    },
+    "Done": {
+      "run": "export-csv",
+      "stage": "finished",
+      "titleRight": "1d 6h",
+      "state": "finished",
+      "frame": "ok",
+      "pr": {
+        "number": 482,
+        "url": "https://github.com/acme/api/pull/482"
+      },
+      "closing": {
+        "requirementsPass": "9 of 9",
+        "decisionsToCheck": 2,
+        "parked": 0
+      },
+      "tasks": {
+        "done": 20,
+        "running": 0,
+        "left": 0
+      },
+      "totals": {
+        "agents": 31,
+        "tokens": "6.2M",
+        "sharePercent": 14
+      },
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 18,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 58,
+        "weekElapsedPercent": 91,
+        "plannedPercent": 0
+      }
+    },
+    "NeedsYou": {
+      "run": "export-csv",
+      "stage": "Build",
+      "titleRight": "2h 31m in Build",
+      "state": "needs you",
+      "frame": "needs-you red",
+      "asks": [
+        {
+          "age": "12m",
+          "text": "The spec says exports include archived rows, but the API hides them from this role. Include them anyway, or leave them out?"
+        }
+      ],
+      "health": "2 tasks wait on your answer · the rest carry on",
+      "sharePercent": 10,
+      "tasks": {
+        "done": 12,
+        "running": 2,
+        "left": 6
+      },
+      "agents": [
+        {
+          "reason": "Map DB columns to the CSV header order",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "7m",
+          "state": "working"
+        },
+        {
+          "reason": "Verify requirement 4 on the run branch",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "21k",
+          "elapsed": "1m",
+          "state": "working"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 41,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 53,
+        "weekElapsedPercent": 46,
+        "plannedPercent": 4
+      }
+    },
+    "SeveralAsks": {
+      "run": "export-csv",
+      "stage": "Build",
+      "titleRight": "2h 58m in Build",
+      "state": "needs you",
+      "frame": "needs-you red",
+      "asks": [
+        {
+          "age": "41m",
+          "text": "Include archived rows in exports, though the API hides them from this role?"
+        },
+        {
+          "age": "12m",
+          "text": "Dates in the file: the viewer's time zone, or always UTC?"
+        },
+        {
+          "age": "3m",
+          "text": "The spec caps exports at 50k rows; one customer has 2M. Raise the cap?"
+        }
+      ],
+      "health": "5 tasks wait on your answers · the rest carry on",
+      "sharePercent": 11,
+      "tasks": {
+        "done": 11,
+        "running": 2,
+        "left": 7
+      },
+      "agents": [
+        {
+          "reason": "Map DB columns to the CSV header order",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "7m",
+          "state": "working"
+        },
+        {
+          "reason": "Verify requirement 4 on the run branch",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "21k",
+          "elapsed": "1m",
+          "state": "working"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 41,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 54,
+        "weekElapsedPercent": 47,
+        "plannedPercent": 3
+      }
+    },
+    "Paused": {
+      "run": "export-csv",
+      "stage": "Build",
+      "titleRight": "1d 3h in Build",
+      "state": "paused at the mark",
+      "frame": "caution",
+      "resumesIn": "2d",
+      "tasks": {
+        "done": 14,
+        "running": 0,
+        "left": 6
+      },
+      "agents": [],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 22,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 75,
+        "weekElapsedPercent": 61,
+        "plannedPercent": 3
+      }
+    },
+    "Stalled": {
+      "run": "export-csv",
+      "stage": "Build",
+      "titleRight": "3h 02m in Build",
+      "state": "running",
+      "sharePercent": 12,
+      "tasks": {
+        "done": 12,
+        "running": 3,
+        "left": 5
+      },
+      "agents": [
+        {
+          "reason": "Add from/to date filters to the export API",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "212k",
+          "elapsed": "14m",
+          "state": "working"
+        },
+        {
+          "reason": "Map DB columns to the CSV header order",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "9m",
+          "state": "quiet"
+        },
+        {
+          "reason": "Stream large exports instead of buffering",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "341k",
+          "elapsed": "31m",
+          "state": "stalled"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 47,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 55,
+        "weekElapsedPercent": 48,
+        "plannedPercent": 2
+      }
+    },
+    "ManyAgents": {
+      "run": "billing-rework",
+      "stage": "Build",
+      "titleRight": "1d 2h in Build",
+      "state": "running",
+      "health": "on track · last commit 1m ago",
+      "sharePercent": 21,
+      "tasks": {
+        "done": 34,
+        "running": 13,
+        "left": 21
+      },
+      "agents": [
+        {
+          "role": "orchestrator",
+          "reason": "Own the billing workstream · 6 workers",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "1.2M",
+          "elapsed": "2h 10m",
+          "state": "working",
+          "expanded": false
+        },
+        {
+          "role": "orchestrator",
+          "reason": "Own the exports workstream · 4 workers",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "640k",
+          "elapsed": "1h 05m",
+          "state": "working",
+          "expanded": false
+        },
+        {
+          "reason": "Add from/to date filters to the export API",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "184k",
+          "elapsed": "12m",
+          "state": "working"
+        },
+        {
+          "reason": "Map DB columns to the CSV header order",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "7m",
+          "state": "working"
+        }
+      ],
+      "more": {
+        "agents": 9,
+        "tokensInFlight": "2.3M"
+      },
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 74,
+        "branch": "lcw/billing-rework",
+        "weekUsedPercent": 64,
+        "weekElapsedPercent": 55,
+        "plannedPercent": 14
+      }
+    },
+    "AgentsOpen": {
+      "run": "billing-rework",
+      "stage": "Build",
+      "titleRight": "1d 2h in Build",
+      "state": "running",
+      "health": "on track · last commit 1m ago",
+      "sharePercent": 21,
+      "tasks": {
+        "done": 34,
+        "running": 13,
+        "left": 21
+      },
+      "agents": [
+        {
+          "role": "orchestrator",
+          "reason": "Own the billing workstream · 6 workers",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "1.2M",
+          "elapsed": "2h 10m",
+          "state": "working",
+          "expanded": true,
+          "workers": [
+            {
+              "reason": "Add proration to the invoice builder",
+              "model": "Sonnet 5.5",
+              "effort": "medium",
+              "tokens": "212k",
+              "elapsed": "22m",
+              "state": "working"
+            },
+            {
+              "reason": "Move the tax rules into one module",
+              "model": "Sonnet 5.5",
+              "effort": "medium",
+              "tokens": "148k",
+              "elapsed": "15m",
+              "state": "working"
+            },
+            {
+              "reason": "Verify invoices against 40 saved cases",
+              "model": "Haiku 5.5",
+              "effort": "low",
+              "tokens": "37k",
+              "elapsed": "4m",
+              "state": "working"
+            }
+          ],
+          "moreWorkers": 3
+        },
+        {
+          "role": "orchestrator",
+          "reason": "Own the exports workstream · 4 workers",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "640k",
+          "elapsed": "1h 05m",
+          "state": "working",
+          "expanded": false
+        },
+        {
+          "reason": "Add from/to date filters to the export API",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "184k",
+          "elapsed": "12m",
+          "state": "working"
+        },
+        {
+          "reason": "Map DB columns to the CSV header order",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "7m",
+          "state": "working"
+        }
+      ],
+      "more": {
+        "agents": 3,
+        "tokensInFlight": "2.3M"
+      },
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 91,
+        "branch": "lcw/billing-rework",
+        "weekUsedPercent": 64,
+        "weekElapsedPercent": 55,
+        "plannedPercent": 14
+      }
+    },
+    "NoMod": {
+      "run": "export-csv",
+      "stage": "Build",
+      "titleRight": "2h 14m in Build",
+      "state": "running",
+      "health": "on track · last commit 3m ago",
+      "sharePercent": 9,
+      "tasks": {
+        "done": 11,
+        "running": 3,
+        "left": 6
+      },
+      "agents": [
+        {
+          "reason": "Add from/to date filters to the export API",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "184k",
+          "elapsed": "12m",
+          "state": "working"
+        },
+        {
+          "reason": "Map DB columns to the CSV header order",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "7m",
+          "state": "working"
+        },
+        {
+          "reason": "Verify requirement 4 on the run branch",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "21k",
+          "elapsed": "1m",
+          "state": "working"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 52,
+        "weekElapsedPercent": 46,
+        "plannedPercent": 5
+      },
+      "variant": "card drawn below the prompt by the status line; no live token figures"
+    },
+    "Light": {
+      "run": "export-csv",
+      "stage": "Build",
+      "titleRight": "2h 14m in Build",
+      "state": "running",
+      "health": "on track · last commit 3m ago",
+      "sharePercent": 9,
+      "tasks": {
+        "done": 11,
+        "running": 3,
+        "left": 6
+      },
+      "agents": [
+        {
+          "reason": "Add from/to date filters to the export API",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "184k",
+          "elapsed": "12m",
+          "state": "working"
+        },
+        {
+          "reason": "Map DB columns to the CSV header order",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "7m",
+          "state": "working"
+        },
+        {
+          "reason": "Verify requirement 4 on the run branch",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "21k",
+          "elapsed": "1m",
+          "state": "working"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 52,
+        "weekElapsedPercent": 46,
+        "plannedPercent": 5
+      },
+      "variant": "light terminal theme"
+    },
+    "Narrow": {
+      "run": "export-csv",
+      "stage": "Build",
+      "titleRight": "2h 14m in Build",
+      "state": "running",
+      "health": "on track · last commit 3m ago",
+      "sharePercent": 9,
+      "tasks": {
+        "done": 11,
+        "running": 3,
+        "left": 6
+      },
+      "agents": [
+        {
+          "reason": "Add from/to date filters to the export API",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "184k",
+          "elapsed": "12m",
+          "state": "working"
+        },
+        {
+          "reason": "Map DB columns to the CSV header order",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "7m",
+          "state": "working"
+        },
+        {
+          "reason": "Verify requirement 4 on the run branch",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "21k",
+          "elapsed": "1m",
+          "state": "working"
+        }
+      ],
+      "status": {
+        "model": "Fable 5.2",
+        "effort": "xhigh",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/export-csv",
+        "weekUsedPercent": 52,
+        "weekElapsedPercent": 46,
+        "plannedPercent": 5
+      },
+      "variant": "narrow terminal: no frame, 16-cell task bar, 24-cell week gauge, one agent shown then \"2 more\""
+    }
+  },
+  "money": {
+    "note": "Money views of the pay-per-token states the human approved: spent in the last 7 days, the cap, the mark, the pace.",
+    "Usual": {
+      "spentUsd": 1260,
+      "todayUsd": 120,
+      "ratePerDay": 180,
+      "capUsd": 4000,
+      "capAssumed": false,
+      "markUsd": 3000,
+      "markShare": 75,
+      "pace": {
+        "usd": 2502,
+        "short": false
+      },
+      "atMark": false
+    },
+    "CapAssumed": {
+      "spentUsd": 1260,
+      "todayUsd": 120,
+      "ratePerDay": 180,
+      "capUsd": 4000,
+      "capAssumed": true,
+      "markUsd": 3000,
+      "markShare": 75,
+      "pace": {
+        "usd": 2502,
+        "short": false
+      },
+      "atMark": false
+    },
+    "NearMark": {
+      "spentUsd": 2850,
+      "todayUsd": 300,
+      "ratePerDay": 400,
+      "capUsd": 4000,
+      "capAssumed": false,
+      "markUsd": 3000,
+      "markShare": 75,
+      "pace": {
+        "usd": 265,
+        "short": true
+      },
+      "atMark": false
+    },
+    "AtMark": {
+      "spentUsd": 3020,
+      "todayUsd": 300,
+      "ratePerDay": 400,
+      "capUsd": 4000,
+      "capAssumed": false,
+      "markUsd": 3000,
+      "markShare": 75,
+      "pace": {
+        "usd": 901,
+        "short": true
+      },
+      "atMark": true,
+      "retryAt": 1795075200000,
+      "retried": false
+    },
+    "MarkAboveCap": {
+      "spentUsd": 4210,
+      "todayUsd": 300,
+      "ratePerDay": 400,
+      "capUsd": 4000,
+      "capAssumed": false,
+      "markUsd": 5500,
+      "markShare": null,
+      "pace": {
+        "usd": 1595,
+        "short": true
+      },
+      "atMark": false
+    }
+  }
+}

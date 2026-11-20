@@ -1,0 +1,27 @@
+{
+ "session_id": "seed-payg",
+ "transcript_path": "/work/.claude/projects/lcw/seed-payg.jsonl",
+ "cwd": "/work/lcw",
+ "effort": {
+  "level": "low"
+ },
+ "model": {
+  "id": "claude-opus-5",
+  "display_name": "Opus 5"
+ },
+ "workspace": {
+  "current_dir": "/work/lcw",
+  "project_dir": "/work/lcw"
+ },
+ "worktree": {
+  "branch": "probe",
+  "original_cwd": "/work/lcw"
+ },
+ "cost": {
+  "total_cost_usd": 1260
+ },
+ "context_window": {
+  "context_window_size": 1000000,
+  "used_percentage": 31
+ }
+}
