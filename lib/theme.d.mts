@@ -1,6 +1,6 @@
 export type ThemeName = 'dark' | 'light';
 export const glyphs: Record<string, string>;
-export const stages: string[];
+export const stages: { build: string[]; sweep: string[] };
 export const thresholds: {
   usageMarkPercent: number;
   contextYellowFrom: number; contextRedFrom: number;
