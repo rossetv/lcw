@@ -73,6 +73,7 @@ test('session-start hook without a run prints the rule and the command', () => {
   const r = run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }) })
   assert.equal(r.code, 0)
   assert.match(r.out, /lcw:lcw skill/)
+  assert.match(r.out, /open goal[^\n]*load the lcw:lcw skill/, 'an open goal loads the skill as a large change does')
   assert.match(r.out, /nothing is changed without the user's go-ahead, whatever its size/)
   assert.match(r.out, /answer it and change nothing/)
   assert.ok(!/just make it/.test(r.out))
