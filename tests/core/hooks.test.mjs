@@ -474,3 +474,20 @@ test('at a mark of the whole week or the full cap the stop text does not offer "
   assert.ok(pct.includes('100% of the week is used') && pct.includes('resets'), pct)
   assert.ok(!pct.includes('finish this regardless'), pct)
 })
+
+test('session start removes the temp files a stopped writer left an hour ago or more, and nothing else', () => {
+  const home = tmp('home')
+  const repo = makeRepo()
+  const runDir = `${home}/repos/k/runs/r1`
+  fs.mkdirSync(`${home}/cache`, { recursive: true })
+  fs.mkdirSync(runDir, { recursive: true })
+  const old = [`${home}/usage.json.123.tmp`, `${home}/cache/diff-a.json.456.tmp`, `${runDir}/state.json.789.tmp`]
+  const fresh = `${home}/usage.json.321.tmp` // a writer may be between its write and its rename right now
+  const others = [`${home}/usage.json`, `${home}/notes.tmp`]
+  for (const f of [...old, fresh, ...others]) fs.writeFileSync(f, '{}')
+  const twoHoursAgo = new Date(Date.now() - 2 * 3600_000)
+  for (const f of [...old, ...others]) fs.utimesSync(f, twoHoursAgo, twoHoursAgo)
+  run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 's1', cwd: repo }) })
+  for (const f of old) assert.equal(fs.existsSync(f), false, f)
+  for (const f of [fresh, ...others]) assert.equal(fs.existsSync(f), true, f)
+})

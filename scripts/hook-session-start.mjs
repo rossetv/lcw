@@ -3,7 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { runsDir, repoKey } from '../lib/key.mjs'
-import { home, mainCheckout, writeAtomic, readJson, writeJson } from './lib/store.mjs'
+import { home, mainCheckout, writeAtomic, readJson, writeJson, sweepTemp } from './lib/store.mjs'
 import { findRun, listRuns } from './lib/runs.mjs'
 import { sessionIds, sessionMark, DEFAULT_MARK } from './lib/gate.mjs'
 import { readMoney, dropSpend } from './lib/money.mjs'
@@ -82,6 +82,7 @@ try {
   const input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}')
   const cwd = input.cwd || process.cwd()
   writeAtomic(`${home()}/plugin-root`, root)
+  try { sweepTemp(home()) } catch {}
   lines.push(`LCW command line: ${cli} (add --session <id> only if CLAUDE_CODE_SESSION_ID is not set)`)
   // A resumed session is known by its transcript's name, as in the other hooks.
   const ids = sessionIds(input)
