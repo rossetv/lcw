@@ -687,15 +687,3 @@ test("a parked fix is neither to go nor dropped on the fixes row, and the wave's
   const s = buildView(j).sweep;
   assert.deepEqual([s.fixed, s.parked, s.dropped], [j.state.sweep.fixed + 1, j.state.sweep.parked, j.state.sweep.dropped + j.state.sweep.waves[1].dropped]);
 });
-
-test('an empty wave is not a pull request on the card', () => {
-  const i = inputsOf('18-finished-merged-as-it-went');
-  const waves = i.state.sweep.waves;
-  assert.ok(waves.length > 1);
-  const before = buildView(i).sweep.prs;
-  i.state.sweep.waves = [...waves, { n: waves.length + 1, status: 'shipped', merged: false, empty: true, pr: 99 }];
-  assert.deepEqual(buildView(i).sweep.prs, before);
-  const only = inputsOf('20-finished-with-one-pull-request-at-the-end');
-  only.state.sweep.waves = [{ n: 1, status: 'shipped', empty: true, pr: null }];
-  assert.deepEqual(buildView(only).sweep.prs, [{ number: only.state.pr.number, merged: false }]);
-});

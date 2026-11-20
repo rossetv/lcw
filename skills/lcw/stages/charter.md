@@ -49,7 +49,7 @@ For the PRs line, always ask: may Claude ever merge a pull request on its own, a
 
 Write their criteria in their own words. The sweep reads GitHub's checks only if the criteria name them. If they do, tell the human that the sweep's pull requests stay drafts until it merges them, so in a repository that skips its checks on draft pull requests such criteria are never met.
 
-Stacked and merged as it goes need merge commits. For either, check the repository allows them: `gh repo view <owner>/<name> --json mergeCommitAllowed`. If it prints anything but `true`, tell the human. `false` means stacked pull requests could not be merged in order, and the sweep could not merge at all; anything else, such as an error, means you could not tell, and that is what you say. They can turn merge commits on in the repository's settings or pick one at the end.
+Stacked and merged as it goes need merge commits. For either, check the repository allows them: `gh repo view <owner>/<name> --json mergeCommitAllowed --jq .mergeCommitAllowed`. If it prints anything but `true`, tell the human. `false` means stacked pull requests could not be merged in order, and the sweep could not merge at all; anything else, such as an error, means you could not tell, and that is what you say. They can turn merge commits on in the repository's settings or pick one at the end.
 
 ## Record as you go
 
