@@ -3,8 +3,6 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { tmp, makeRepo, git, lcw, readJson } from './helpers.mjs'
 
-process.env.GIT_TERMINAL_PROMPT = '0' // a test that reaches for a real remote must fail, not ask for a login
-
 /** A repo with a GitHub origin, a home and a started sweep. */
 function sweep(name = 'tidy') {
   const home = tmp('home')
@@ -35,7 +33,11 @@ function commit(wt, file, text) {
   return git(wt, 'rev-parse', 'HEAD')
 }
 
-/** A gh on PATH that writes each call's arguments to a log. GH_STATE and GH_DRAFT are what pr view shows, GH_FAIL the subcommand that fails, GH_API_ERROR what a failing api call says. */
+/**
+ * A gh on PATH that writes each call's arguments to a log. GH_STATE is what each pr view shows in turn, comma separated,
+ * the last one again once they run out (open, then merged, by default); GH_DRAFT and GH_BASE are the rest of what it shows,
+ * and the repository's default branch is main. GH_FAIL is the subcommand that fails, GH_API_ERROR what a failing api call says.
+ */
 function fakeGh(more = {}) {
   const bin = tmp('bin')
   const log = `${bin}/calls`
@@ -43,7 +45,13 @@ function fakeGh(more = {}) {
 echo "$*" >> "${log}"
 case "$*" in *--delete-branch*) echo "gh must not delete the branch" >&2; exit 1;; esac
 if [ "$1 $2" = "$GH_FAIL" ]; then echo "GraphQL: not mergeable" >&2; exit 1; fi
-if [ "$1 $2" = "pr view" ]; then echo "{\\"state\\":\\"\${GH_STATE:-OPEN}\\",\\"isDraft\\":\${GH_DRAFT:-true}}"; fi
+if [ "$1 $2" = "pr view" ]; then
+  states="\${GH_STATE:-OPEN,MERGED}"
+  state=$(echo "$states" | cut -d, -f"$(grep -c '^pr view' "${log}")")
+  [ -n "$state" ] || state=$(echo "$states" | awk -F, '{print $NF}')
+  echo "{\\"state\\":\\"$state\\",\\"isDraft\\":\${GH_DRAFT:-true},\\"baseRefName\\":\\"\${GH_BASE:-main}\\"}"
+fi
+if [ "$1 $2" = "repo view" ]; then echo '{"defaultBranchRef":{"name":"main"}}'; fi
 if [ "$1" = "api" ] && [ -n "$GH_API_ERROR" ]; then echo "$GH_API_ERROR" >&2; exit 1; fi
 exit 0
 `, { mode: 0o755 })
@@ -273,15 +281,45 @@ test('merge readies a draft, merges it with a merge commit on the GitHub remote,
   const r = lcw(['merge', '1'], { ...t.o, env: gh.env })
   assert.equal(r.code, 0, r.out)
   assert.deepEqual(gh.calls(), [
-    'pr view 12 -R acme/widgets --json state,isDraft',
+    'pr view 12 -R acme/widgets --json state,isDraft,baseRefName',
+    'repo view acme/widgets --json defaultBranchRef',
     'pr ready 12 -R acme/widgets',
     'pr merge 12 -R acme/widgets --merge',
+    'pr view 12 -R acme/widgets --json state',
     'api -X DELETE repos/acme/widgets/git/refs/heads/lcw/tidy-wave-1',
   ])
   assert.deepEqual(t.state().sweep.waves.map((w) => w.merged), [true, false])
   assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1 merged/)
   assert.equal(lcw(['merge', '1'], { ...t.o, env: gh.env }).code, 1, 'merged already')
-  assert.equal(gh.calls().length, 4)
+  assert.equal(gh.calls().length, 6)
+})
+
+test('a pull request the merge only queued is not recorded and keeps its branch, and a later merge records it once GitHub shows it merged', () => {
+  const t = shippedWaves()
+  const queued = fakeGh({ GH_STATE: 'OPEN' })
+  const r = lcw(['merge', '1'], { ...t.o, env: queued.env })
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /not merged yet/)
+  assert.ok(queued.calls().includes('pr merge 12 -R acme/widgets --merge'), queued.calls().join('\n'))
+  assert.ok(!queued.calls().some((c) => c.startsWith('api')), queued.calls().join('\n'))
+  assert.equal(t.state().sweep.waves[0].merged, false)
+  const later = fakeGh({ GH_STATE: 'MERGED' })
+  assert.equal(lcw(['merge', '1'], { ...t.o, env: later.env }).code, 0)
+  assert.ok(!later.calls().some((c) => c.startsWith('pr merge')), later.calls().join('\n'))
+  assert.ok(later.calls().includes('api -X DELETE repos/acme/widgets/git/refs/heads/lcw/tidy-wave-1'))
+  assert.equal(t.state().sweep.waves[0].merged, true)
+})
+
+test('a pull request still based on a wave branch is refused, with no write to GitHub', () => {
+  const t = shippedWaves()
+  t.edit((s) => { s.sweep.waves[0].merged = true })
+  const gh = fakeGh({ GH_BASE: 'lcw/tidy-wave-1' })
+  const r = lcw(['merge', '2'], { ...t.o, env: gh.env })
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /lcw\/tidy-wave-1/)
+  assert.match(r.out, /\bmain\b/)
+  assert.ok(gh.calls().length > 0 && gh.calls().every((c) => c.startsWith('pr view') || c.startsWith('repo view')), gh.calls().join('\n'))
+  assert.equal(t.state().sweep.waves[1].merged, false)
 })
 
 test('merge deletes the remote wave branch through the api and leaves the local branch, its tracking ref and the worktree alone', () => {

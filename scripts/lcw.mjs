@@ -741,14 +741,24 @@ const commands = {
     const root = run.state.repoRoot
     const repo = githubRepo(root) || fail('lcw merge needs a GitHub remote named origin. Nothing was merged.')
     const pr = String(wave.pr)
+    let view, main
     try {
-      // merged earlier but never recorded: go on to the branch, do not merge twice
-      const view = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state,isDraft'))
-      if (view.state !== 'MERGED') {
+      view = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state,isDraft,baseRefName'))
+      if (view.state !== 'MERGED') main = JSON.parse(gh(root, 'repo', 'view', repo, '--json', 'defaultBranchRef')).defaultBranchRef.name
+    } catch (e) { fail(`gh could not read #${pr}: ${firstLine(e)}. Nothing was recorded.`) }
+    // merged earlier but never recorded: go on to the branch, do not merge twice
+    if (view.state !== 'MERGED') {
+      // the next wave's pull request is opened on this wave's branch, and GitHub retargets it only when that branch is deleted
+      if (view.baseRefName !== main) fail(`#${pr} is based on ${view.baseRefName}, not the default branch ${main}; retarget it to ${main} first (gh pr edit ${pr} -R ${repo} --base ${main}). Nothing was merged or recorded.`)
+      let state
+      try {
         if (view.isDraft) gh(root, 'pr', 'ready', pr, '-R', repo)
         gh(root, 'pr', 'merge', pr, '-R', repo, '--merge')
-      }
-    } catch (e) { fail(`gh could not merge #${pr}: ${firstLine(e)}. Nothing was recorded.`) }
+        state = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state')).state
+      } catch (e) { fail(`gh could not merge #${pr}: ${firstLine(e)}. Nothing was recorded.`) }
+      // a merge queue or required checks: gh returns once the merge is queued, and deleting the branch now would close it unmerged
+      if (state !== 'MERGED') fail(`#${pr} is not merged yet: GitHub shows it ${state}, queued or waiting on checks. Nothing was recorded and its branch is kept; run lcw merge ${n} again once it is merged.`)
+    }
     // gh's --delete-branch and git's push --delete would touch local refs, and the wave's branch is checked out in the sweep's worktree
     let left = ''
     try { gh(root, 'api', '-X', 'DELETE', `repos/${repo}/git/refs/heads/${wave.branch}`) } catch (e) {
