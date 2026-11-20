@@ -3,11 +3,14 @@
   "owner": {
     "name": "rossetv"
   },
+  "metadata": {
+    "description": "LCW, the Large Change Workflow for Claude Code."
+  },
   "plugins": [
     {
       "name": "lcw",
       "source": "./",
-      "description": "Large Change Workflow"
+      "description": "Say what you want built. Claude works out what you mean, then plans, builds, reviews and opens a draft pull request on its own, with a status bar to watch it."
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "name": "lcw",
-  "version": "0.2.8",
-  "description": "Large Change Workflow: say what you want in plain words; Claude captures the intent, then plans, builds, reviews and ships it as a draft pull request, with a status bar to watch it.",
+  "version": "0.2.9",
+  "description": "Say what you want built. Claude works out what you mean, then plans, builds, reviews and opens a draft pull request on its own, with a status bar to watch it.",
   "author": {
     "name": "rossetv"
   },

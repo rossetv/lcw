@@ -1,6 +1,10 @@
-# LCW: Large Change Workflow
+<p align="center">
+  <img src=".claude-plugin/icon.png" width="112" alt="LCW's icon: a small block mushroom with a face">
+</p>
 
-A Claude Code plugin that takes any large change from what you intend to build, to a draft pull request.
+<h1 align="center">LCW: Large Change Workflow</h1>
+
+<p align="center">A Claude Code plugin that takes any large change from what you intend to build, to a draft pull request.</p>
 
 <p align="center">
   <img src="overview.svg" width="830" alt="How an LCW run goes. You say what you want. Brainstorm, with you: Claude clarifies what you mean, tests your assumptions against the code, asks the hard questions as a senior partner would, and uses mocks and diagrams to make sure you both understand the same thing; you approve once. Then, autonomously: Spec, written by AI for AI and checked by a blind reviewer; Plan; Build, where Claude orchestrates workers and, for very large work, an extra orchestrator for each area, and a blind reviewer checks each milestone's code without the spec; Review, where reviewers check the work against the spec, raise every concern, and Claude decides what to change; and Ship, a draft pull request that you review. A Fable advisor reviews the work at every stage. Each stage saves its records in ~/.lcw, outside your repository: the brainstorm, the spec, the plan, a ledger of every decision and why, and mocks. Ship writes the draft pull request from them and lists what you really need to know before merging.">
