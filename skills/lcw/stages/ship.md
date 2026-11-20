@@ -53,7 +53,7 @@ What the human asks for next is a new request: a large one is a new run, and a s
 
 ## In a sweep
 
-A wave ships to the sweep's branch, in the way charter.md picks for its pull requests (`lcw status` prints the choice). The worktree and every branch stay until the sweep ends: a wave does none of "Afterwards: clean up", and records no closing counts, since `lcw wave shipped` keeps the sweep's totals. With the worktree clean, as above:
+A wave ships to the sweep's branch, in the way charter.md picks for its pull requests (`lcw status` prints the choice). The worktree and every branch stay until the sweep ends: a wave does none of "Afterwards: clean up", and records no closing counts, since `lcw wave shipped` keeps the sweep's totals. With the worktree clean, as above, `lcw set health="writing wave <n>'s pull request"`, or `health="landing wave <n>"` where the choice is one at the end or the wave opens none:
 
 **A wave with no commits** (every fix dropped or parked: `git rev-list --count lcw/<name>..HEAD` prints 0) has nothing to push, whatever the choice: `lcw wave shipped`, with no push and no pull request.
 
@@ -75,7 +75,7 @@ Where the criteria name GitHub's checks, a pass after a wave ships only looks (`
 
 A wave whose checks have not passed, or that misses any other criterion, falls short. One that meets them all: `lcw merge <wave>`, and act on what it says.
 
-- **Merged.** The next pull request is now against the default branch, which starts none of its checks: where the criteria name checks, `gh pr close <number>` and `gh pr reopen <number>` it so they run. Go on to the next wave.
+- **Merged.** `lcw set health="wave <n>'s PR #<number> merged: it met your charter's rule"`. The next pull request is now against the default branch, which starts none of its checks: where the criteria name checks, `gh pr close <number>` and `gh pr reopen <number>` it so they run. Go on to the next wave.
 - **Based on another branch** (an earlier wave's branch was not deleted, so GitHub did not retarget it; it prints a `gh pr edit` command): run that command, close and reopen the pull request where the criteria name checks, and look at the wave again from its checks, not straight at the merge; if `lcw merge` says so again, the wave stays open.
 - **Not merged yet** (a merge queue, or GitHub waiting on checks): it is still waiting, and the pass stops there. The next pass and the end look at it again; `lcw merge <wave>` records it once GitHub shows it merged.
 - **gh could not merge** (a conflict, a required review, required checks still running): `lcw ledger "wave <n>: gh could not merge: <gh's words>"`, and the pass stops there. The next pass, or the end, tries it once more; if that fails too (the ledger shows whether it failed so in an earlier pass), it stays open, with every wave after it, and the end report gives gh's words.

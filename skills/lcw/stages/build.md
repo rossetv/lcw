@@ -70,7 +70,7 @@ and end your turn. The review starts on a fresh context.
 
 ## In a sweep
 
-A wave builds as above, its areas in parallel, from the wave's plan, with charter.md and the wave's findings wherever this file says the spec or the brainstorm. A worker's brief takes, in their place: each of its fixes with its F id and its recipe; which of them are security fixes, whether the repository is public, and whether the charter lets such fixes be published; the charter's no-go zones and the kinds of change it allows; and the paths of charter.md and findings.md for reference. Tell it:
+`lcw set health="wave <n>: <areas> fixes building side by side"`. A wave builds as above, its areas in parallel, from the wave's plan, with charter.md and the wave's findings wherever this file says the spec or the brainstorm. A worker's brief takes, in their place: each of its fixes with its F id and its recipe; which of them are security fixes, whether the repository is public, and whether the charter lets such fixes be published; the charter's no-go zones and the kinds of change it allows; and the paths of charter.md and findings.md for reference. Tell it:
 
 - A fix to behaviour starts as a failing test written from its recipe, and is done when that test passes.
 - If it cannot make the test fail, it leaves that fix unbuilt, drops it itself (`lcw req <F id> drop`, `lcw ledger "<F id> dropped: <reason>"`, and `lcw task <id> dropped` if all its fixes go) and reports why.

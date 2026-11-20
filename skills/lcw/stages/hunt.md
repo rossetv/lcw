@@ -2,7 +2,7 @@
 
 Each round of a sweep starts here: probes look for problems in the areas the charter names, and you sort what they find. Entering Hunt adds one to the round. You do not read code: probes do, and they report.
 
-`lcw set health="hunting, area by area"`. Read charter.md and, in a later round, findings.md, both in the run folder.
+`lcw set health="hunting, area by area"` in round 1, `health="hunting again, round <n>"` in a later one. Read charter.md and, in a later round, findings.md, both in the run folder.
 
 ## Which areas
 
@@ -28,7 +28,7 @@ Write each report into findings.md under its part as it arrives, so after a comp
 
 ## Sorting
 
-When every part has reported, sort each finding against the charter, and write the sort and its reason beside it in findings.md. Give each finding an id that is new in this sweep (F1, F2, and on across rounds); a fix keeps its id when its wave's Plan records it.
+When every part has reported, `lcw set health="sorted against the charter"`, and sort each finding against the charter, and write the sort and its reason beside it in findings.md. Give each finding an id that is new in this sweep (F1, F2, and on across rounds); a fix keeps its id when its wave's Plan records it.
 
 - **Fix**: it goes into a wave.
 - **Park**: a decision only the human can make (the finding names a problem but not what should happen instead, and the charter does not settle it), or what the charter's park line says to park. A fix that would need a no-go zone, or a kind of change the charter does not allow, is parked, not built. Say why.

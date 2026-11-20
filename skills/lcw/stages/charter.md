@@ -26,7 +26,7 @@ From what they count, propose values instead of asking open questions: the areas
 
 ## The ten lines
 
-Take the lines in this order, one at a time. For each, give your best reading from their words, the probes and earlier runs, with the alternatives and what each costs, and let them choose. Be the partner SKILL.md describes: if a line would let the sweep do harm or turn it into a nitpick loop, say so and offer better.
+Take the lines in this order, one at a time. While you ask a line, `lcw set health="asking you: <the question in a few words>"`. For each, give your best reading from their words, the probes and earlier runs, with the alternatives and what each costs, and let them choose. Be the partner SKILL.md describes: if a line would let the sweep do harm or turn it into a nitpick loop, say so and offer better.
 
 | Line | What it settles |
 |---|---|
@@ -75,6 +75,8 @@ Just before you send the playback, put the question in LCW's box above their pro
 ```
 lcw approval
 ```
+
+Once the box is shown, `lcw set health="waiting for your yes on the charter"`.
 
 It takes Go labels and `--meaning` as in Brainstorm. Run it again whenever you send the playback again. The box can be hidden, so the message still ends with the question and the three replies.
 
