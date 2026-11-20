@@ -743,6 +743,7 @@ const commands = {
       if (wave.status !== 'shipped') fail(`Wave ${wave.n} is ${wave.status}; a pull request is recorded once it has shipped. Nothing was changed.`)
       if (wave.empty) fail(`Wave ${wave.n} shipped with no commits, so it has no pull request. Nothing was changed.`)
       if (wave.pr) fail(`Wave ${wave.n} has pull request #${wave.pr} already. Nothing was changed.`)
+      if (w.prs === 'end') fail('The charter chose one pull request at the end, so a wave has no pull request of its own. Nothing was changed.')
       const pr = prOf(ref).number || fail(`A pull request is its number or its URL, not ${ref}. Nothing was changed.`)
       change(run, `wave ${wave.n}: PR #${pr}`, () => { wave.pr = pr })
       return out(`wave ${wave.n}: PR #${pr}`)
@@ -904,16 +905,16 @@ function listItem(cmd, field, statuses, make) {
   if (cmd === 'req' && status === 'drop') {
     const item = find(list, 'id', id)
     change(run, `req ${id} dropped: ${item.name}`, (s) => {
-      if (item.status === 'parked') s.sweep.parked--
-      s.requirements = s.requirements.filter((x) => x !== item)
       const wave = runningWave(s)
+      if (item.status === 'parked') { s.sweep.parked--; if (!wave) s.sweep.dropped++ }
+      s.requirements = s.requirements.filter((x) => x !== item)
       if (wave) wave.dropped++
     })
     return out(`${id} dropped`)
   }
   if (!statuses.includes(status)) fail(`Usage: lcw ${cmd} <id> <${statuses.join('|')}>`)
   const item = find(list, 'id', id)
-  if (cmd === 'req' && item.status === 'parked') fail(`${id} is parked for the person and stays parked; it is neither dropped nor fixed. Nothing was changed.`)
+  if (cmd === 'req' && item.status === 'parked') fail(`${id} is parked for the person and stays parked; it can only be dropped. Nothing was changed.`)
   change(run, `${cmd} ${id}: ${status}`, () => { item.status = status })
   out(`${id} ${status}`)
 }

@@ -629,12 +629,32 @@ test('a parked fix cannot also be passed, failed or reset, it can be dropped onc
   for (const s of ['pass', 'failing', 'todo']) {
     const r = t.cli('req', 'F1', s)
     assert.equal(r.code, 1, s)
-    assert.match(r.out, /parked/)
+    assert.match(r.out, /stays parked; it can only be dropped/)
   }
   assert.equal(t.cli('req', 'F1', 'park').code, 0)
   assert.deepEqual([t.state().requirements[0].status, t.state().sweep.parked, t.state().sweep.waves[0].dropped], ['parked', 1, 0])
   assert.equal(t.cli('req', 'F1', 'drop').code, 0)
   assert.deepEqual([t.state().requirements.length, t.state().sweep.parked, t.state().sweep.waves[0].dropped], [0, 0, 1])
+})
+
+test('dropping a parked fix with no wave running counts it dropped once, and the shipped wave does not take it', () => {
+  const t = shipping(1)
+  t.cli('req', 'add', 'F1', 'fix one')
+  t.cli('req', 'F1', 'park')
+  commit(t.wt, 'b.txt', 'fix\n')
+  t.cli('wave', 'shipped')
+  assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped], [1, 0])
+  assert.equal(t.cli('req', 'F1', 'drop').code, 0)
+  assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped, t.state().sweep.waves[0].dropped], [0, 1, 0])
+})
+
+test('wave pr is refused under one pull request at the end', () => {
+  const t = shipping(1)
+  commit(t.wt, 'b.txt', 'fix\n')
+  t.cli('wave', 'shipped')
+  t.edit((s) => { s.sweep.prs = 'end' })
+  assert.equal(t.cli('wave', 'pr', '1', '3').code, 1)
+  assert.equal(t.state().sweep.waves[0].pr, null)
 })
 
 test('a merge GitHub refuses says so when the pull request could not be put back to draft', () => {
