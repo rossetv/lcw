@@ -98,8 +98,11 @@ function survey(cwd, lcwHome) {
     const t = { type: 'worktree', path: w.path, branch: w.branch, head: w.head }
     const liveRun = live.find((s) => s.worktree && real(s.worktree) === w.path)
     const endedRun = runs.find((s) => ended(s) && s.worktree && real(s.worktree) === w.path)
+    // The folder was deleted by hand: only git's record of it is left, so removing that loses nothing.
+    const gone = !!w.prunable && !w.locked
     if (w.locked) t.not = 'it is locked'
-    else if (w.prunable) t.not = 'its folder is missing'
+    else if (gone && liveRun) t.not = `LCW run ${liveRun.id} is ${liveRun.status} in it`
+    else if (gone) {}
     else if (within(here, w.path)) t.not = 'this session is in it'
     else if (liveRun) t.not = `LCW run ${liveRun.id} is ${liveRun.status} in it`
     else if (sessions.some((s) => within(s, w.path))) t.not = 'an open session is in it'
@@ -112,7 +115,8 @@ function survey(cwd, lcwHome) {
       else if (tryGit(w.path, 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory') !== '') t.not = 'it holds ignored files'
     }
     const merged = w.branch ? branchWhy.get(w.branch) : (commitInBase(w.head) ? `in ${base}` : null)
-    if (endedRun) t.why = `LCW run ${endedRun.id} ${endedRun.status}`
+    if (gone) t.why = 'its folder is gone'
+    else if (endedRun) t.why = `LCW run ${endedRun.id} ${endedRun.status}`
     else if (merged) t.why = `branch ${merged}`
     else t.not ??= 'its branch is not merged'
     return t
