@@ -35,6 +35,8 @@ Start from their words and work out the intent behind them: why they want it, wh
 
 Ask only about what the human would notice: what they will see, what it does, what it must never do. A detail they would not notice either way, such as the flavour of a format or which of two sensible refusals applies, is not a question for them: note it in brainstorm.md under "Left to Claude", and Plan decides it.
 
+Do not offer a list, a table or any other proof "in the pull request", in a question, an option or the playback. Where the human needs to trust something they will not check themselves, such as that every removed setting is read by nothing, make that part of the intent and tell them Review checks it.
+
 ## Show it
 
 People understand what they can see, so show far more than you tell. Whenever the human would otherwise have to imagine something, draw it, and draw it before you ask the question it answers:

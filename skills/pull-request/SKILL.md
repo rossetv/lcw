@@ -10,7 +10,7 @@ The human comes back to this page after hours away and decides from it whether t
 
 ## The order
 
-Three sections, with these headings, in this order. Never another order, and nothing above them.
+Three sections, with these headings, in this order. Never another order, nothing above them, and nothing after them but Check.
 
 - **What**: what this change builds, as the person using it meets it. Two or three sentences in their words, not the code's. Then a picture of it.
 - **Why**: the problem it solves and for whom, from the brainstorm. Two or three sentences. Not the story of the run.
@@ -23,6 +23,8 @@ Nothing else goes in. A sensible choice the human would most likely have made to
 ## Short
 
 What, Why and How together stay under 150 words; the pictures carry the rest. Keep a sentence only if the reader would decide something differently because of it. No greeting, no summary at the end, no list of files (the diff has it), no account of what the agents did, no AI attribution (no "Generated with Claude Code" line or anything like it), and nothing a reader cannot open: no local path (~/.lcw, the run folder, the ledger, a scratch file) and no pointer to what only this machine holds, such as "see the ledger". Write as the `lcw:docs` skill says.
+
+The pull request holds no record of the run's work: no list or table of each thing removed, renamed or measured, as a section or in a `<details>` block, even where the spec says the pull request lists it. Say what the record shows in one line of How, such as "41 settings are removed, each one read by nothing". Review checked the record itself, so the pull request neither repeats it nor points to it.
 
 ## The pictures
 
