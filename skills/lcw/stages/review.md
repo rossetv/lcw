@@ -2,7 +2,7 @@
 
 The finished work is checked against the intent in the spec: first by independent reviewers, then by you, because you hold the intent.
 
-`lcw set health="checking the result against the spec"`. On a second or later round, set back only the groups that had a failing requirement, and any requirement the fixes touched (`lcw req <id> todo`), and review only those. The test suites, run in every round, guard the rest.
+`lcw set health="checking the result against the spec"` (a sweep sets its own words instead, below). On a second or later round, set back only the groups that had a failing requirement, and any requirement the fixes touched (`lcw req <id> todo`), and review only those. The test suites, run in every round, guard the rest.
 
 ## The independent review
 

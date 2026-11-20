@@ -35,7 +35,7 @@ If two workers did touch the same file, launch a worker to settle the result fro
 
 ## Keep pushing
 
-After every report ask: is anything stuck? Is this going well? How can we speed this up: more in parallel, a task split, a cheaper model where a test can check the work? How can we improve this? Act on the answers, and keep health current (`lcw set health="on track, T7 done"`).
+After every report ask: is anything stuck? Is this going well? How can we speed this up: more in parallel, a task split, a cheaper model where a test can check the work? How can we improve this? Act on the answers, and keep health current (`lcw set health="on track, T7 done"`; in a wave, keep the wave's words in front: `health="wave <n>: <areas> fixes building side by side, T7 done"`).
 
 A task that has failed twice, or is going round in circles, moves up a tier with what was learned (see models.md); it is not simply retried. A task that cannot be done is parked, `lcw task <task> parked`, with the reason in the ledger; it goes in the pull request.
 

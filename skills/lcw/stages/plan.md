@@ -2,7 +2,7 @@
 
 You decide HOW. Do not ask the human: they care that what they asked for gets built, not how. Plan the simplest build that meets the spec: no layer, abstraction, option or dependency that the spec does not need today.
 
-`lcw set health="planning the build"`. Read map.md in the run folder: the probes launched during Spec mapped the code there. Launch more only for what it leaves open. The map covers the code the change touches, how it is built and tested, where the seams are, how the repository writes its commits, and which checks it asks for before a pull request (lint, type checks, formatting, or a list in a contributing guide, CLAUDE.md or a gates file).
+`lcw set health="planning the build"` (a sweep sets its own words instead, below). Read map.md in the run folder: the probes launched during Spec mapped the code there. Launch more only for what it leaves open. The map covers the code the change touches, how it is built and tested, where the seams are, how the repository writes its commits, and which checks it asks for before a pull request (lint, type checks, formatting, or a list in a contributing guide, CLAUDE.md or a gates file).
 
 ## Tasks
 

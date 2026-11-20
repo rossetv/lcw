@@ -76,7 +76,7 @@ Just before you send the playback, put the question in LCW's box above their pro
 lcw approval
 ```
 
-Once the box is shown, `lcw set health="waiting for your yes on the charter"`.
+Once the box is shown, `lcw set health="waiting for your yes on the charter"`. After a "yes, but", keep those words while you rework the charter, not "asking you: ...".
 
 It takes Go labels and `--meaning` as in Brainstorm. Run it again whenever you send the playback again. The box can be hidden, so the message still ends with the question and the three replies.
 

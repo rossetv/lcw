@@ -28,7 +28,7 @@ Write each report into findings.md under its part as it arrives, so after a comp
 
 ## Sorting
 
-When every part has reported, `lcw set health="sorted against the charter"`, and sort each finding against the charter, and write the sort and its reason beside it in findings.md. Give each finding an id that is new in this sweep (F1, F2, and on across rounds); a fix keeps its id when its wave's Plan records it.
+When every part has reported, sort each finding against the charter, and write the sort and its reason beside it in findings.md. Give each finding an id that is new in this sweep (F1, F2, and on across rounds); a fix keeps its id when its wave's Plan records it.
 
 - **Fix**: it goes into a wave.
 - **Park**: a decision only the human can make (the finding names a problem but not what should happen instead, and the charter does not settle it), or what the charter's park line says to park. A fix that would need a no-go zone, or a kind of change the charter does not allow, is parked, not built. Say why.
@@ -49,6 +49,8 @@ findings.md holds every finding with its recipe and its sort, round by round, an
 ```
 lcw hunt --fix 151 --park 14 --drop 21
 ```
+
+Then `lcw set health="sorted against the charter"`.
 
 Show the sorted list in the conversation, short: what goes to Fix, area by area; what is parked and why; what is dropped and why; and where parked.md is. Do not wait for an answer: parked items never hold up the rest.
 
