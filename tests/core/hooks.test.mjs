@@ -109,6 +109,7 @@ test('session-start hook says why a run is paused: a pause by the user stays unt
   assert.match(mark, /status paused \(paused at the usage mark\)/)
   assert.ok(!/stays paused until they say/.test(mark), mark)
   assert.match(mark, /lcw\.mjs resume/)
+  assert.match(mark, /still shows the mark, the run stays paused and you end your turn/)
 })
 
 test('session start finds the run of a resumed session by its transcript', () => {

@@ -53,6 +53,7 @@ function fakeGh(more = {}) {
   fs.writeFileSync(`${bin}/gh`, `#!/bin/sh
 echo "$*" >> "${log}"
 case "$*" in *--delete-branch*) echo "gh must not delete the branch" >&2; exit 1;; esac
+if [ -n "$GH_UNDO_FAIL" ] && echo "$*" | grep -q -- --undo; then echo "cannot undo" >&2; exit 1; fi
 if [ "$1 $2" = "$GH_FAIL" ]; then echo "GraphQL: not mergeable" >&2; exit 1; fi
 if [ "$1 $2" = "pr view" ]; then
   states="\${GH_STATE:-OPEN,MERGED}"
@@ -592,7 +593,7 @@ test('start is refused while this session drives an unfinished run of either sha
   const t = sweep()
   const again = t.cli('start', 'second', '--title', 'Second')
   assert.equal(again.code, 1)
-  assert.ok(again.out.includes(t.state().id) && /lcw stop/.test(again.out), again.out)
+  assert.ok(again.out.includes(t.state().id) && /another session/.test(again.out), again.out)
   assert.equal(lcw(['runs'], t.o).out.trim().split('\n').length, 1)
   assert.equal(lcw(['start', 'other', '--title', 'Other'], { ...t.o, session: 's2' }).code, 0, 'another session is free to start')
   t.cli('finish')
@@ -616,4 +617,52 @@ test('finish and stop take a pull request as a bare number or a URL', () => {
   const dir2 = /^folder: (.+)$/m.exec(lcw(['start', 'g', '--title', 'G'], u).out)[1]
   lcw(['finish', '--pr', 'https://github.com/acme/widgets/pull/11'], u)
   assert.equal(readJson(`${dir2}/state.json`).pr.number, 11)
+})
+
+test('a parked fix cannot also be passed, failed, reset or dropped, and parking it again is harmless', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1')
+  t.cli('wave', 'start')
+  t.cli('req', 'add', 'F1', 'fix one')
+  t.cli('req', 'F1', 'park')
+  for (const s of ['pass', 'failing', 'todo', 'drop']) {
+    const r = t.cli('req', 'F1', s)
+    assert.equal(r.code, 1, s)
+    assert.match(r.out, /parked/)
+  }
+  assert.equal(t.cli('req', 'F1', 'park').code, 0)
+  assert.deepEqual([t.state().requirements[0].status, t.state().sweep.parked, t.state().sweep.waves[0].dropped], ['parked', 1, 0])
+})
+
+test('a merge GitHub refuses says so when the pull request could not be put back to draft', () => {
+  const t = shippedWaves()
+  const r = lcw(['merge', '1'], { ...t.o, env: fakeGh({ GH_FAIL: 'pr merge', GH_UNDO_FAIL: '1' }).env })
+  assert.equal(r.code, 1)
+  assert.match(r.out, /still marked ready/)
+})
+
+test('start inside a run this session drives does not invite stopping it', () => {
+  const t = sweep()
+  const r = t.cli('start', 'other', '--title', 'Other')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /another session/)
+  assert.ok(!/lcw stop/.test(r.out), r.out)
+})
+
+test('stage Charter in Charter changes nothing, so an approval already asked stays', () => {
+  const t = sweep()
+  t.cli('approval')
+  const at = t.state().sweep.approvedAt
+  assert.ok(at)
+  assert.equal(t.cli('stage', 'Charter').code, 0)
+  assert.equal(t.state().sweep.approvedAt, at)
+})
+
+test('wave shipped --pr is refused when the charter chose one pull request at the end', () => {
+  const t = shipping(1)
+  t.cli('set', 'sweep.prs=end')
+  commit(t.wt, 'a.txt', 'x\n')
+  assert.equal(t.cli('wave', 'shipped', '--pr', '5').code, 1)
+  assert.equal(t.state().sweep.waves[0].status, 'running')
+  assert.equal(t.cli('wave', 'shipped').code, 0)
 })

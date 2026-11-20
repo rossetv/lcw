@@ -199,7 +199,7 @@ const commands = {
     if (shape !== 'build' && shape !== 'sweep') fail(`--shape is build or sweep, not ${shape}. Nothing was changed.`)
     const sweep = shape === 'sweep'
     const driving = sessionId ? open(readJson(sessionFile(home(), sessionId))?.runDir) : null
-    if (driving) fail(`This session already drives run ${driving.state.id} (${driving.state.title}). Finish it, or lcw stop it, before starting another. Nothing was started.`)
+    if (driving) fail(`This session already drives run ${driving.state.id} (${driving.state.title}). A second change needs another session, which the person opens; this run carries on here. Nothing was started.`)
     const key = repoKey(mainCheckout(cwd))
     const d = new Date(now())
     const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
@@ -275,6 +275,7 @@ const commands = {
     const run = need()
     const stages = stagesOf(run.state)
     const stage = stages.find((s) => s.toLowerCase() === String(rest[0]).toLowerCase()) || fail(`Stage is one of: ${stages.join(', ')}`)
+    if (run.state.sweep && run.state.stage === 'Charter' && stage === 'Charter') return out('stage Charter')
     if (stage === 'Hunt') {
       if (run.state.stage === 'Hunt') return out('stage Hunt')
       const waiting = run.state.sweep.waves.filter((x) => x.status !== 'shipped')
@@ -716,6 +717,7 @@ const commands = {
     if (sub === 'shipped') {
       if (s.stage !== 'Ship') fail(`A wave ships in Ship; this sweep is in ${s.stage}. Nothing was changed.`)
       const wave = runningWave(s) || fail('No wave is running. Nothing was changed.')
+      if (flags.pr !== undefined && s.sweep.prs === 'end') fail('The charter chose one pull request at the end, so a wave has no pull request of its own. Nothing was changed.')
       const pr = flags.pr === undefined ? null : prOf(flags.pr).number || fail(`--pr takes the pull request's number, not ${flags.pr}. Nothing was changed.`)
       const tip = git(s.worktree, 'rev-parse', `refs/heads/${wave.branch}`)
       // every fix dropped or parked: nothing to land, so no pull request and nothing for the waves after it to wait on
@@ -778,7 +780,7 @@ const commands = {
         if (view.isDraft) { gh(root, 'pr', 'ready', pr, '-R', repo); readied = true }
         try { gh(root, 'pr', 'merge', pr, '-R', repo, '--merge') } catch (e) {
           // a refused merge leaves it as it was; a queued one exits 0 and is not undone
-          if (readied) try { gh(root, 'pr', 'ready', pr, '-R', repo, '--undo'); back = ' It is a draft again.' } catch {}
+          if (readied) try { gh(root, 'pr', 'ready', pr, '-R', repo, '--undo'); back = ' It is a draft again.' } catch { back = ' It is still marked ready for review, not a draft.' }
           throw e
         }
         state = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state')).state
@@ -901,6 +903,7 @@ function listItem(cmd, field, statuses, make) {
   }
   if (cmd === 'req' && status === 'drop') {
     const item = find(list, 'id', id)
+    if (item.status === 'parked') fail(`${id} is parked for the person and stays parked; it is neither dropped nor fixed. Nothing was changed.`)
     change(run, `req ${id} dropped: ${item.name}`, (s) => {
       s.requirements = s.requirements.filter((x) => x !== item)
       const wave = runningWave(s)
@@ -910,6 +913,7 @@ function listItem(cmd, field, statuses, make) {
   }
   if (!statuses.includes(status)) fail(`Usage: lcw ${cmd} <id> <${statuses.join('|')}>`)
   const item = find(list, 'id', id)
+  if (cmd === 'req' && item.status === 'parked') fail(`${id} is parked for the person and stays parked; it is neither dropped nor fixed. Nothing was changed.`)
   change(run, `${cmd} ${id}: ${status}`, () => { item.status = status })
   out(`${id} ${status}`)
 }
