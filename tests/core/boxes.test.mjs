@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { DEFAULT_CAP_USD } from '../../lib/spend.mjs'
 import { dollars } from '../../lib/format.mjs'
 import {
-  LEARN_TEXT, awakeCheckWanted, SHOWN_WITHIN_MS, claudeCommand, markSpell, dismissKeys, discussPrompt, fixSpendPrompt, nextStepOf, pressPlan, resumePrompt, runFact, sameBox,
+  LEARN_TEXT, awakeApplies, awakeCheckWanted, SHOWN_WITHIN_MS, claudeCommand, markSpell, dismissKeys, discussPrompt, fixSpendPrompt, nextStepOf, pressPlan, resumePrompt, runFact, sameBox,
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue,
 } from '../../hooks/boxes.mjs'
 import { bannerFor } from '../../lib/banner.mjs'
@@ -241,4 +241,34 @@ test('a reply on the approval box only fills the prompt: no command, no prompt s
   assert.deepEqual(press(facts, 'but'), { fillText: 'Yes, but ', dismiss: true })
   assert.deepEqual(press(facts, 'else'), { fillText: 'Something else: ', dismiss: true })
   assert.equal(press(facts, 'go3'), null)
+})
+
+test("a sweep's approval is read in its Charter, with its own Go meaning, and a reply only fills the prompt", () => {
+  const state = (over) => ({ id: 's1', shape: 'sweep', stage: 'Charter', status: 'with-you', approval: { go: [], at: 5 }, ...over })
+  const fact = runFact(state())
+  assert.equal(fact.shape, 'sweep')
+  assert.deepEqual(fact.approval, { go: ['Go'], meaning: 'starts the hunt', at: 5 })
+  assert.equal(runFact(state({ stage: 'Brainstorm' })).approval, undefined, 'a sweep has no Brainstorm to approve')
+  assert.equal(runFact(state({ stage: 'Hunt', status: 'running' })).approval, undefined)
+  assert.equal(runFact({ ...state(), shape: undefined }).approval, undefined, 'a build is not approved in a Charter')
+  assert.equal(runFact({ id: 'r1', stage: 'Brainstorm', status: 'with-you', approval: { at: 5 } }).shape, 'build')
+  const facts = { now: NOW, advisorModel: 'fable', run: fact }
+  assert.deepEqual(press(facts, 'go1'), { fillText: 'Go', dismiss: true })
+  assert.deepEqual(press(facts, 'but'), { fillText: 'Yes, but ', dismiss: true })
+  assert.deepEqual(press(facts, 'else'), { fillText: 'Something else: ', dismiss: true })
+})
+
+test("the keep-awake check does not apply in a sweep's Charter", () => {
+  assert.equal(awakeApplies({ status: 'running', stage: 'Charter' }), false)
+  assert.equal(awakeApplies({ status: 'running', stage: 'Hunt' }), true)
+})
+
+test('an unfinished sweep names the wave it was in: the running one, else the next queued, none between waves', () => {
+  const wave = (waves, stage = 'Build') => unfinishedFact({ dir: '/runs/s2', shownAt: NOW - 3600000,
+    state: { id: 's2', name: 'backlog', shape: 'sweep', status: 'running', stage, sweep: { waves } } }, '').wave
+  assert.equal(wave([{ n: 1, status: 'shipped' }, { n: 2, status: 'running' }, { n: 3, status: 'queued' }]), 2)
+  assert.equal(wave([{ n: 1, status: 'shipped' }, { n: 2, status: 'queued' }], 'Plan'), 2)
+  assert.equal(wave([{ n: 1, status: 'shipped' }], 'Hunt'), undefined)
+  const build = unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000, state: { id: 'r2', name: 'x', status: 'running', stage: 'Build', sweep: { waves: [{ n: 1, status: 'running' }] } } }, '')
+  assert.equal(build.wave, undefined, 'a build has no waves')
 })

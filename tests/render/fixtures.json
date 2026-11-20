@@ -1,5 +1,5 @@
 {
-  "note": "Sixteen sample states for the render tests: a session with no run, each stage, needs-you, paused, finished, narrow, light, many agents. They began as the data behind the boards of the status bar mock, which is kept in the first build's records. The tests check rules against them, not a fixed picture.",
+  "note": "Sample states for the render tests: a session with no run, each stage of a build, needs-you, paused, finished, narrow, light, many agents; then, numbered, a sweep in each of its states and a build beside them. The first sixteen began as the data behind the boards of the status bar mock, which is kept in the first build's records. The tests check rules against them, and draw the numbered ones row for row.",
   "boards": {
     "Main": {
       "state": "no run",
@@ -802,6 +802,2527 @@
         "plannedPercent": 5
       },
       "variant": "narrow terminal: no frame, 16-cell task bar, 24-cell week gauge, one agent shown then \"2 more\""
+    },
+    "01-charter-with-you": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Charter",
+      "titleRight": "6m in Charter",
+      "state": "with you",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "guide": true,
+      "health": "asking you: how should the pull requests come, and may I merge them?",
+      "sweep": {
+        "prs": null,
+        "charter": 9,
+        "open": 1,
+        "approvedAt": null,
+        "round": 0,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 0,
+        "parked": 0,
+        "dropped": 0,
+        "waves": []
+      },
+      "agents": [
+        {
+          "reason": "Count the backlog’s items and list its sections",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "18k",
+          "elapsed": "2m",
+          "state": "working",
+          "spark": [
+            2,
+            5,
+            9,
+            4
+          ]
+        },
+        {
+          "reason": "Map the backend’s areas for the charter",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "41k",
+          "elapsed": "3m",
+          "state": "working",
+          "spark": [
+            3,
+            8,
+            12,
+            10,
+            6
+          ]
+        }
+      ]
+    },
+    "03-hunt-round-1-probes-at-work": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Hunt",
+      "titleRight": "9m in Hunt",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "hunting, area by area",
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 36,
+          "hunted": 14,
+          "running": 6,
+          "findings": 23,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 0,
+        "parked": 0,
+        "dropped": 0,
+        "waves": []
+      },
+      "agents": [
+        {
+          "reason": "Hunt Billing, items 1 to 8: still true? what would fix each?",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "52k",
+          "elapsed": "4m",
+          "state": "working",
+          "spark": [
+            4,
+            9,
+            14,
+            11,
+            7,
+            12
+          ]
+        },
+        {
+          "reason": "Hunt Panel, items 1 to 8",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "88k",
+          "elapsed": "4m",
+          "state": "working",
+          "spark": [
+            6,
+            12,
+            18,
+            15,
+            16,
+            9
+          ]
+        },
+        {
+          "reason": "Hunt Panel, items 9 to 16",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "62k",
+          "elapsed": "3m",
+          "state": "working",
+          "spark": [
+            5,
+            14,
+            12,
+            17,
+            8
+          ]
+        },
+        {
+          "reason": "Hunt the money paths for wrong totals",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "143k",
+          "elapsed": "6m",
+          "state": "working",
+          "spark": [
+            9,
+            16,
+            22,
+            19,
+            25,
+            21,
+            14
+          ]
+        },
+        {
+          "reason": "Hunt Sign-in and access, items 1 to 8",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "21k",
+          "elapsed": "2m",
+          "state": "working",
+          "spark": [
+            3,
+            8,
+            11
+          ]
+        },
+        {
+          "reason": "Hunt Personal data, items 1 to 4",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "9.8k",
+          "elapsed": "1m",
+          "state": "working",
+          "spark": [
+            2,
+            6
+          ]
+        }
+      ]
+    },
+    "04-hunt-sorted-the-queue-is-filled": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Hunt",
+      "titleRight": "31m in Hunt",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "sorted against the charter",
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 36,
+          "hunted": 36,
+          "running": 0,
+          "findings": 186,
+          "fix": 151,
+          "park": 14,
+          "drop": 21
+        },
+        "fixed": 0,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      }
+    },
+    "05-plan-for-wave-1": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Plan",
+      "titleRight": "3m in Plan",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "planning wave 1: Billing, Panel, Sign-in",
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 0,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "plan": {
+        "tasks": 28,
+        "atOnce": 12,
+        "models": {
+          "Haiku 5.5": 9,
+          "Sonnet 5.5": 16,
+          "Opus 5.5": 3
+        }
+      }
+    },
+    "06-build-wave-2-fixes-in-parallel": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "22m in Build",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "wave 2: Billing and Panel fixes building side by side",
+      "tasks": {
+        "done": 9,
+        "running": 7,
+        "left": 11,
+        "dropped": 1
+      },
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 27,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 1
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "agents": [
+        {
+          "reason": "Fix: a zero renewal bill closes paid at its raise",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "9m",
+          "state": "working",
+          "spark": [
+            8,
+            14,
+            19,
+            12,
+            16,
+            11
+          ]
+        },
+        {
+          "reason": "Fix: the auto-restore refusal shows a Go package prefix",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "31k",
+          "elapsed": "4m",
+          "state": "working",
+          "spark": [
+            5,
+            11,
+            9,
+            13
+          ]
+        },
+        {
+          "reason": "Fix: an add-time order’s line stays paid for good",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "104k",
+          "elapsed": "12m",
+          "state": "quiet",
+          "spark": [
+            9,
+            12,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "reason": "Fix: the panel needs regenerating for signup_unavailable",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "59k",
+          "elapsed": "6m",
+          "state": "working",
+          "spark": [
+            7,
+            13,
+            15,
+            10,
+            12
+          ]
+        },
+        {
+          "reason": "Fix: enrol-token 201 carries no Cache-Control: no-store",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "23k",
+          "elapsed": "3m",
+          "state": "working",
+          "spark": [
+            4,
+            10,
+            12
+          ]
+        },
+        {
+          "reason": "Fix: does_not_fit names “the chosen node”",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "48k",
+          "elapsed": "5m",
+          "state": "working",
+          "spark": [
+            6,
+            9,
+            14,
+            11
+          ]
+        },
+        {
+          "reason": "Fix: mock answers a null next-backup minute",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "12k",
+          "elapsed": "2m",
+          "state": "working",
+          "spark": [
+            3,
+            9
+          ]
+        }
+      ]
+    },
+    "07-build-a-worker-has-stalled": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "22m in Build",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "one worker stalled; asked what it needs",
+      "tasks": {
+        "done": 9,
+        "running": 7,
+        "left": 11,
+        "dropped": 1
+      },
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 27,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 1
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "agents": [
+        {
+          "reason": "Fix: a zero renewal bill closes paid at its raise",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "9m",
+          "state": "working",
+          "spark": [
+            8,
+            14,
+            19,
+            12,
+            16,
+            11
+          ]
+        },
+        {
+          "reason": "Fix: the auto-restore refusal shows a Go package prefix",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "31k",
+          "elapsed": "4m",
+          "state": "working",
+          "spark": [
+            5,
+            11,
+            9,
+            13
+          ]
+        },
+        {
+          "reason": "Fix: an add-time order’s line stays paid for good",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "104k",
+          "elapsed": "12m",
+          "state": "stalled",
+          "spark": [
+            9,
+            12,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "reason": "Fix: the panel needs regenerating for signup_unavailable",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "59k",
+          "elapsed": "6m",
+          "state": "working",
+          "spark": [
+            7,
+            13,
+            15,
+            10,
+            12
+          ]
+        },
+        {
+          "reason": "Fix: enrol-token 201 carries no Cache-Control: no-store",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "23k",
+          "elapsed": "3m",
+          "state": "working",
+          "spark": [
+            4,
+            10,
+            12
+          ]
+        },
+        {
+          "reason": "Fix: does_not_fit names “the chosen node”",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "48k",
+          "elapsed": "5m",
+          "state": "working",
+          "spark": [
+            6,
+            9,
+            14,
+            11
+          ]
+        },
+        {
+          "reason": "Fix: mock answers a null next-backup minute",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "12k",
+          "elapsed": "2m",
+          "state": "working",
+          "spark": [
+            3,
+            9
+          ]
+        }
+      ]
+    },
+    "08-build-a-very-large-wave": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "22m in Build",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "wave 2: two areas, each under its own orchestrator",
+      "tasks": {
+        "done": 9,
+        "running": 7,
+        "left": 11,
+        "dropped": 1
+      },
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 27,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 1
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "agents": [
+        {
+          "reason": "Billing: drive this wave’s 9 fixes",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "212k",
+          "elapsed": "22m",
+          "state": "working",
+          "spark": [
+            12,
+            9,
+            14,
+            8,
+            11,
+            7,
+            10,
+            13
+          ],
+          "role": "orchestrator",
+          "expanded": true,
+          "workers": [
+            {
+              "reason": "Fix: a zero renewal bill closes paid at its raise",
+              "model": "Sonnet 5.5",
+              "effort": "medium",
+              "tokens": "96k",
+              "elapsed": "9m",
+              "state": "working",
+              "spark": [
+                8,
+                14,
+                19,
+                12,
+                16,
+                11
+              ]
+            },
+            {
+              "reason": "Fix: the auto-restore refusal shows a Go package prefix",
+              "model": "Haiku 5.5",
+              "effort": "low",
+              "tokens": "31k",
+              "elapsed": "4m",
+              "state": "working",
+              "spark": [
+                5,
+                11,
+                9,
+                13
+              ]
+            },
+            {
+              "reason": "Fix: an add-time order’s line stays paid for good",
+              "model": "Sonnet 5.5",
+              "effort": "medium",
+              "tokens": "104k",
+              "elapsed": "12m",
+              "state": "quiet",
+              "spark": [
+                9,
+                12,
+                3,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ],
+          "moreWorkers": 0
+        },
+        {
+          "reason": "Panel: drive this wave’s 12 fixes",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "187k",
+          "elapsed": "22m",
+          "state": "working",
+          "spark": [
+            10,
+            13,
+            9,
+            12,
+            8,
+            14,
+            9,
+            11
+          ],
+          "role": "orchestrator",
+          "expanded": true,
+          "workers": [
+            {
+              "reason": "Fix: the panel needs regenerating for signup_unavailable",
+              "model": "Sonnet 5.5",
+              "effort": "medium",
+              "tokens": "59k",
+              "elapsed": "6m",
+              "state": "working",
+              "spark": [
+                7,
+                13,
+                15,
+                10,
+                12
+              ]
+            },
+            {
+              "reason": "Fix: enrol-token 201 carries no Cache-Control: no-store",
+              "model": "Haiku 5.5",
+              "effort": "low",
+              "tokens": "23k",
+              "elapsed": "3m",
+              "state": "working",
+              "spark": [
+                4,
+                10,
+                12
+              ]
+            },
+            {
+              "reason": "Fix: does_not_fit names “the chosen node”",
+              "model": "Sonnet 5.5",
+              "effort": "medium",
+              "tokens": "48k",
+              "elapsed": "5m",
+              "state": "working",
+              "spark": [
+                6,
+                9,
+                14,
+                11
+              ]
+            },
+            {
+              "reason": "Fix: mock answers a null next-backup minute",
+              "model": "Haiku 5.5",
+              "effort": "low",
+              "tokens": "12k",
+              "elapsed": "2m",
+              "state": "working",
+              "spark": [
+                3,
+                9
+              ]
+            }
+          ],
+          "moreWorkers": 0
+        }
+      ]
+    },
+    "09-review-once-for-the-whole-wave": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Review",
+      "titleRight": "11m in Review",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "reviewing wave 2’s 27 fixes",
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 27,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 1
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "requirements": {
+        "pass": 20,
+        "toGo": 6,
+        "failingName": "F21 the add-time order’s line is marked carried out"
+      },
+      "agents": [
+        {
+          "reason": "Review the Billing fixes against their recipes",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "164k",
+          "elapsed": "8m",
+          "state": "working",
+          "spark": [
+            11,
+            15,
+            19,
+            14,
+            17,
+            12
+          ]
+        },
+        {
+          "reason": "Review the Panel fixes against their recipes",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "121k",
+          "elapsed": "8m",
+          "state": "working",
+          "spark": [
+            9,
+            13,
+            12,
+            16,
+            10,
+            14
+          ]
+        }
+      ]
+    },
+    "10-ship-wave-2": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Ship",
+      "titleRight": "2m in Ship",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "writing wave 2’s pull request",
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 27,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 1
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "tasks": {
+        "done": 27,
+        "dropped": 1
+      },
+      "requirements": {
+        "pass": 27
+      },
+      "agents": [
+        {
+          "reason": "Draw the pull request’s two pictures",
+          "model": "Opus 5.5",
+          "effort": "high",
+          "tokens": "15k",
+          "elapsed": "1m",
+          "state": "working",
+          "spark": [
+            4,
+            9
+          ]
+        }
+      ]
+    },
+    "11-ship-when-your-charter-lets-claude-merge": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Ship",
+      "titleRight": "6m in Ship",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "wave 2’s PR #42 merged: it met your charter’s rule",
+      "sweep": {
+        "prs": "merged",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 54,
+        "parked": 14,
+        "dropped": 22,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 42,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "tasks": {
+        "done": 27,
+        "dropped": 1
+      },
+      "requirements": {
+        "pass": 27
+      }
+    },
+    "12-hunt-round-2-the-queue-ran-dry": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Hunt",
+      "titleRight": "5m in Hunt",
+      "state": "running",
+      "sharePercent": 29,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 58,
+        "weekElapsedPercent": 61
+      },
+      "health": "hunting again, round 2",
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 2,
+        "hunt": {
+          "areas": 36,
+          "hunted": 9,
+          "running": 5,
+          "findings": 4,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 148,
+        "parked": 14,
+        "dropped": 22,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 42,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 43,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 44,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 45,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 46,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "agents": [
+        {
+          "reason": "Hunt Billing again: anything new, or still true?",
+          "model": "Haiku 5.5",
+          "effort": "low",
+          "tokens": "29k",
+          "elapsed": "3m",
+          "state": "working",
+          "spark": [
+            4,
+            9,
+            12,
+            8
+          ]
+        },
+        {
+          "reason": "Hunt Panel again",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "49k",
+          "elapsed": "3m",
+          "state": "working",
+          "spark": [
+            6,
+            11,
+            14,
+            9
+          ]
+        }
+      ]
+    },
+    "13-needs-you-one-question": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Ship",
+      "titleRight": "4m in Ship",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "wave 3 waits on your answer; wave 4 is being planned",
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 54,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 42,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 1
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "tasks": {
+        "done": 26
+      },
+      "requirements": {
+        "pass": 27
+      },
+      "asks": [
+        {
+          "age": "12m",
+          "text": "Wave 3 cannot be pushed: GitHub refuses the branch, because this token has no write access to the repository. Give it access and say “carry on”, or name another remote."
+        }
+      ]
+    },
+    "14-needs-you-two-questions": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "38m in Build",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "2 areas wait on your answers; Panel carries on",
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 54,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 42,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 1
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "tasks": {
+        "done": 11,
+        "running": 4,
+        "left": 12
+      },
+      "asks": [
+        {
+          "age": "41m",
+          "text": "The Fleet tests need Docker, and no Docker daemon is running here. Start it, or shall I park Fleet’s 10 fixes?"
+        },
+        {
+          "age": "9m",
+          "text": "The Billing fixes need a Stripe test key, and none is set. Add one, or shall I park them?"
+        }
+      ]
+    },
+    "15-paused-at-your-usage-mark": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "52m in Build",
+      "state": "paused at the mark",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 75,
+        "weekElapsedPercent": 61
+      },
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 97,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 42,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 43,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 1
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "tasks": {
+        "done": 14,
+        "running": 3,
+        "left": 9
+      }
+    },
+    "16-paused-by-you": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "52m in Build",
+      "state": "paused by you",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 97,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 42,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 43,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 1
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "tasks": {
+        "done": 14,
+        "left": 12
+      }
+    },
+    "17-finished-with-stacked-pull-requests": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "finished",
+      "titleRight": "1d 7h",
+      "state": "finished",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "tasks": {
+        "done": 22
+      },
+      "totals": {
+        "agents": 212,
+        "tokens": "48.3M",
+        "sharePercent": 31
+      },
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 3,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 153,
+        "parked": 14,
+        "dropped": 24,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 22,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 22,
+            "status": "shipped",
+            "pr": 42,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 22,
+            "status": "shipped",
+            "pr": 43,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 22,
+            "status": "shipped",
+            "pr": 44,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 22,
+            "status": "shipped",
+            "pr": 45,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 22,
+            "status": "shipped",
+            "pr": 46,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 7,
+            "fixes": 22,
+            "status": "shipped",
+            "pr": 47,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      }
+    },
+    "18-finished-merged-as-it-went": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "finished",
+      "titleRight": "1d 7h",
+      "state": "finished",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "tasks": {
+        "done": 22
+      },
+      "totals": {
+        "agents": 212,
+        "tokens": "48.3M",
+        "sharePercent": 31
+      },
+      "sweep": {
+        "prs": "merged",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 3,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 153,
+        "parked": 14,
+        "dropped": 24,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 42,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 43,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 44,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 45,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 46,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 7,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 47,
+            "merged": true,
+            "dropped": 0
+          }
+        ]
+      }
+    },
+    "19-finished-some-waves-short-of-your-rule": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "finished",
+      "titleRight": "1d 7h",
+      "state": "finished",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "tasks": {
+        "done": 22
+      },
+      "totals": {
+        "agents": 212,
+        "tokens": "48.3M",
+        "sharePercent": 31
+      },
+      "sweep": {
+        "prs": "merged",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 3,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 153,
+        "parked": 14,
+        "dropped": 24,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 42,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 43,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 44,
+            "merged": true,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 45,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 46,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 7,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 47,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      }
+    },
+    "20-finished-with-one-pull-request-at-the-end": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "finished",
+      "titleRight": "1d 7h",
+      "state": "finished",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "tasks": {
+        "done": 22
+      },
+      "totals": {
+        "agents": 212,
+        "tokens": "48.3M",
+        "sharePercent": 31
+      },
+      "pr": {
+        "number": 41,
+        "url": "https://github.com/acme/api/pull/41"
+      },
+      "sweep": {
+        "prs": "end",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 3,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 153,
+        "parked": 14,
+        "dropped": 24,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 7,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      }
+    },
+    "21-stopped": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "12m in Build",
+      "state": "stopped",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 81,
+        "parked": 14,
+        "dropped": 22,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 42,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 43,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "tasks": {
+        "done": 6,
+        "left": 20
+      }
+    },
+    "22-in-a-narrow-window": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "22m in Build",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "wave 2 building",
+      "sweep": {
+        "prs": "stacked",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 27,
+        "parked": 14,
+        "dropped": 21,
+        "waves": [
+          {
+            "n": 1,
+            "fixes": 27,
+            "status": "shipped",
+            "pr": 41,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 2,
+            "fixes": 27,
+            "status": "running",
+            "pr": null,
+            "merged": false,
+            "dropped": 1
+          },
+          {
+            "n": 3,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 4,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 5,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          },
+          {
+            "n": 6,
+            "fixes": 27,
+            "status": "queued",
+            "pr": null,
+            "merged": false,
+            "dropped": 0
+          }
+        ]
+      },
+      "tasks": {
+        "done": 9,
+        "running": 7,
+        "left": 11
+      },
+      "agents": [
+        {
+          "reason": "Fix: a zero renewal bill closes paid at its raise",
+          "model": "Sonnet 5.5",
+          "effort": "medium",
+          "tokens": "96k",
+          "elapsed": "9m",
+          "state": "working",
+          "spark": [
+            8,
+            14,
+            19
+          ]
+        }
+      ]
+    },
+    "23-a-build-for-comparison": {
+      "run": "shared-lists",
+      "stage": "Build",
+      "titleRight": "18m in Build",
+      "state": "running",
+      "health": "on track",
+      "sharePercent": 5,
+      "tasks": {
+        "done": 7,
+        "running": 4,
+        "left": 6
+      },
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/shared-lists",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      }
     }
   },
   "money": {

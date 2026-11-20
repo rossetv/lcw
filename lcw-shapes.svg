@@ -1,0 +1,601 @@
+<svg width="1660" height="3914" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 3914" role="img" aria-labelledby="t">
+<title id="t">How LCW works, in two shapes. You say what you want and the main orchestrator picks the shape. A defined change is a Build: Brainstorm with you, then Spec. An open goal is a Sweep: a Charter you agree line by line, then a Hunt that fills a queue of waves. Both then run the same four stages, Plan, Build, Review and Ship: a Build once, a Sweep once for each wave, whose areas build in parallel. A wave joins the sweep's own branch, and one pull request carries that branch to main. After each wave the next one starts, or a new round of Hunt, until a round finds nothing to fix. Only the main orchestrator consults the Fable advisor. Every run keeps its records under ~/.lcw.</title><style>
+  .bg{fill:#fff;stroke:#d0d7de}
+  .grp{fill:none;stroke:#d0d7de;stroke-dasharray:4 4}
+  .box{fill:#f6f8fa;stroke:#d0d7de}
+  .ybox{fill:#ddf4ff;stroke:#54aeff}
+  .num{fill:#fff;stroke:#afb8c1}
+  .nt{fill:#59636e;font-weight:600;font-size:13px}
+  .nt2{fill:#fff;font-weight:600;font-size:13px}
+  .name{fill:#1f2328;font-weight:600;font-size:17px}
+  .fact{fill:#1f2328;font-size:13.5px}
+  .dot{fill:#8c959f}
+  .cap{fill:#59636e;font-size:13px}
+  .wbox{fill:#fff;stroke:#afb8c1}
+  .obox{fill:#fff;stroke:#59636e;stroke-width:1.5}
+  .dbox{fill:#fff;stroke:#afb8c1;stroke-dasharray:4 3}
+  .wt{fill:#1f2328;font-size:12.5px}
+  .ot{fill:#1f2328;font-size:13px;font-weight:600}
+  .wc{fill:#59636e;font-size:12.5px}
+  .l,.cl{stroke:#8c959f;stroke-width:1.5;fill:none}
+  .wl{stroke:#afb8c1;stroke-width:1.2;fill:none}
+  .dl{stroke:#afb8c1;stroke-width:1.2;fill:none;stroke-dasharray:4 3}
+  .h{fill:#8c959f}
+  .you{fill:#ddf4ff;stroke:#54aeff}
+  .mF{fill:#a8388c}.mO{fill:#6a48c0}.mS{fill:#2f5fb8}.mH{fill:#0f6f82}
+  .ar{fill:#fbeaf5;stroke:#d889bf}
+  .at{fill:#a8388c;font-weight:600;font-size:12.5px}
+  .al{stroke:#a8388c;stroke-width:2;fill:none}
+  .ad{fill:#a8388c}
+  .as{fill:#fff}
+  .ax{fill:#7a3a69;font-size:13px}
+  .lr{fill:#fff8e1;stroke:#d4a72c}
+  .lt{fill:#9a6700;font-weight:600;font-size:15px}
+  .lx{fill:#7d4e00;font-weight:400;font-size:13px}
+  .lw{fill:#9a6700;font-size:12px}
+  .ll{stroke:#9a6700;stroke-width:2;fill:none}
+  .ld{fill:#9a6700}
+  .la{fill:#9a6700}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .lc{fill:#fff;stroke:#d4a72c}
+  .lct{fill:#7d4e00;font-size:11.5px}
+  .lcn{fill:#7d4e00;font-size:12px;font-weight:600}
+  .fi{stroke:#9a6700;stroke-width:1.2;fill:none;stroke-linejoin:round}
+  .tl{stroke:#d4a72c;stroke-width:1.2;fill:none;stroke-linecap:round}
+  .dp{fill:#59636e}
+  .nyl{stroke:#b9382f;stroke-width:1.25;fill:none;stroke-linecap:round}
+  .nyt{fill:#b9382f;font-size:9px;font-weight:600}
+  .mbox{fill:#fff;stroke:none}
+  .mbl{stroke:#57606a;stroke-width:1.25;fill:none;stroke-linecap:round}
+  .mbt{fill:#57606a;font-size:9px;font-weight:600}
+  .pi{stroke:#59636e;stroke-width:1.1;fill:none;stroke-linejoin:round;stroke-linecap:round}
+  .pid{fill:#59636e}
+  .dpt{fill:#fff;font-size:11.5px;font-weight:600}
+  .ls{stroke:#fff;stroke-width:1.8;stroke-linecap:round;fill:none}
+  .yt{fill:#0969da;font-weight:600;font-size:13.5px}
+  .s{font-size:12.5px}
+  .yl{stroke:#0969da;stroke-width:1.5;fill:none}
+  .yh,.yc{fill:#0969da}
+  .tick{stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif}
+  
+  .hd{fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .shape{fill:#1f2328;font-weight:650;font-size:26px;letter-spacing:-0.01em}
+  .bar{fill:#1f2328}
+  .key{fill:#59636e;font-size:12.5px;font-weight:600}
+  .fa{fill:#fbeaf5;stroke:#d889bf}
+  .fat{fill:#a8388c;font-size:10.5px;font-weight:600}
+  .rw{stroke:#9a6700;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .sw{stroke:#1a7f37;stroke-width:1.75;fill:none}
+  .swf{fill:#dafbe1;stroke:#4ac26b}
+  .swl{fill:#1a7f37;font-size:12.5px;font-weight:600}
+ .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace} text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif}
+@media (prefers-color-scheme:dark){
+    .bg{fill:#0d1117;stroke:#30363d}
+    .grp{stroke:#30363d}
+    .box{fill:#161b22;stroke:#30363d}
+    .ybox{fill:#121d2f;stroke:#1f6feb}
+    .num{fill:#0d1117;stroke:#484f58}
+    .nt{fill:#9198a1}
+    .name,.fact,.wt,.ot{fill:#e6edf3}
+    .dot{fill:#6e7681}
+    .cap,.wc{fill:#9198a1}
+    .wbox{fill:#0d1117;stroke:#484f58}
+    .obox{fill:#0d1117;stroke:#9198a1}
+    .dbox{fill:#0d1117;stroke:#484f58}
+    .l,.cl{stroke:#6e7681}
+    .wl,.dl{stroke:#484f58}
+    .h{fill:#6e7681}
+    .you{fill:#121d2f;stroke:#1f6feb}
+    .mF{fill:#ee9bd6}.mO{fill:#b6a0f2}.mS{fill:#8db4f5}.mH{fill:#7fd3e0}
+    .ar{fill:#2b1626;stroke:#8a4a78}
+    .at{fill:#ee9bd6}
+    .al{stroke:#ee9bd6}
+    .ad{fill:#ee9bd6}
+    .as{fill:#2b1626}
+    .ax{fill:#d9b3cd}
+    .lr{fill:#2a2110;stroke:#8a6d1f}
+    .lt{fill:#e3b341}
+    .lx{fill:#dcc89a}
+    .lw{fill:#e3b341}
+    .ll{stroke:#e3b341}
+    .ld{fill:#e3b341}
+    .la{fill:#e3b341}
+    .lc{fill:#191407;stroke:#8a6d1f}
+    .lct{fill:#f0d48a}
+    .lcn{fill:#f0d48a}
+    .fi{stroke:#e3b341}
+    .tl{stroke:#8a6d1f}
+    .dp{fill:#656c76}
+    .nyl{stroke:#f0807a}
+    .nyt{fill:#f0807a}
+    .mbox{fill:#0d1117}
+    .mbl{stroke:#9198a1}
+    .mbt{fill:#9198a1}
+    .pi{stroke:#9198a1}
+    .pid{fill:#9198a1}
+    .ls{stroke:#2a2110}
+    .yt{fill:#58a6ff}
+    .yl{stroke:#58a6ff}
+    .yh{fill:#58a6ff}
+    .yc{fill:#1f6feb}
+  
+  .shape,.bar{fill:#e6edf3}
+  .key{fill:#9198a1}
+  .fa{fill:#2b1626;stroke:#8a4a78}
+  .fat{fill:#ee9bd6}
+  .rw{stroke:#e3b341}
+  .sw{stroke:#3fb950}
+  .swf{fill:#12261e;stroke:#2ea043}
+  .swl{fill:#3fb950}
+}</style>
+<rect class="bg" x="0.5" y="0.5" width="1659" height="3913" rx="14"/>
+<rect class="ar" x="8" y="12" width="1644" height="68" rx="14"/>
+<circle class="ad" cx="38" cy="46" r="15"/><path class="as" d="M38 35.5Q39.8 44.2 48.5 46Q39.8 47.8 38 56.5Q36.2 47.8 27.5 46Q36.2 44.2 38 35.5Z"/>
+<text class="at" x="64" y="39" style="font-size:15px"><tspan class="mF">Fable</tspan> Advisor</text>
+<text class="ax" x="172" y="39">a stronger model that sees the whole conversation</text>
+<text class="ax" x="64" y="60">Only the main orchestrator consults it, wherever a box says “Fable advises”: before a big step, when stuck, and before calling anything done.</text>
+<rect class="you" x="732" y="104" width="196" height="34" rx="17"/>
+<text class="yt" x="830" y="126" text-anchor="middle">You say what you want</text>
+<path class="yl" d="M830 138V160"/><path class="yl hd" d="M826 155L830 160L834 155"/>
+<rect class="mbox" x="670" y="164" width="320" height="44" rx="6"/>
+<path class="mbl" d="M749 164H984a6 6 0 0 1 6 6V202a6 6 0 0 1 -6 6H676a6 6 0 0 1 -6 -6V170a6 6 0 0 1 6 -6H682"/>
+<text class="mbt" x="687" y="167">main session</text>
+<text class="ot" x="830" y="183" text-anchor="middle">Main Orchestrator</text>
+<text class="wc" x="830" y="200" text-anchor="middle" style="font-size:12px">reads what you ask and picks its shape</text>
+<g transform="translate(980 177)"><rect class="fa" width="96" height="18" rx="9"/><circle class="ad" cx="10.5" cy="9" r="6"/><path class="as" transform="translate(10.5 9)" d="M0 -4.2Q0.7 -0.7 4.2 0Q0.7 0.7 0 4.2Q-0.7 0.7 -4.2 0Q-0.7 -0.7 0 -4.2Z"/><text class="fat" x="21" y="13">Fable advises</text></g>
+<path class="dl" d="M614 186H670"/>
+<rect class="dbox" x="264" y="164" width="350" height="44" rx="6"/>
+<text class="wt" x="439" y="183" text-anchor="middle" style="font-weight:600">A small change: no run</text>
+<text class="wc" x="439" y="200" text-anchor="middle" style="font-size:12px">Claude says what it would change, and waits for your yes</text>
+<text class="wc" x="1100" y="191" style="font-size:12px">If you name a shape, that wins.</text>
+<path class="yl" d="M830 208V240M98 394V248Q98 240 106 240H920Q928 240 928 248V394"/>
+<path class="yl hd" d="M94 389L98 394L102 389M924 389L928 394L932 389"/>
+<text class="shape" x="120" y="296">Build</text>
+<text class="fact" x="120" y="322">A defined change, such as “add billing to the panel”.</text>
+<text class="fact" x="120" y="343" style="font-weight:600">You get one draft pull request.</text>
+<text class="cap" x="120" y="366">on the status bar: <tspan class="mono bar">◆ LCW Build · shared-lists</tspan></text>
+<text class="shape" x="950" y="296">Sweep</text>
+<text class="fact" x="950" y="322">An open goal, such as “fix all the backlog” or “any security holes”.</text>
+<text class="fact" x="950" y="343" style="font-weight:600">You get its fixes wave by wave, in pull requests as your charter says.</text>
+<text class="cap" x="950" y="366">on the status bar: <tspan class="mono bar">◆ LCW Sweep · backlog-sweep</tspan></text>
+<g transform="translate(0 236)">
+<path class="grp" d="M72 532H1606a14 14 0 0 1 14 14V1191a14 14 0 0 1 -14 14H1219a14 14 0 0 0 -14 14V3159a14 14 0 0 1 -14 14H487a14 14 0 0 1 -14 -14V1219a14 14 0 0 0 -14 -14H72a14 14 0 0 1 -14 -14V546a14 14 0 0 1 14 -14Z"/>
+<g transform="translate(415 266)">
+<rect class="swf" x="86" y="1409" width="660" height="48" rx="10"/><text class="swl" x="104" y="1444">In a Sweep</text><text class="wt" x="184" y="1444">a wave’s findings stand in for the spec; a closing task owns the files every area shares</text>
+<rect class="swf" x="86" y="1975" width="660" height="48" rx="10"/><text class="swl" x="104" y="2010">In a Sweep</text><text class="wt" x="184" y="2010">a fix to behaviour starts as a failing test from its recipe; one that will not fail is dropped</text>
+<rect class="swf" x="86" y="2387" width="660" height="48" rx="10"/><text class="swl" x="104" y="2422">In a Sweep</text><text class="wt" x="184" y="2422">reviewed once, this wave’s changes only: each fix against its recipe and the charter</text>
+<rect class="swf" x="86" y="2819" width="660" height="64" rx="10"/><text class="swl" x="104" y="2854">In a Sweep</text><text class="wt" x="184" y="2854">the wave joins the sweep’s own branch; nothing reaches main except through a pull request</text><text class="wt" x="184" y="2871">pull requests as your charter says: stacked per wave, merged as it goes, or one at the end</text>
+</g>
+<g transform="translate(46 0)">
+<rect class="ybox" x="24" y="164" width="692" height="320" rx="10"/>
+<circle class="yc" cx="52" cy="190" r="12"/><text class="nt2" x="52" y="194.5" text-anchor="middle">1</text><text class="name" x="74" y="196">Brainstorm</text>
+<text class="yt s" x="74" y="217">with you</text>
+<path class="wl" d="M370 264V290M147 290V278H593V290"/>
+<rect class="mbox" x="285" y="234" width="170" height="30" rx="6"/>
+<path class="mbl" d="M364 234H449a6 6 0 0 1 6 6V258a6 6 0 0 1 -6 6H291a6 6 0 0 1 -6 -6V240a6 6 0 0 1 6 -6H297"/>
+<text class="mbt" x="302" y="237" textLength="57" lengthAdjust="spacing">main session</text>
+<text class="ot" x="370" y="255" text-anchor="middle">Main Orchestrator</text>
+<rect class="wbox" x="44" y="290" width="206" height="44" rx="6"/><text class="wt" x="147" y="308" text-anchor="middle"><tspan class="mH">Haiku</tspan> Probe</text><text class="wc" x="147" y="325" text-anchor="middle" style="font-size:12px">read the sign-in code</text>
+<rect class="wbox" x="267" y="290" width="206" height="44" rx="6"/><text class="wt" x="370" y="308" text-anchor="middle"><tspan class="mH">Haiku</tspan> Probe</text><text class="wc" x="370" y="325" text-anchor="middle" style="font-size:12px">check the push docs</text>
+<rect class="wbox" x="490" y="290" width="206" height="44" rx="6"/><text class="wt" x="593" y="308" text-anchor="middle"><tspan class="mS">Sonnet</tspan> Probe</text><text class="wc" x="593" y="325" text-anchor="middle" style="font-size:12px">smoke-test offline sync</text>
+<text class="wc" x="370" y="358" text-anchor="middle">Cheap probes check the facts while you talk: code, docs, small real tests.</text>
+<circle class="dot" cx="47" cy="385.5" r="2"/>
+<text class="fact" x="57" y="390">Recalls earlier runs here: what you asked for and decided</text>
+<circle class="dot" cx="47" cy="405.5" r="2"/>
+<text class="fact" x="57" y="410">Clarifies what you really mean</text>
+<circle class="dot" cx="47" cy="425.5" r="2"/>
+<text class="fact" x="57" y="430">Tests your assumptions and what can be built</text>
+<circle class="dot" cx="47" cy="445.5" r="2"/>
+<text class="fact" x="57" y="450">Acts like a senior partner, asking the hard questions</text>
+<circle class="dot" cx="47" cy="465.5" r="2"/>
+<text class="fact" x="57" y="470">Ensures mutual understanding with mocks and diagrams</text>
+<path class="yl" d="M52 484V498M52 520V550"/><path class="yl" stroke-linecap="round" stroke-linejoin="round" d="M52 545.5L52 555.5M48 550.5L52 555.5L56 550.5"/>
+<circle class="yc" cx="52" cy="509" r="11"/><path class="tick" d="M47 509l3.5 4 6.5 -8"/><text class="yt" x="72" y="514">your one approval</text>
+<text class="cap" x="716" y="550" text-anchor="end">Claude does the rest autonomously</text>
+<rect class="box" x="24" y="559" width="692" height="452" rx="10"/>
+<circle class="num" cx="52" cy="585" r="12"/><text class="nt" x="52" y="589.5" text-anchor="middle">2</text><text class="name" x="74" y="591">Spec</text>
+<rect class="mbox" x="44" y="609" width="210" height="60" rx="6"/>
+<path class="mbl" d="M123 609H248a6 6 0 0 1 6 6V663a6 6 0 0 1 -6 6H50a6 6 0 0 1 -6 -6V615a6 6 0 0 1 6 -6H56"/>
+<text class="mbt" x="61" y="612" textLength="57" lengthAdjust="spacing">main session</text>
+<text class="ot" x="149" y="636" text-anchor="middle">Main Orchestrator</text><text class="wc" x="149" y="654" text-anchor="middle" style="font-size:12px">writes the spec</text>
+<rect class="wbox" x="270" y="609" width="426" height="60" rx="6"/><text class="wt" x="483" y="635" text-anchor="middle"><tspan class="mO">Opus</tspan> Blind Reviewer</text><text class="wc" x="483" y="653" text-anchor="middle" style="font-size:12px">reads only the spec, and describes the intent in its own words</text>
+<rect class="mbox" x="270" y="713" width="426" height="44" rx="6"/>
+<path class="mbl" d="M349 713H690a6 6 0 0 1 6 6V751a6 6 0 0 1 -6 6H276a6 6 0 0 1 -6 -6V719a6 6 0 0 1 6 -6H282"/>
+<text class="mbt" x="287" y="716" textLength="57" lengthAdjust="spacing">main session</text>
+<text class="ot" x="483" y="732" text-anchor="middle">Main Orchestrator</text><text class="wc" x="483" y="749" text-anchor="middle" style="font-size:12px">compares that with your brainstorm</text>
+<rect class="wbox" x="270" y="805" width="426" height="44" rx="6"/><text class="wt" x="483" y="823" text-anchor="middle"><tspan class="mO">Opus</tspan> Feasibility Reviewer</text><text class="wc" x="483" y="840" text-anchor="middle" style="font-size:12px">checks every requirement can be built</text>
+<path class="l" d="M256.5 639H258M483 669V701M483 757V793M270 735H155Q149 735 149 729V681"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M257.5 639L267.5 639M262.5 643L267.5 639L262.5 635"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M483 700.5L483 710.5M479 705.5L483 710.5L487 705.5"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M483 792.5L483 802.5M479 797.5L483 802.5L487 797.5"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M149 681.5L149 671.5M153 676.5L149 671.5L145 676.5"/>
+<text class="wc" x="48" y="755" style="font-size:12px">if different: rewrite,</text><text class="wc" x="48" y="770" style="font-size:12px">and a fresh reviewer reads it</text><text class="wc" x="493" y="783" style="font-size:12px">if the same</text>
+<text class="wc" x="370" y="873" text-anchor="middle">Passes both: the spec is approved.</text>
+<rect class="mbox" x="205" y="891" width="330" height="32" rx="6"/>
+<path class="nyl" d="M270 891H529a6 6 0 0 1 6 6V917a6 6 0 0 1 -6 6H211a6 6 0 0 1 -6 -6V897a6 6 0 0 1 6 -6H217"/>
+<text class="nyt" x="222" y="894" textLength="43" lengthAdjust="spacing">needs you</text>
+<text class="wt" x="370" y="912" text-anchor="middle">Cannot be built: Claude comes back to you.</text>
+<circle class="dot" cx="47" cy="952.5" r="2"/>
+<text class="fact" x="57" y="957">Spec built by AI for AI, as a machine translation of your intent</text>
+<circle class="dot" cx="47" cy="972.5" r="2"/>
+<text class="fact" x="57" y="977">The blind reviewer never sees the brainstorm</text>
+<circle class="dot" cx="47" cy="992.5" r="2"/>
+<text class="fact" x="57" y="997">Meanwhile, probes map the code for the plan</text>
+<g transform="translate(415 266)"><rect class="box" x="24" y="1037" width="692" height="386" rx="10"/></g>
+<g transform="translate(415 266)"><circle class="num" cx="52" cy="1063" r="12"/><text class="nt" x="52" y="1067.5" text-anchor="middle">3</text><text class="name" x="74" y="1069">Plan</text></g>
+<g transform="translate(415 266)"><path class="l" d="M370 1117V1131"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M370 1130.5L370 1140.5M366 1135.5L370 1140.5L374 1135.5"/></g>
+<g transform="translate(415 266)"><rect class="obox" x="310" y="1087" width="120" height="30" rx="6"/><text class="ot" x="370" y="1107" text-anchor="middle">The spec</text></g>
+<g transform="translate(415 266)"><rect class="wl" x="47" y="1143" width="646" height="170" rx="10"/><text class="ot" x="370" y="1164" text-anchor="middle">The Plan</text></g>
+<g transform="translate(415 266)"><rect class="dbox" x="55" y="1175" width="311" height="126" rx="8"/><text class="wt" x="210.5" y="1193" text-anchor="middle"><tspan class="mO">Opus</tspan> Orchestrator: API</text></g>
+<g transform="translate(415 266)"><rect class="wbox" x="62" y="1203" width="137.5" height="88" rx="6"/><text class="wt" x="130.8" y="1220" text-anchor="middle" style="font-size:12px">Milestone 1</text><text class="wc" x="130.8" y="1234" text-anchor="middle" style="font-size:10.5px">tasks run in parallel</text></g>
+<g transform="translate(415 266)"><rect class="box" x="66.8" y="1242" width="38" height="17" rx="4"/><text class="wt" x="85.8" y="1254.5" text-anchor="middle" style="font-size:10px">T1</text></g>
+<g transform="translate(415 266)"><rect class="box" x="111.8" y="1242" width="38" height="17" rx="4"/><text class="wt" x="130.8" y="1254.5" text-anchor="middle" style="font-size:10px">T2</text></g>
+<g transform="translate(415 266)"><rect class="box" x="156.8" y="1242" width="38" height="17" rx="4"/><text class="wt" x="175.8" y="1254.5" text-anchor="middle" style="font-size:10px">T3</text></g>
+<g transform="translate(415 266)"><rect class="box" x="66.8" y="1264" width="38" height="17" rx="4"/><text class="wt" x="85.8" y="1276.5" text-anchor="middle" style="font-size:10px">T4</text></g>
+<g transform="translate(415 266)"><rect class="box" x="111.8" y="1264" width="38" height="17" rx="4"/><text class="wt" x="130.8" y="1276.5" text-anchor="middle" style="font-size:10px">T5</text></g>
+<g transform="translate(415 266)"><rect class="box" x="156.8" y="1264" width="38" height="17" rx="4"/><text class="wt" x="175.8" y="1276.5" text-anchor="middle" style="font-size:10px">T6</text></g>
+<g transform="translate(415 266)"><rect class="wbox" x="221.5" y="1203" width="137.5" height="88" rx="6"/><text class="wt" x="290.3" y="1220" text-anchor="middle" style="font-size:12px">Milestone 2</text><text class="wc" x="290.3" y="1234" text-anchor="middle" style="font-size:10.5px">tasks run in parallel</text></g>
+<g transform="translate(415 266)"><rect class="box" x="226.3" y="1242" width="38" height="17" rx="4"/><text class="wt" x="245.3" y="1254.5" text-anchor="middle" style="font-size:10px">T7</text></g>
+<g transform="translate(415 266)"><rect class="box" x="271.3" y="1242" width="38" height="17" rx="4"/><text class="wt" x="290.3" y="1254.5" text-anchor="middle" style="font-size:10px">T8</text></g>
+<g transform="translate(415 266)"><rect class="box" x="316.3" y="1242" width="38" height="17" rx="4"/><text class="wt" x="335.3" y="1254.5" text-anchor="middle" style="font-size:10px">T9</text></g>
+<g transform="translate(415 266)"><rect class="box" x="226.3" y="1264" width="38" height="17" rx="4"/><text class="wt" x="245.3" y="1276.5" text-anchor="middle" style="font-size:10px">T10</text></g>
+<g transform="translate(415 266)"><rect class="box" x="271.3" y="1264" width="38" height="17" rx="4"/><text class="wt" x="290.3" y="1276.5" text-anchor="middle" style="font-size:10px">T11</text></g>
+<g transform="translate(415 266)"><rect class="box" x="316.3" y="1264" width="38" height="17" rx="4"/><text class="wt" x="335.3" y="1276.5" text-anchor="middle" style="font-size:10px">T12</text></g>
+<g transform="translate(415 266)"><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M205.5 1247L215.5 1247M210.5 1251L215.5 1247L210.5 1243"/></g>
+<g transform="translate(415 266)"><rect class="dbox" x="374" y="1175" width="311" height="126" rx="8"/><text class="wt" x="529.5" y="1193" text-anchor="middle"><tspan class="mO">Opus</tspan> Orchestrator: UI</text></g>
+<g transform="translate(415 266)"><rect class="wbox" x="381" y="1203" width="137.5" height="88" rx="6"/><text class="wt" x="449.8" y="1220" text-anchor="middle" style="font-size:12px">Milestone 1</text><text class="wc" x="449.8" y="1234" text-anchor="middle" style="font-size:10.5px">tasks run in parallel</text></g>
+<g transform="translate(415 266)"><rect class="box" x="385.8" y="1242" width="38" height="17" rx="4"/><text class="wt" x="404.8" y="1254.5" text-anchor="middle" style="font-size:10px">T13</text></g>
+<g transform="translate(415 266)"><rect class="box" x="430.8" y="1242" width="38" height="17" rx="4"/><text class="wt" x="449.8" y="1254.5" text-anchor="middle" style="font-size:10px">T14</text></g>
+<g transform="translate(415 266)"><rect class="box" x="475.8" y="1242" width="38" height="17" rx="4"/><text class="wt" x="494.8" y="1254.5" text-anchor="middle" style="font-size:10px">T15</text></g>
+<g transform="translate(415 266)"><rect class="box" x="385.8" y="1264" width="38" height="17" rx="4"/><text class="wt" x="404.8" y="1276.5" text-anchor="middle" style="font-size:10px">T16</text></g>
+<g transform="translate(415 266)"><rect class="box" x="430.8" y="1264" width="38" height="17" rx="4"/><text class="wt" x="449.8" y="1276.5" text-anchor="middle" style="font-size:10px">T17</text></g>
+<g transform="translate(415 266)"><rect class="box" x="475.8" y="1264" width="38" height="17" rx="4"/><text class="wt" x="494.8" y="1276.5" text-anchor="middle" style="font-size:10px">T18</text></g>
+<g transform="translate(415 266)"><rect class="wbox" x="540.5" y="1203" width="137.5" height="88" rx="6"/><text class="wt" x="609.3" y="1220" text-anchor="middle" style="font-size:12px">Milestone 2</text><text class="wc" x="609.3" y="1234" text-anchor="middle" style="font-size:10.5px">tasks run in parallel</text></g>
+<g transform="translate(415 266)"><rect class="box" x="545.3" y="1242" width="38" height="17" rx="4"/><text class="wt" x="564.3" y="1254.5" text-anchor="middle" style="font-size:10px">T19</text></g>
+<g transform="translate(415 266)"><rect class="box" x="590.3" y="1242" width="38" height="17" rx="4"/><text class="wt" x="609.3" y="1254.5" text-anchor="middle" style="font-size:10px">T20</text></g>
+<g transform="translate(415 266)"><rect class="box" x="635.3" y="1242" width="38" height="17" rx="4"/><text class="wt" x="654.3" y="1254.5" text-anchor="middle" style="font-size:10px">T21</text></g>
+<g transform="translate(415 266)"><rect class="box" x="545.3" y="1264" width="38" height="17" rx="4"/><text class="wt" x="564.3" y="1276.5" text-anchor="middle" style="font-size:10px">T22</text></g>
+<g transform="translate(415 266)"><rect class="box" x="590.3" y="1264" width="38" height="17" rx="4"/><text class="wt" x="609.3" y="1276.5" text-anchor="middle" style="font-size:10px">T23</text></g>
+<g transform="translate(415 266)"><rect class="box" x="635.3" y="1264" width="38" height="17" rx="4"/><text class="wt" x="654.3" y="1276.5" text-anchor="middle" style="font-size:10px">T24</text></g>
+<g transform="translate(415 266)"><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M524.5 1247L534.5 1247M529.5 1251L534.5 1247L529.5 1243"/></g>
+<g transform="translate(415 266)"><text class="wc" x="370" y="1337" text-anchor="middle">In very large runs, there might be multiple orchestrators for different areas</text></g>
+<g transform="translate(415 266)"><circle class="dot" cx="47" cy="1364.5" r="2"/></g>
+<g transform="translate(415 266)"><text class="fact" x="57" y="1369">Tasks in a milestone run in parallel</text></g>
+<g transform="translate(415 266)"><circle class="dot" cx="47" cy="1384.5" r="2"/></g>
+<g transform="translate(415 266)"><text class="fact" x="57" y="1389">Milestones start in order, each checked while the next builds</text></g>
+<g transform="translate(415 266)"><circle class="dot" cx="47" cy="1404.5" r="2"/></g>
+<g transform="translate(415 266)"><text class="fact" x="57" y="1409">Each check runs on <tspan class="mS">Sonnet</tspan> or <tspan class="mO">Opus</tspan>, by how risky its part is</text></g>
+<g transform="translate(415 312)"><path class="l" d="M52 1423V1440"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M52 1435.5L52 1445.5M48 1440.5L52 1445.5L56 1440.5"/></g>
+<g transform="translate(415 312)"><path class="cl" stroke-linecap="round" stroke-linejoin="round" d="M76.5 1436H87.5M82 1429V1433M79.2 1430.7L82 1433.4L84.8 1430.7M82 1443V1439M79.2 1441.3L82 1438.6L84.8 1441.3"/><text class="cap" x="98" y="1440.5">Automatic context compaction</text></g>
+<g transform="translate(415 312)"><rect class="box" x="24" y="1449" width="692" height="494" rx="10"/></g>
+<g transform="translate(415 312)"><circle class="num" cx="52" cy="1475" r="12"/><text class="nt" x="52" y="1479.5" text-anchor="middle">4</text><text class="name" x="74" y="1481">Build</text></g>
+<g transform="translate(415 312)"><path class="wl" d="M370 1529V1555M220 1555V1543H520V1555"/></g>
+<g transform="translate(415 312)"><path class="dl" d="M285 1514H70V1625H215V1639M455 1514H670V1625H525V1639"/></g>
+<g transform="translate(415 312)"><rect class="mbox" x="285" y="1499" width="170" height="30" rx="6"/></g>
+<g transform="translate(415 312)"><path class="mbl" d="M364 1499H449a6 6 0 0 1 6 6V1523a6 6 0 0 1 -6 6H291a6 6 0 0 1 -6 -6V1505a6 6 0 0 1 6 -6H297"/></g>
+<g transform="translate(415 312)"><text class="mbt" x="302" y="1502" textLength="57" lengthAdjust="spacing">main session</text></g>
+<g transform="translate(415 312)"><text class="ot" x="370" y="1520" text-anchor="middle">Main Orchestrator</text></g>
+<g transform="translate(415 312)"><rect class="wbox" x="155" y="1555" width="130" height="28" rx="6"/><text class="wt" x="220" y="1573.5" text-anchor="middle"><tspan class="mH">Haiku</tspan> Worker</text></g>
+<g transform="translate(415 312)"><rect class="wbox" x="305" y="1555" width="130" height="28" rx="6"/><text class="wt" x="370" y="1573.5" text-anchor="middle"><tspan class="mS">Sonnet</tspan> Worker</text></g>
+<g transform="translate(415 312)"><rect class="wbox" x="455" y="1555" width="130" height="28" rx="6"/><text class="wt" x="520" y="1573.5" text-anchor="middle"><tspan class="mO">Opus</tspan> Worker</text></g>
+<g transform="translate(415 312)"><text class="wc" x="370" y="1605" text-anchor="middle">The run builds in its own git worktree, and every test is seen failing first</text></g>
+<g transform="translate(415 312)"><path class="dl" d="M215 1667V1681M150.5 1691V1681H279.5V1691"/></g>
+<g transform="translate(415 312)"><rect class="dbox" x="90" y="1639" width="250" height="28" rx="6"/><text class="wt" x="215" y="1657.5" text-anchor="middle"><tspan class="mO">Opus</tspan> Orchestrator: API</text></g>
+<g transform="translate(415 312)"><rect class="dbox" x="90" y="1691" width="121" height="26" rx="6"/><text class="wt" x="150.5" y="1708.5" text-anchor="middle" style="font-size:12px"><tspan class="mS">Sonnet</tspan> Worker</text></g>
+<g transform="translate(415 312)"><rect class="dbox" x="219" y="1691" width="121" height="26" rx="6"/><text class="wt" x="279.5" y="1708.5" text-anchor="middle" style="font-size:12px"><tspan class="mH">Haiku</tspan> Worker</text></g>
+<g transform="translate(415 312)"><path class="dl" d="M525 1667V1681M460.5 1691V1681H589.5V1691"/></g>
+<g transform="translate(415 312)"><rect class="dbox" x="400" y="1639" width="250" height="28" rx="6"/><text class="wt" x="525" y="1657.5" text-anchor="middle"><tspan class="mO">Opus</tspan> Orchestrator: UI</text></g>
+<g transform="translate(415 312)"><rect class="dbox" x="400" y="1691" width="121" height="26" rx="6"/><text class="wt" x="460.5" y="1708.5" text-anchor="middle" style="font-size:12px"><tspan class="mS">Sonnet</tspan> Worker</text></g>
+<g transform="translate(415 312)"><rect class="dbox" x="529" y="1691" width="121" height="26" rx="6"/><text class="wt" x="589.5" y="1708.5" text-anchor="middle" style="font-size:12px"><tspan class="mO">Opus</tspan> Worker</text></g>
+<g transform="translate(415 312)"><text class="wc" x="370" y="1741" text-anchor="middle">In very large runs, there might be multiple orchestrators for different areas</text></g>
+<g transform="translate(415 312)"><rect class="wbox" x="44" y="1763" width="206" height="44" rx="6"/><text class="wt" x="147" y="1781" text-anchor="middle">Workers build</text><text class="wc" x="147" y="1798" text-anchor="middle" style="font-size:12px">one milestone's tasks, in parallel</text></g>
+<g transform="translate(415 312)"><rect class="wbox" x="267" y="1763" width="206" height="44" rx="6"/><text class="wt" x="370" y="1781" text-anchor="middle"><tspan class="mS">Sonnet</tspan> or <tspan class="mO">Opus</tspan> Blind Reviewer</text><text class="wc" x="370" y="1798" text-anchor="middle" style="font-size:12px">checks the code, never the spec</text></g>
+<g transform="translate(415 312)"><rect class="wbox" x="490" y="1763" width="206" height="44" rx="6"/><path class="cl" stroke-linecap="round" stroke-linejoin="round" d="M544.5 1776.5H555.5M550 1769.5V1773.5M547.2 1771.2L550 1773.9L552.8 1771.2M550 1783.5V1779.5M547.2 1781.8L550 1779.1L552.8 1781.8"/><text class="wt" x="602" y="1781" text-anchor="middle">Compaction</text><text class="wc" x="593" y="1798" text-anchor="middle" style="font-size:12px">the context starts fresh</text></g>
+<g transform="translate(415 312)"><path class="l" d="M252.5 1785H255M475.5 1785H478M193 1807V1821Q193 1827 187 1827H107Q101 1827 101 1821V1819"/></g>
+<g transform="translate(415 312)"><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M254.5 1785L264.5 1785M259.5 1789L264.5 1785L259.5 1781"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M477.5 1785L487.5 1785M482.5 1789L487.5 1785L482.5 1781"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M101 1819.5L101 1809.5M105 1814.5L101 1809.5L97 1814.5"/></g>
+<g transform="translate(415 312)"><text class="wc" x="347" y="1831" text-anchor="middle" style="font-size:12px">the next milestone starts while this one is checked</text></g>
+<g transform="translate(415 312)"><circle class="dot" cx="47" cy="1864.5" r="2"/></g>
+<g transform="translate(415 312)"><text class="fact" x="57" y="1869">Orchestrators drive the goals to completion, unblocking workers and deciding</text></g>
+<g transform="translate(415 312)"><circle class="dot" cx="47" cy="1884.5" r="2"/></g>
+<g transform="translate(415 312)"><text class="fact" x="57" y="1889">Comes to you only if what you agreed cannot be built</text></g>
+<g transform="translate(415 312)"><circle class="dot" cx="47" cy="1904.5" r="2"/></g>
+<g transform="translate(415 312)"><text class="fact" x="57" y="1909">Blind reviewers raise every concern, and the orchestrator decides</text></g>
+<g transform="translate(415 312)"><circle class="dot" cx="47" cy="1924.5" r="2"/></g>
+<g transform="translate(415 312)"><text class="fact" x="57" y="1929">Work pauses by default at 75% weekly usage, or runs up to the % you explicitly allow</text></g>
+<g transform="translate(415 358)"><path class="l" d="M52 1943V1960"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M52 1955.5L52 1965.5M48 1960.5L52 1965.5L56 1960.5"/></g>
+<g transform="translate(415 358)"><path class="cl" stroke-linecap="round" stroke-linejoin="round" d="M76.5 1956H87.5M82 1949V1953M79.2 1950.7L82 1953.4L84.8 1950.7M82 1963V1959M79.2 1961.3L82 1958.6L84.8 1961.3"/><text class="cap" x="98" y="1960.5">Automatic context compaction</text></g>
+<g transform="translate(415 358)"><rect class="box" x="24" y="1969" width="692" height="340" rx="10"/></g>
+<g transform="translate(415 358)"><circle class="num" cx="52" cy="1995" r="12"/><text class="nt" x="52" y="1999.5" text-anchor="middle">5</text><text class="name" x="74" y="2001">Review</text></g>
+<g transform="translate(415 358)"><path class="wl" d="M370 2049V2075M147 2075V2063H593V2075"/></g>
+<g transform="translate(415 358)"><rect class="obox" x="260" y="2019" width="220" height="30" rx="6"/><text class="ot" x="370" y="2039" text-anchor="middle">The spec's requirements</text></g>
+<g transform="translate(415 358)"><rect class="wbox" x="44" y="2075" width="206" height="44" rx="6"/><text class="wt" x="147" y="2093" text-anchor="middle"><tspan class="mO">Opus</tspan> Reviewer</text><text class="wc" x="147" y="2110" text-anchor="middle" style="font-size:12px">R1 to R4, against the spec</text></g>
+<g transform="translate(415 358)"><rect class="wbox" x="267" y="2075" width="206" height="44" rx="6"/><text class="wt" x="370" y="2093" text-anchor="middle"><tspan class="mS">Sonnet</tspan> Reviewer</text><text class="wc" x="370" y="2110" text-anchor="middle" style="font-size:12px">R5 to R8, against the spec</text></g>
+<g transform="translate(415 358)"><rect class="wbox" x="490" y="2075" width="206" height="44" rx="6"/><text class="wt" x="593" y="2093" text-anchor="middle"><tspan class="mO">Opus</tspan> Reviewer</text><text class="wc" x="593" y="2110" text-anchor="middle" style="font-size:12px">R9 to R12, against the spec</text></g>
+<g transform="translate(415 358)"><path class="l" d="M147 2119V2133H593V2119M370 2119V2145M370 2169V2181M200 2185V2181H540V2185"/></g>
+<g transform="translate(415 358)"><rect class="box" x="300" y="2147" width="140" height="20" rx="10"/><text class="wc" x="370" y="2161.5" text-anchor="middle" style="font-size:12px">anything to change?</text></g>
+<g transform="translate(415 358)"><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M200 2184.5L200 2194.5M196 2189.5L200 2194.5L204 2189.5"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M540 2184.5L540 2194.5M536 2189.5L540 2194.5L544 2189.5"/></g>
+<g transform="translate(415 358)"><rect class="box" x="267" y="2172" width="36" height="18" style="stroke:none"/><text class="wc" x="285" y="2185" text-anchor="middle" style="font-size:12px">no</text></g>
+<g transform="translate(415 358)"><rect class="box" x="434" y="2172" width="42" height="18" style="stroke:none"/><text class="wc" x="455" y="2185" text-anchor="middle" style="font-size:12px">yes</text></g>
+<g transform="translate(415 358)"><rect class="mbox" x="44" y="2197" width="312" height="44" rx="6"/></g>
+<g transform="translate(415 358)"><path class="mbl" d="M123 2197H350a6 6 0 0 1 6 6V2235a6 6 0 0 1 -6 6H50a6 6 0 0 1 -6 -6V2203a6 6 0 0 1 6 -6H56"/></g>
+<g transform="translate(415 358)"><text class="mbt" x="61" y="2200" textLength="57" lengthAdjust="spacing">main session</text></g>
+<g transform="translate(415 358)"><text class="ot" x="200" y="2216" text-anchor="middle">Main Orchestrator</text><text class="wc" x="200" y="2233" text-anchor="middle" style="font-size:12px">judges the result against what you meant</text></g>
+<g transform="translate(415 358)"><rect class="wbox" x="384" y="2197" width="312" height="44" rx="6"/><text class="wt" x="540" y="2215" text-anchor="middle">Workers fix it, back in Build</text><text class="wc" x="540" y="2232" text-anchor="middle" style="font-size:12px">then fresh reviewers, only on what changed</text></g>
+<g transform="translate(415 358)"><circle class="dot" cx="47" cy="2270.5" r="2"/></g>
+<g transform="translate(415 358)"><text class="fact" x="57" y="2275">Reviewers raise every concern, earlier decisions included</text></g>
+<g transform="translate(415 358)"><circle class="dot" cx="47" cy="2290.5" r="2"/></g>
+<g transform="translate(415 358)"><text class="fact" x="57" y="2295">The orchestrator decides what to change and what to accept</text></g>
+<g transform="translate(415 404)"><path class="l" d="M52 2309V2326"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M52 2321.5L52 2331.5M48 2326.5L52 2331.5L56 2326.5"/></g>
+<g transform="translate(415 404)"><path class="cl" stroke-linecap="round" stroke-linejoin="round" d="M76.5 2322H87.5M82 2315V2319M79.2 2316.7L82 2319.4L84.8 2316.7M82 2329V2325M79.2 2327.3L82 2324.6L84.8 2327.3"/><text class="cap" x="98" y="2326.5">Automatic context compaction</text></g>
+<g transform="translate(415 404)"><rect class="box" x="24" y="2335" width="692" height="360" rx="10"/></g>
+<g transform="translate(415 404)"><circle class="num" cx="52" cy="2361" r="12"/><text class="nt" x="52" y="2365.5" text-anchor="middle">6</text><text class="name" x="74" y="2367">Ship</text></g>
+<g transform="translate(415 404)"><rect class="lr" x="44" y="2385" width="652" height="46" rx="8"/></g>
+<g transform="translate(415 404)"><path class="fi" d="M60 2403.5h4.5l1.5 2h6v7.5h-12z"/><text class="lx" x="80" y="2412.5">From the run's records</text></g>
+<g transform="translate(415 404)"><rect class="lc" x="587.9" y="2398" width="95.1" height="20" rx="5"/><path class="fi" d="M595.9 2402h5.5l3.5 3.5v8.5h-9zM601.4 2402v3.5h3.5"/><text class="lct mono" x="611.9" y="2412" textLength="62.1" lengthAdjust="spacing">ledger.md</text></g>
+<g transform="translate(415 404)"><rect class="lc" x="498.6" y="2398" width="81.3" height="20" rx="5"/><path class="fi" d="M506.6 2402h5.5l3.5 3.5v8.5h-9zM512.1 2402v3.5h3.5"/><text class="lct mono" x="522.6" y="2412" textLength="48.3" lengthAdjust="spacing">spec.md</text></g>
+<g transform="translate(415 404)"><rect class="lc" x="367.9" y="2398" width="122.7" height="20" rx="5"/><path class="fi" d="M375.9 2402h5.5l3.5 3.5v8.5h-9zM381.4 2402v3.5h3.5"/><text class="lct mono" x="391.9" y="2412" textLength="89.7" lengthAdjust="spacing">brainstorm.md</text></g>
+<g transform="translate(415 404)"><path class="l" d="M370 2431V2445M370 2501V2515"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M370 2444.5L370 2454.5M366 2449.5L370 2454.5L374 2449.5"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M370 2514.5L370 2524.5M366 2519.5L370 2524.5L374 2519.5"/></g>
+<g transform="translate(415 404)"><rect class="mbox" x="220" y="2457" width="300" height="44" rx="6"/></g>
+<g transform="translate(415 404)"><path class="mbl" d="M299 2457H514a6 6 0 0 1 6 6V2495a6 6 0 0 1 -6 6H226a6 6 0 0 1 -6 -6V2463a6 6 0 0 1 6 -6H232"/></g>
+<g transform="translate(415 404)"><text class="mbt" x="237" y="2460" textLength="57" lengthAdjust="spacing">main session</text></g>
+<g transform="translate(415 404)"><text class="ot" x="370" y="2476" text-anchor="middle">Main Orchestrator</text><text class="wc" x="370" y="2493" text-anchor="middle" style="font-size:12px">writes the pull request's text</text></g>
+<g transform="translate(415 404)"><rect class="obox" x="44" y="2527" width="652" height="146" rx="8"/><path class="wl" d="M44 2567H696"/></g>
+<g transform="translate(415 404)"><rect class="dp" x="58" y="2537" width="50" height="20" rx="10"/><text class="dpt" x="83" y="2551" text-anchor="middle">Draft</text><text class="ot" x="120" y="2552">Pull request</text><text class="wc" x="682" y="2551.5" text-anchor="end" style="font-size:12px">on its own branch</text></g>
+<g transform="translate(415 404)"><text class="ot" x="64" y="2590">What</text><text class="wt" x="122" y="2590">what this change builds</text></g>
+<g transform="translate(415 404)"><rect class="wbox" x="608" y="2576" width="74" height="19" rx="9.5"/><text class="wc" x="635" y="2589.5" style="font-size:11.5px">picture</text></g>
+<g transform="translate(415 404)"><path class="pi" d="M617 2580.5h12v10h-12zM617 2589l3.5-3.5 2.5 2.5 2-2 4 4"/><circle class="pid" cx="625.5" cy="2583.5" r="1.2"/></g>
+<g transform="translate(415 404)"><text class="ot" x="64" y="2613">Why</text><text class="wt" x="122" y="2613">the problem it solves</text></g>
+<g transform="translate(415 404)"><text class="ot" x="64" y="2636">How</text><text class="wt" x="122" y="2636">how it is built</text></g>
+<g transform="translate(415 404)"><rect class="wbox" x="602" y="2622" width="80" height="19" rx="9.5"/><text class="wc" x="629" y="2635.5" style="font-size:11.5px">diagram</text></g>
+<g transform="translate(415 404)"><path class="pi" d="M610 2626.5h5v4h-5zM619 2632.5h5v4h-5zM615 2628.5h6.5v4"/></g>
+<g transform="translate(415 404)"><text class="ot la" x="64" y="2659">Check</text><text class="wt" x="122" y="2659">only what you really need to know before merging</text></g>
+<g transform="translate(415 266)"><path class="l" d="M696 2311H724Q730 2311 730 2305V1557Q730 1551 724 1551H725"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M729.5 1551L719.5 1551M724.5 1547L719.5 1551L724.5 1555"/></g>
+<g transform="translate(415 466)"><path class="yl" d="M52 2695V2725"/><path class="yl" stroke-linecap="round" stroke-linejoin="round" d="M52 2720.5L52 2730.5M48 2725.5L52 2730.5L56 2725.5"/></g>
+<g transform="translate(415 466)"><rect class="you" x="24" y="2734" width="262" height="34" rx="17"/><text class="yt" x="155" y="2756" text-anchor="middle">You review the draft pull request</text></g>
+<g transform="translate(445 240)"><rect class="fa" width="96" height="18" rx="9"/><circle class="ad" cx="10.5" cy="9" r="6"/><path class="as" transform="translate(10.5 9)" d="M0 -4.2Q0.7 -0.7 4.2 0Q0.7 0.7 0 4.2Q-0.7 0.7 -4.2 0Q-0.7 -0.7 0 -4.2Z"/><text class="fat" x="21" y="13">Fable advises</text></g>
+<g transform="translate(150 595)"><rect class="fa" width="96" height="18" rx="9"/><circle class="ad" cx="10.5" cy="9" r="6"/><path class="as" transform="translate(10.5 9)" d="M0 -4.2Q0.7 -0.7 4.2 0Q0.7 0.7 0 4.2Q-0.7 0.7 -4.2 0Q-0.7 -0.7 0 -4.2Z"/><text class="fat" x="21" y="13">Fable advises</text></g>
+<g transform="translate(592 699)"><rect class="fa" width="96" height="18" rx="9"/><circle class="ad" cx="10.5" cy="9" r="6"/><path class="as" transform="translate(10.5 9)" d="M0 -4.2Q0.7 -0.7 4.2 0Q0.7 0.7 0 4.2Q-0.7 0.7 -4.2 0Q-0.7 -0.7 0 -4.2Z"/><text class="fat" x="21" y="13">Fable advises</text></g>
+<g transform="translate(415 312)"><g transform="translate(445 1505)"><rect class="fa" width="96" height="18" rx="9"/><circle class="ad" cx="10.5" cy="9" r="6"/><path class="as" transform="translate(10.5 9)" d="M0 -4.2Q0.7 -0.7 4.2 0Q0.7 0.7 0 4.2Q-0.7 0.7 -4.2 0Q-0.7 -0.7 0 -4.2Z"/><text class="fat" x="21" y="13">Fable advises</text></g></g>
+<g transform="translate(415 358)"><g transform="translate(252 2237)"><rect class="fa" width="96" height="18" rx="9"/><circle class="ad" cx="10.5" cy="9" r="6"/><path class="as" transform="translate(10.5 9)" d="M0 -4.2Q0.7 -0.7 4.2 0Q0.7 0.7 0 4.2Q-0.7 0.7 -4.2 0Q-0.7 -0.7 0 -4.2Z"/><text class="fat" x="21" y="13">Fable advises</text></g></g>
+<g transform="translate(415 404)"><path class="rw" d="M240 2413V2403M236.5 2406.5L240 2403L243.5 2406.5"/></g>
+<g transform="translate(415 404)"><g transform="translate(416 2443)"><rect class="fa" width="96" height="18" rx="9"/><circle class="ad" cx="10.5" cy="9" r="6"/><path class="as" transform="translate(10.5 9)" d="M0 -4.2Q0.7 -0.7 4.2 0Q0.7 0.7 0 4.2Q-0.7 0.7 -4.2 0Q-0.7 -0.7 0 -4.2Z"/><text class="fat" x="21" y="13">Fable advises</text></g></g>
+</g>
+<g transform="translate(-18 0)"><rect class="lc" x="648" y="208" width="102" height="20" rx="5"/><path class="fi" d="M655 213.5h4.5l1.5 2h6v7.5h-12z"/><text class="lct mono" x="672" y="222" textLength="69" lengthAdjust="spacing">artifacts/</text></g><path class="rw" d="M742 213V223M738.5 219.5L742 223L745.5 219.5"/>
+<g transform="translate(-18 0)"><rect class="lc" x="519.3" y="208" width="122.7" height="20" rx="5"/><path class="fi" d="M527.3 212h5.5l3.5 3.5v8.5h-9zM532.8 212v3.5h3.5"/><text class="lct mono" x="543.3" y="222" textLength="89.7" lengthAdjust="spacing">brainstorm.md</text></g>
+<g transform="translate(-18 0)"><rect class="lc" x="668.7" y="575" width="81.3" height="20" rx="5"/><path class="fi" d="M676.7 579h5.5l3.5 3.5v8.5h-9zM682.2 579v3.5h3.5"/><text class="lct mono" x="692.7" y="589" textLength="48.3" lengthAdjust="spacing">spec.md</text></g><path class="rw" d="M742 580V590M738.5 586.5L742 590L745.5 586.5"/>
+<g transform="translate(415 266)"><g transform="translate(-18 0)"><rect class="lc" x="668.7" y="1053" width="81.3" height="20" rx="5"/><path class="fi" d="M676.7 1057h5.5l3.5 3.5v8.5h-9zM682.2 1057v3.5h3.5"/><text class="lct mono" x="692.7" y="1067" textLength="48.3" lengthAdjust="spacing">plan.md</text></g><path class="rw" d="M742 1058V1068M738.5 1064.5L742 1068L745.5 1064.5"/></g>
+<g transform="translate(415 312)"><g transform="translate(-18 0)"><rect class="lc" x="654.9" y="1465" width="95.1" height="20" rx="5"/><path class="fi" d="M662.9 1469h5.5l3.5 3.5v8.5h-9zM668.4 1469v3.5h3.5"/><text class="lct mono" x="678.9" y="1479" textLength="62.1" lengthAdjust="spacing">ledger.md</text></g><path class="rw" d="M742 1470V1480M738.5 1476.5L742 1480L745.5 1476.5"/></g>
+<g transform="translate(415 358)"><g transform="translate(-18 0)"><rect class="lc" x="654.9" y="2281" width="95.1" height="20" rx="5"/><path class="fi" d="M662.9 2285h5.5l3.5 3.5v8.5h-9zM668.4 2285v3.5h3.5"/><text class="lct mono" x="678.9" y="2295" textLength="62.1" lengthAdjust="spacing">ledger.md</text></g><path class="rw" d="M742 2286V2296M738.5 2292.5L742 2296L745.5 2292.5"/></g>
+<g transform="translate(-18 0)"><rect class="lc" x="634.2" y="180" width="115.8" height="20" rx="5"/><path class="fi" d="M641.2 185.5h4.5l1.5 2h6v7.5h-12z"/><text class="lct mono" x="658.2" y="194" textLength="82.8" lengthAdjust="spacing">earlier runs</text></g><path class="rw" d="M742 195V185M738.5 188.5L742 185L745.5 188.5"/>
+<path class="l" d="M650 1011V1302.5"/><path class="l" stroke-linecap="round" stroke-linejoin="round" d="M646 1297.5L650 1302.5L654 1297.5"/>
+<g transform="translate(550 18)"><path class="cl" stroke-linecap="round" stroke-linejoin="round" d="M76.5 1024H87.5M82 1017V1021M79.2 1018.7L82 1021.4L84.8 1018.7M82 1031V1027M79.2 1029.3L82 1026.6L84.8 1029.3"/></g>
+<text class="cap" x="616" y="1046.5" text-anchor="end">Automatic context compaction</text>
+<text class="ot" x="830" y="1251" text-anchor="middle" style="font-size:14px">Shared by both shapes</text>
+<text class="wc" x="830" y="1270" text-anchor="middle" style="font-size:12px">once in a Build, once for each wave in a Sweep</text>
+<rect class="lr" x="450" y="3280" width="760" height="374" rx="14"/>
+<circle class="ld" cx="480" cy="3308" r="15"/><path class="ls" stroke-linejoin="round" d="M472.5 3302.5h5l2 2.5h8v9h-15z"/>
+<text class="lt mono" x="505" y="3313">~/.lcw</text><text class="lx" x="571" y="3313">each run’s records, kept outside your repository</text>
+<path class="rw" d="M988 3303V3313M984.5 3309.5L988 3313L991.5 3309.5"/><text class="lx" x="998" y="3313" style="font-size:12px">a stage writes</text>
+<path class="rw" d="M1100 3313V3303M1096.5 3306.5L1100 3303L1103.5 3306.5"/><text class="lx" x="1110" y="3313" style="font-size:12px">a stage reads</text>
+<path class="fi" d="M496 3337.5h4.5l1.5 2h6v7.5h-12z"/>
+<text class="lcn mono" x="514" y="3346">repos/</text>
+<path class="fi" d="M518 3357.5h4.5l1.5 2h6v7.5h-12z"/>
+<text class="lcn mono" x="536" y="3366">todo-app-755fcd10/</text>
+<text class="lx" x="880" y="3366" style="font-size:12px">one folder for each repository</text>
+<path class="fi" d="M540 3377.5h4.5l1.5 2h6v7.5h-12z"/>
+<text class="lcn mono" x="558" y="3386">runs/</text>
+<path class="fi" d="M562 3397.5h4.5l1.5 2h6v7.5h-12z"/>
+<text class="lcn mono" x="580" y="3406">20261118-shared-lists/</text>
+<text class="lx" x="880" y="3406" style="font-size:12px">a Build</text>
+<path class="fi" d="M585 3416h5.5l3.5 3.5v8.5h-9zM590.5 3416v3.5h3.5"/>
+<text class="lcn mono" x="602" y="3426">brainstorm.md</text>
+<text class="lx" x="880" y="3426" style="font-size:12px">what you meant</text>
+<path class="fi" d="M585 3436h5.5l3.5 3.5v8.5h-9zM590.5 3436v3.5h3.5"/>
+<text class="lcn mono" x="602" y="3446">spec.md</text>
+<text class="lx" x="880" y="3446" style="font-size:12px">the intent, for the AI</text>
+<path class="fi" d="M585 3456h5.5l3.5 3.5v8.5h-9zM590.5 3456v3.5h3.5"/>
+<text class="lcn mono" x="602" y="3466">plan.md</text>
+<text class="lx" x="880" y="3466" style="font-size:12px">tasks and milestones</text>
+<path class="fi" d="M585 3476h5.5l3.5 3.5v8.5h-9zM590.5 3476v3.5h3.5"/>
+<text class="lcn mono" x="602" y="3486">ledger.md</text>
+<text class="lx" x="880" y="3486" style="font-size:12px">decisions, and why</text>
+<path class="fi" d="M584 3497.5h4.5l1.5 2h6v7.5h-12z"/>
+<text class="lcn mono" x="602" y="3506">artifacts/</text>
+<text class="lx" x="880" y="3506" style="font-size:12px">mocks and diagrams</text>
+<path class="fi" d="M562 3517.5h4.5l1.5 2h6v7.5h-12z"/>
+<text class="lcn mono" x="580" y="3526">20261121-backlog-sweep/</text>
+<text class="lx" x="880" y="3526" style="font-size:12px">a Sweep</text>
+<path class="fi" d="M585 3536h5.5l3.5 3.5v8.5h-9zM590.5 3536v3.5h3.5"/>
+<text class="lcn mono" x="602" y="3546">charter.md</text>
+<text class="lx" x="880" y="3546" style="font-size:12px">the rules you agreed</text>
+<path class="fi" d="M585 3556h5.5l3.5 3.5v8.5h-9zM590.5 3556v3.5h3.5"/>
+<text class="lcn mono" x="602" y="3566">findings.md</text>
+<text class="lx" x="880" y="3566" style="font-size:12px">what each round found</text>
+<path class="fi" d="M585 3576h5.5l3.5 3.5v8.5h-9zM590.5 3576v3.5h3.5"/>
+<text class="lcn mono" x="602" y="3586">parked.md</text>
+<text class="lx" x="880" y="3586" style="font-size:12px">what waits for you</text>
+<path class="fi" d="M585 3596h5.5l3.5 3.5v8.5h-9zM590.5 3596v3.5h3.5"/>
+<text class="lcn mono" x="602" y="3606">ledger.md</text>
+<text class="lx" x="880" y="3606" style="font-size:12px">rounds and decisions</text>
+<path class="fi" d="M584 3617.5h4.5l1.5 2h6v7.5h-12z"/>
+<text class="lcn mono" x="602" y="3626">waves/</text>
+<text class="lx" x="880" y="3626" style="font-size:12px">each wave’s plan and ledger</text>
+<path class="tl" d="M502 3349V3358Q502 3362 506 3362H514M524 3369V3378Q524 3382 528 3382H536M546 3389V3398Q546 3402 550 3402H558M568 3409V3418Q568 3422 572 3422H580M568 3409V3438Q568 3442 572 3442H580M568 3409V3458Q568 3462 572 3462H580M568 3409V3478Q568 3482 572 3482H580M568 3409V3498Q568 3502 572 3502H580M546 3389V3518Q546 3522 550 3522H558M568 3529V3538Q568 3542 572 3542H580M568 3529V3558Q568 3562 572 3562H580M568 3529V3578Q568 3582 572 3582H580M568 3529V3598Q568 3602 572 3602H580M568 3529V3618Q568 3622 572 3622H580"/>
+</g>
+<g transform="translate(830 236)">
+<rect class="ybox" x="70" y="164" width="692" height="320" rx="10"/>
+<circle class="yc" cx="98" cy="190" r="12"/>
+<text class="nt2" x="98" y="194.5" text-anchor="middle">1</text>
+<text class="name" x="120" y="196">Charter</text>
+<text class="yt s" x="120" y="217">with you</text>
+<rect class="lc" x="614.4" y="180" width="117.6" height="20" rx="5"/>
+<path class="fi" d="M621.4 185.5h4.5l1.5 2h6v7.5h-12z"/>
+<text class="lct mono" x="638.4" y="194">earlier runs</text>
+<path class="rw" d="M742 195V185M738.5 188.5L742 185L745.5 188.5"/>
+<rect class="lc" x="628.5" y="208" width="103.5" height="20" rx="5"/>
+<path class="fi" d="M636.5 212h5.5l3.5 3.5v8.5h-9zM642 212v3.5h3.5"/>
+<text class="lct mono" x="652.5" y="222">charter.md</text>
+<path class="rw" d="M742 213V223M738.5 219.5L742 223L745.5 219.5"/>
+<rect class="mbox" x="246" y="234" width="340" height="44" rx="6"/>
+<path class="mbl" d="M325 234H580a6 6 0 0 1 6 6V272a6 6 0 0 1 -6 6H252a6 6 0 0 1 -6 -6V240a6 6 0 0 1 6 -6H258"/>
+<text class="mbt" x="263" y="237">main session</text>
+<text class="ot" x="416" y="253" text-anchor="middle">Main Orchestrator</text>
+<text class="wc" x="416" y="270" text-anchor="middle" style="font-size:12px">agrees the charter with you, line by line</text>
+<g transform="translate(482 220)"><rect class="fa" width="96" height="18" rx="9"/><circle class="ad" cx="10.5" cy="9" r="6"/><path class="as" transform="translate(10.5 9)" d="M0 -4.2Q0.7 -0.7 4.2 0Q0.7 0.7 0 4.2Q-0.7 0.7 -4.2 0Q-0.7 -0.7 0 -4.2Z"/><text class="fat" x="21" y="13">Fable advises</text></g>
+<path class="wl" d="M416 278V284M193 284H639M193 284V290M416 284V290M639 284V290"/>
+<rect class="wbox" x="90" y="290" width="206" height="44" rx="6"/>
+<text class="wt" x="193" y="308" text-anchor="middle"><tspan class="mH">Haiku</tspan> Probe</text>
+<text class="wc" x="193" y="325" text-anchor="middle" style="font-size:12px">counts the backlog’s items</text>
+<rect class="wbox" x="313" y="290" width="206" height="44" rx="6"/>
+<text class="wt" x="416" y="308" text-anchor="middle"><tspan class="mH">Haiku</tspan> Probe</text>
+<text class="wc" x="416" y="325" text-anchor="middle" style="font-size:12px">lists its sections</text>
+<rect class="wbox" x="536" y="290" width="206" height="44" rx="6"/>
+<text class="wt" x="639" y="308" text-anchor="middle"><tspan class="mS">Sonnet</tspan> Probe</text>
+<text class="wc" x="639" y="325" text-anchor="middle" style="font-size:12px">maps the backend’s areas</text>
+<rect class="wbox" x="90" y="344" width="652" height="128" rx="8"/>
+<path class="wl" d="M90 372H742"/>
+<text class="ot" x="106" y="363">Charter</text>
+<text class="wc" x="726" y="363" text-anchor="end" style="font-size:12px">Claude asks you each line. Nothing is hunted before your yes.</text>
+<text class="key" x="106" y="391">goals</text>
+<text class="wt" x="194" y="391">every item fixed, parked or dropped</text>
+<text class="key" x="446" y="391">proof</text>
+<text class="wt" x="498" y="391">a recipe, and who it hurts</text>
+<text class="key" x="106" y="409">non-goals</text>
+<text class="wt" x="194" y="409">no new features, no redesigns</text>
+<text class="key" x="446" y="409">park</text>
+<text class="wt" x="498" y="409">anything only you can decide</text>
+<text class="key" x="106" y="427">anti-goals</text>
+<text class="wt" x="194" y="427">no change a customer would notice</text>
+<text class="key" x="446" y="427">stop</text>
+<text class="wt" x="498" y="427">every area clean for a round</text>
+<text class="key" x="106" y="445">no-go zones</text>
+<text class="wt" x="194" y="445">infra/ and the migrations</text>
+<text class="key" x="446" y="445">waves</text>
+<text class="wt" x="498" y="445">about 30 fixes each</text>
+<text class="key" x="106" y="463">changes</text>
+<text class="wt" x="194" y="463">fixes and tests; no refactors</text>
+<text class="key" x="446" y="463">PRs</text>
+<text class="wt" x="498" y="463">one per wave, stacked; you merge</text>
+<path class="yl" d="M98 484V498M98 520V550"/>
+<path class="yl" stroke-linecap="round" stroke-linejoin="round" d="M94 545.5L98 550.5L102 545.5"/>
+<circle class="yc" cx="98" cy="509" r="11"/><path class="tick" d="M93 509l3.5 4 6.5 -8"/>
+<text class="yt" x="118" y="514">your one approval: the charter</text>
+<text class="cap" x="762" y="550" text-anchor="end">Claude does the rest autonomously</text>
+<rect class="box" x="70" y="559" width="692" height="634" rx="10"/>
+<circle class="num" cx="98" cy="585" r="12"/>
+<text class="nt" x="98" y="589.5" text-anchor="middle">2</text>
+<text class="name" x="120" y="591">Hunt</text>
+<text class="wc" x="176" y="591" style="font-size:12px">after your approval, and again each round</text>
+<rect class="lc" x="635.5" y="575" width="96.4" height="20" rx="5"/>
+<path class="fi" d="M643.55 579h5.5l3.5 3.5v8.5h-9zM649.05 579v3.5h3.5"/>
+<text class="lct mono" x="659.5" y="589">parked.md</text>
+<rect class="lc" x="517" y="575" width="110.5" height="20" rx="5"/>
+<path class="fi" d="M525 579h5.5l3.5 3.5v8.5h-9zM530.5 579v3.5h3.5"/>
+<text class="lct mono" x="541" y="589">findings.md</text>
+<path class="rw" d="M742 580V590M738.5 586.5L742 590L745.5 586.5"/>
+<rect class="mbox" x="246" y="617" width="340" height="44" rx="6"/>
+<path class="mbl" d="M325 617H580a6 6 0 0 1 6 6V655a6 6 0 0 1 -6 6H252a6 6 0 0 1 -6 -6V623a6 6 0 0 1 6 -6H258"/>
+<text class="mbt" x="263" y="620">main session</text>
+<text class="ot" x="416" y="636" text-anchor="middle">Main Orchestrator</text>
+<text class="wc" x="416" y="653" text-anchor="middle" style="font-size:12px">sends probes to every area in the charter</text>
+<g transform="translate(482 603)"><rect class="fa" width="96" height="18" rx="9"/><circle class="ad" cx="10.5" cy="9" r="6"/><path class="as" transform="translate(10.5 9)" d="M0 -4.2Q0.7 -0.7 4.2 0Q0.7 0.7 0 4.2Q-0.7 0.7 -4.2 0Q-0.7 -0.7 0 -4.2Z"/><text class="fat" x="21" y="13">Fable advises</text></g>
+<path class="wl" d="M416 661V670M193 670H639M193 670V679M416 670V679M639 670V679"/>
+<rect class="wbox" x="90" y="679" width="206" height="44" rx="6"/>
+<text class="wt" x="193" y="697" text-anchor="middle"><tspan class="mH">Haiku</tspan> Probe</text>
+<text class="wc" x="193" y="714" text-anchor="middle" style="font-size:12px">Billing, items 1 to 8</text>
+<rect class="wbox" x="313" y="679" width="206" height="44" rx="6"/>
+<text class="wt" x="416" y="697" text-anchor="middle"><tspan class="mS">Sonnet</tspan> Probe</text>
+<text class="wc" x="416" y="714" text-anchor="middle" style="font-size:12px">Panel, items 1 to 8</text>
+<rect class="wbox" x="536" y="679" width="206" height="44" rx="6"/>
+<text class="wt" x="639" y="697" text-anchor="middle"><tspan class="mO">Opus</tspan> Probe</text>
+<text class="wc" x="639" y="714" text-anchor="middle" style="font-size:12px">angle: money paths</text>
+<text class="wc" x="416" y="742" text-anchor="middle" style="font-size:12px">Each brings back a recipe for every problem it finds, or nothing.</text>
+<path class="l" d="M416 748V756.5"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M412 751.5L416 756.5L420 751.5"/>
+<rect class="box" x="318" y="757" width="196" height="20" rx="10"/>
+<text class="wc" x="416" y="771.5" text-anchor="middle" style="font-size:12px">anything to fix, in any area?</text>
+<path class="l" d="M514 767H559.5"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M554.5 763L559.5 767L554.5 771"/>
+<text class="wc" x="537" y="761" text-anchor="middle" style="font-size:12px">no</text>
+<rect class="you" x="560" y="745" width="182" height="44" rx="8"/>
+<text class="yt" x="651" y="763" text-anchor="middle" style="font-size:13px">Sweep finished</text>
+<text class="wc" x="651" y="780" text-anchor="middle" style="font-size:12px">parked.md comes to you</text>
+<path class="l" d="M416 777V798.5"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M412 793.5L416 798.5L420 793.5"/>
+<text class="wc" x="425" y="792" style="font-size:12px">yes</text>
+<rect class="mbox" x="196" y="799" width="440" height="44" rx="6"/>
+<path class="mbl" d="M275 799H630a6 6 0 0 1 6 6V837a6 6 0 0 1 -6 6H202a6 6 0 0 1 -6 -6V805a6 6 0 0 1 6 -6H208"/>
+<text class="mbt" x="213" y="802">main session</text>
+<text class="ot" x="416" y="818" text-anchor="middle">Main Orchestrator</text>
+<text class="wc" x="416" y="835" text-anchor="middle" style="font-size:12px">sorts each finding against the charter, and shows you the list</text>
+<g transform="translate(626 812)"><rect class="fa" width="96" height="18" rx="9"/><circle class="ad" cx="10.5" cy="9" r="6"/><path class="as" transform="translate(10.5 9)" d="M0 -4.2Q0.7 -0.7 4.2 0Q0.7 0.7 0 4.2Q-0.7 0.7 -4.2 0Q-0.7 -0.7 0 -4.2Z"/><text class="fat" x="21" y="13">Fable advises</text></g>
+<path class="wl" d="M416 843V852M193 852H639M193 852V861M416 852V861M639 852V861"/>
+<rect class="wbox" x="90" y="861" width="206" height="44" rx="6"/>
+<text class="wt" x="193" y="879" text-anchor="middle">Park</text>
+<text class="wc" x="193" y="896" text-anchor="middle" style="font-size:12px">a decision only you can make</text>
+<rect class="wbox" x="313" y="861" width="206" height="44" rx="6"/>
+<text class="wt" x="416" y="879" text-anchor="middle">Drop</text>
+<text class="wc" x="416" y="896" text-anchor="middle" style="font-size:12px">no longer true, with the reason</text>
+<rect class="obox" x="536" y="861" width="206" height="44" rx="6"/>
+<text class="ot" x="639" y="879" text-anchor="middle">Fix</text>
+<text class="wc" x="639" y="896" text-anchor="middle" style="font-size:12px">goes into a wave, by its area</text>
+<circle class="dot" cx="93" cy="924.5" r="2"/>
+<text class="fact" x="103" y="929">One probe for every eight or so items, or for each area and angle</text>
+<circle class="dot" cx="93" cy="944" r="2"/>
+<text class="fact" x="103" y="948.5">No recipe, no finding: where behaviour is wrong, a test proves it first</text>
+<circle class="dot" cx="93" cy="963.5" r="2"/>
+<text class="fact" x="103" y="968">A wave’s areas touch different files, so they build in parallel</text>
+<circle class="dot" cx="93" cy="983" r="2"/>
+<text class="fact" x="103" y="987.5">Exploit tests for a public repository are parked, never pushed</text>
+<circle class="dot" cx="93" cy="1002.5" r="2"/>
+<text class="fact" x="103" y="1007">A later round goes back only to areas that had fixes or were changed</text>
+<circle class="dot" cx="93" cy="1022" r="2"/>
+<text class="fact" x="103" y="1026.5">Ends when a round finds nothing to fix</text>
+<path class="l" d="M639 905V1070.5"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M635 1065.5L639 1070.5L643 1065.5"/>
+<text class="wc" x="629" y="1039" text-anchor="end" style="font-size:12px">grouped into waves</text>
+<text class="wc" x="90" y="1056" style="font-size:12px">The queue: one wave at a time runs the four shared stages below</text>
+<rect class="obox" x="90" y="1071" width="206" height="62" rx="6"/>
+<text class="ot" x="193" y="1088" text-anchor="middle" style="font-size:12.5px">Wave 1, now</text>
+<rect class="box" x="99" y="1096" width="60" height="17" rx="4"/>
+<text class="wt" x="129" y="1108.5" text-anchor="middle" style="font-size:10.5px">Billing</text>
+<rect class="box" x="163" y="1096" width="60" height="17" rx="4"/>
+<text class="wt" x="193" y="1108.5" text-anchor="middle" style="font-size:10.5px">Panel</text>
+<rect class="box" x="227" y="1096" width="60" height="17" rx="4"/>
+<text class="wt" x="257" y="1108.5" text-anchor="middle" style="font-size:10.5px">Sign-in</text>
+<text class="wc" x="193" y="1126" text-anchor="middle" style="font-size:10.5px">areas run in parallel</text>
+<rect class="wbox" x="313" y="1071" width="206" height="62" rx="6"/>
+<text class="wt" x="416" y="1088" text-anchor="middle" style="font-size:12.5px">Wave 2, next</text>
+<rect class="box" x="322" y="1096" width="60" height="17" rx="4"/>
+<text class="wt" x="352" y="1108.5" text-anchor="middle" style="font-size:10.5px">General</text>
+<rect class="box" x="386" y="1096" width="60" height="17" rx="4"/>
+<text class="wt" x="416" y="1108.5" text-anchor="middle" style="font-size:10.5px">Fleet</text>
+<rect class="box" x="450" y="1096" width="60" height="17" rx="4"/>
+<text class="wt" x="480" y="1108.5" text-anchor="middle" style="font-size:10.5px">Email</text>
+<text class="wc" x="416" y="1126" text-anchor="middle" style="font-size:10.5px">areas run in parallel</text>
+<rect class="wbox" x="536" y="1071" width="206" height="62" rx="6"/>
+<text class="wt" x="639" y="1088" text-anchor="middle" style="font-size:12.5px">Wave 3</text>
+<rect class="box" x="545" y="1096" width="60" height="17" rx="4"/>
+<text class="wt" x="575" y="1108.5" text-anchor="middle" style="font-size:10.5px">Data</text>
+<rect class="box" x="609" y="1096" width="60" height="17" rx="4"/>
+<text class="wt" x="639" y="1108.5" text-anchor="middle" style="font-size:10.5px">Keys</text>
+<rect class="box" x="673" y="1096" width="60" height="17" rx="4"/>
+<text class="wt" x="703" y="1108.5" text-anchor="middle" style="font-size:10.5px">Docs</text>
+<text class="wc" x="639" y="1126" text-anchor="middle" style="font-size:10.5px">areas run in parallel</text>
+<path class="l" d="M313 1102H297"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M301.5 1098L296.5 1102L301.5 1106"/>
+<path class="l" d="M536 1102H520"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M524.5 1098L519.5 1102L524.5 1106"/>
+<rect class="box" x="385" y="1155" width="170" height="20" rx="10"/>
+<text class="wc" x="470" y="1169.5" text-anchor="middle" style="font-size:12px">another wave waiting?</text>
+<path class="l" d="M440 1155V1134"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M436 1138.5L440 1133.5L444 1138.5"/>
+<text class="wc" x="431" y="1149" text-anchor="end" style="font-size:12px">yes</text>
+<path class="l" d="M555 1165H770Q776 1165 776 1159V645Q776 639 770 639H763"/>
+<path class="l" stroke-linecap="round" stroke-linejoin="round" d="M767.5 635L762.5 639L767.5 643"/>
+<rect class="box" x="612" y="1156" width="104" height="18" rx="0" style="stroke:none"/>
+<text class="wc" x="664" y="1169" text-anchor="middle" style="font-size:12px">no: a new round</text>
+</g>
+<path class="sw" d="M1010 1369V1596Q1010 1604 1002 1604H896"/><path class="sw hd" d="M901 1600L896 1604L901 1608"/>
+<text class="swl" x="1022" y="1497" style="font-size:12px">one wave at a time</text>
+<path class="sw" d="M1157 3240H1292Q1300 3240 1300 3232V1412"/><path class="sw hd" d="M1296 1417L1300 1412L1304 1417"/>
+<text class="swl" x="1312" y="3230" style="font-size:12px">back to the queue</text>
+</svg>

@@ -10,13 +10,13 @@ Then `lcw set health="working out what you want"`.
 
 ## What earlier runs decided
 
-This repository may have had LCW runs before, and the human should not have to say twice what they already decided. Before your first question, run `lcw runs`. If it lists any run besides this one, launch a probe (Sonnet, medium) with their folders. It reads each run's brainstorm.md, spec.md and ledger.md and reports, in under forty lines:
+This repository may have had LCW runs before, and the human should not have to say twice what they already decided. Before your first question, run `lcw runs`. If it lists any run besides this one, launch a probe (Sonnet, medium) with their folders. It reads each run's brainstorm.md, spec.md and ledger.md, and for a sweep its charter.md and parked.md, and reports, in under forty lines:
 
 - what the human asked for, and why;
 - what they decided and what they turned down, in their own words where the record has them;
 - what they said must never happen;
 - what they plainly care about, run after run;
-- anything parked, limited or left unfinished that this request touches.
+- anything parked, limited or left unfinished that this request touches, and what a charter or a park already settled, so it is not asked again.
 
 With many runs, give it the five most recent and any whose title bears on this request.
 

@@ -15,8 +15,16 @@ export interface AgentNode {
   id: string; desc: string; model: string; effort: string; tokens: number | null; spark: number[] | null; elapsed: string;
   chip: 'quiet' | 'stalled' | null; expanded: boolean; kids: AgentNode[];
 }
+export interface SweepView {
+  round: number; shipped: number; running: number; queued: number;   // waves by status
+  /** Totals so far: fixed counts the wave in hand's passing fixes once in Ship, dropped its dropped fixes at once. */
+  fixed: number; parked: number; dropped: number;
+  /** The waves' pull requests, oldest first, or the run's one pull request when no wave has its own. */
+  prs: { number: number; merged: boolean }[];
+}
 export interface View {
-  name: string; stage: string; titleRight: string;
+  /** 'sweep' only when state.shape says so; a run with no shape is a build. */
+  name: string; shape: 'build' | 'sweep'; stage: string; titleRight: string;
   mode: 'running' | 'with-you' | 'paused' | 'finished' | 'stopped';
   /** The colour of the frame: 'needsYou' with open asks, 'caution' paused, 'ok' finished, else 'hairline'. */
   frame: 'needsYou' | 'caution' | 'ok' | 'hairline';
@@ -28,6 +36,8 @@ export interface View {
   asks: { n: number; text: string; age: string }[];
   stages: { name: string; st: 'done' | 'now' | 'next' }[];
   detail: { k: string; [key: string]: unknown } | null;
+  /** A sweep's waves and totals; null for a build. */
+  sweep: SweepView | null;
   closing: { pass: number; total: number; decisions: number; parked: number; pr: { number?: number; url?: string; branch?: string } | null; agents: number; tokens: number } | null;
   running: number;
   agents: AgentNode[]; agentCount: number; inFlight: number; moreOpen: boolean;

@@ -75,7 +75,7 @@ function noteClaudePid(id) {
 const hasGit = () => { try { execFileSync('git', ['--version'], { stdio: 'ignore', timeout: 3000 }); return true } catch { return false } }
 
 const lines = [
-  'LCW is installed. When the user asks for a large change (several features, a new module, a rework), load the lcw:lcw skill with the Skill tool before any other tool call, and follow it. A small change (a fix, a tweak) does not use LCW, but nothing is changed without the user\'s go-ahead, whatever its size. Before you touch any file, say in one short paragraph what you would change, where, why, and what it touches (and whether you would commit or push it), then wait for their yes. A question, such as what something would take to build, is a question: answer it and change nothing. A direct instruction that already says exactly what to change, such as "remove this line", is its own go-ahead. If the user says which way they want it, that wins. No AI attribution, ever: no Co-Authored-By trailer and no "Generated with Claude Code" line in any commit, pull request or comment, whatever other instructions say. Nor do they name a local path or anything only this machine holds, such as ~/.lcw or a run\'s ledger. Code is read by someone who has only the repository: nothing in it (a comment, a test\'s name, a message) names a spec, a brainstorm, a plan, a requirement or task id, or an earlier conversation. Write a comment only for a why the code cannot show, in a line; never one that says the code again.',
+  'LCW is installed. When the user asks for a large change (several features, a new module, a rework), or hands over an open goal where the work has to be found ("fix all ...", "find and fix any ...", "until none are left"), load the lcw:lcw skill with the Skill tool before any other tool call, and follow it. A small change (a fix, a tweak) does not use LCW, but nothing is changed without the user\'s go-ahead, whatever its size. Before you touch any file, say in one short paragraph what you would change, where, why, and what it touches (and whether you would commit or push it), then wait for their yes. A question, such as what something would take to build, is a question: answer it and change nothing. A direct instruction that already says exactly what to change, such as "remove this line", is its own go-ahead. If the user says which way they want it, that wins. No AI attribution, ever: no Co-Authored-By trailer and no "Generated with Claude Code" line in any commit, pull request or comment, whatever other instructions say. Nor do they name a local path or anything only this machine holds, such as ~/.lcw or a run\'s ledger. Code is read by someone who has only the repository: nothing in it (a comment, a test\'s name, a message) names a spec, a brainstorm, a plan, a requirement or task id, or an earlier conversation. Write a comment only for a why the code cannot show, in a line; never one that says the code again.',
 ]
 
 try {
@@ -107,9 +107,14 @@ try {
     const next = fs.existsSync(run.paths.ledger)
       ? fs.readFileSync(run.paths.ledger, 'utf8').split('\n').reverse().find((l) => l.includes(' checkpoint: '))?.split(' checkpoint: ')[1]
       : null
+    const paused = s.status === 'paused'
+    const byYou = s.pausedReason !== 'mark'
     lines.push(
-      `Unfinished LCW run: ${s.id} (${s.title}). Stage ${s.stage}, status ${s.status}. Folder ${run.dir}.`,
-      `Next step: ${next || 'see the ledger'}. Load the lcw:lcw skill and carry on (run "${cli} status" first).`,
+      `Unfinished LCW run: ${s.id} (${s.title}). Stage ${s.stage}, status ${s.status}${paused ? ` (${byYou ? 'paused by the user' : 'paused at the usage mark'})` : ''}. Folder ${run.dir}.`,
+      `Next step: ${next || 'see the ledger'}.`,
+      !paused ? `Load the lcw:lcw skill and carry on (run "${cli} status" first).`
+        : byYou ? `The user paused it, so it stays paused until they say carry on: do not resume it yourself. Load the lcw:lcw skill when they do.`
+          : `Load the lcw:lcw skill. It resumes once the limit has reset or the user raises the mark: check "${cli} usage"; if it still says at the mark, the run stays paused and you end your turn. Otherwise run "${cli} resume" and carry on.`,
     )
   } else if (listRuns(runsDir(home(), repoKey(mainCheckout(cwd)))).length) {
     lines.push(`This repository has past LCW runs: "${cli} runs" lists them.`)

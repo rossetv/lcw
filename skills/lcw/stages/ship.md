@@ -36,9 +36,11 @@ Leave the branch, `lcw finish --branch lcw/<name>`, and tell the human the branc
 
 Once the pull request is open, this machine holds nothing it needs: the branch is on GitHub. Clean up what the run left behind, and keep the run folder under ~/.lcw, since later runs read it.
 
+In a sweep this part runs once, when the sweep ends, never after a wave. Step 2 compares HEAD with the remote branch it was pushed to: `lcw/<name>` only in one at the end, and in stacked or merged as it goes, where `lcw/<name>` is never pushed, the branch of the last wave that was pushed, `lcw/<name>-wave-<n>`, and its remote, since an empty wave has no remote branch. Where no wave was pushed, since none had commits (in every pull request choice), `git rev-list --count <default branch>..HEAD` must print 0 instead. Step 3 removes every local wave branch too.
+
 1. Leave the worktree: call ExitWorktree with action "keep". The session is back in the main checkout, where a new run can start.
 2. Check that nothing would be lost. `git -C <worktree> status --porcelain --untracked-files=all` must print nothing, `git -C <worktree> ls-files --others --ignored --exclude-standard --directory` must print nothing (`git worktree remove` deletes ignored files, such as a `.env`, without asking), and `git -C <worktree> rev-parse HEAD` must equal `git rev-parse origin/lcw/<name>`. If any check fails, remove nothing, and tell the human what is left in the worktree.
-3. Remove the worktree with `git worktree remove <worktree>`, then the local branch with `git branch -D lcw/<name>`. The `-D` is needed because the branch is not in the local default branch yet; the pushed copy is the one that counts.
+3. Remove the worktree with `git worktree remove <worktree>`, then the local branch with `git branch -D lcw/<name>` (in a sweep, and each `lcw/<name>-wave-<n>`). The `-D` is needed because the branch is not in the local default branch yet; the pushed copy is the one that counts.
 4. Delete the temporary files the run made outside the repository, such as its scratchpad files and the pull request's body file.
 
 Tell the human it is cleaned up, and that `gh pr checkout <number>` brings the branch back if they want to look at it locally.
@@ -48,3 +50,41 @@ With no remote, the branch is the only copy of the change. Check only that the w
 If the human then has you merge the pull request, delete its branch on GitHub as well (`gh pr merge --delete-branch`), then run `git fetch --prune` and bring the main checkout up to date: when it is on the default branch and `git status --porcelain --untracked-files=no` prints nothing, `git pull --ff-only`. If it is on another branch, has uncommitted changes or cannot fast-forward, leave it as it is and tell the human why. A merge the human makes on GitHub needs nothing here: `lcw worktree` brings the main checkout up to date when the next run starts.
 
 What the human asks for next is a new request: a large one is a new run, and a small one is made only on their go-ahead, as SKILL.md says.
+
+## In a sweep
+
+A wave ships to the sweep's branch, in the way charter.md picks for its pull requests (`lcw status` prints the choice). The worktree and every branch stay until the sweep ends: a wave does none of "Afterwards: clean up", and records no closing counts, since `lcw wave shipped` keeps the sweep's totals. With the worktree clean, as above, `lcw set health="writing wave <n>'s pull request"`, or `health="landing wave <n>"` where the choice is one at the end or the wave opens none:
+
+**A wave with no commits** (every fix dropped or parked: `git rev-list --count lcw/<name>..HEAD` prints 0) has nothing to push, whatever the choice: `lcw wave shipped`, with no push and no pull request.
+
+**Stacked, or merged as it goes.** The wave pushes its own branch, never `lcw/<name>`, which these two never push. Write the text as above, from charter.md, the wave's fixes in findings.md and the ledger, then:
+
+```
+git push -u origin lcw/<name>-wave-<n>
+gh pr create --draft --head lcw/<name>-wave-<n> --base <base> --title "<title>" --body-file <file>
+lcw wave shipped --pr <number>
+```
+
+Between the push and the pull request, check (here and anywhere else this file compares HEAD with a remote branch, in a sweep) that `git rev-parse HEAD` equals `git rev-parse origin/lcw/<name>-wave-<n>`. The base is the branch of the last earlier wave that has an unmerged pull request (`gh pr view <number> --json state`), else the default branch.
+
+If the push or the pull request needs something only the human can give (the token has no write access, say), run `lcw wave shipped` with no `--pr`, `lcw ask` it as SKILL.md says, and carry on with the next wave's Plan, Build and Review, after `lcw set health="wave <n> waits on your answer; wave <n+1> is being planned"`. Its push and pull request wait for the answer, and so do those of every later wave, since each is stacked on it: each of those ships with `lcw wave shipped` alone. Once the human answers, push them and open their pull requests in order, each against the base above, and record each with `lcw wave pr <n> <url>`. The check before each pull request compares the wave's own branch, `git rev-parse lcw/<name>-wave-<n>`, with its remote, not HEAD, which is by then on a later wave.
+
+**Merged as it goes**, then: go through the shipped waves not yet merged, in order, passing over a wave with no commits (`lcw status` shows it empty). The first wave that falls short stops the pass: it stays open, with every wave after it, until a pass finds it meets the charter's criteria. Each pass looks at every one of them again, from the first; only a second "gh could not merge" and "merged into another branch" below leave a wave open for good. A wave whose pull request waits on the human's answer falls short.
+
+Where the criteria name GitHub's checks, a pass after a wave ships only looks (`gh pr checks <number> -R <repo>`, never `--watch`) and never waits; at the end, wait for them with the Monitor tool (a plain foreground sleep is refused), an until-loop on `gh pr checks <number> -R <repo>` that ends when none is pending, in waits of up to 10 minutes each, at most an hour for the whole end pass, not an hour for each wave; "no checks reported" within 10 minutes of the pull request being opened or reopened means look again, after that the checks count as none, and none run, all skipped, or still running when the hour runs out is not passed.
+
+A wave whose checks have not passed, or that misses any other criterion, falls short. One that meets them all: `lcw merge <wave>`, and act on what it says.
+
+- **Merged.** `lcw set health="wave <n>'s PR #<number> merged: it met your charter's rule"`. The next pull request is now against the default branch, which starts none of its checks: where the criteria name checks, `gh pr close <number>` and `gh pr reopen <number>` it so they run. Go on to the next wave.
+- **Based on another branch** (an earlier wave's branch was not deleted, so GitHub did not retarget it; it prints a `gh pr edit` command): run that command, close and reopen the pull request where the criteria name checks, and look at the wave again from its checks, not straight at the merge; if `lcw merge` says so again, the wave stays open.
+- **Not merged yet** (a merge queue, or GitHub waiting on checks): it is still waiting, and the pass stops there. The next pass and the end look at it again; `lcw merge <wave>` records it once GitHub shows it merged.
+- **gh could not merge** (a conflict, a required review, required checks still running): `lcw ledger "wave <n>: gh could not merge: <gh's words>"`, and the pass stops there. The next pass, or the end, tries it once more; if that fails too (the ledger shows whether it failed so in an earlier pass), it stays open, with every wave after it, and the end report gives gh's words.
+- **gh could not read #N**: the pass stops there; the next pass tries it again, and the end counts it as gh could not merge.
+- **Wave <m> is not merged yet; waves merge in order**: merge wave <m> first; the pass goes in order, so it comes to it first anyway.
+- **Merged into another branch** than the default one: its changes have not landed and it needs the human. It stays open, with every wave after it, and the end report says why.
+
+In every other case LCW does not read or act on CI.
+
+**One at the end**, or no GitHub remote: no push and no pull request, and no wave branch is pushed until the sweep ends; `lcw wave shipped`. With no remote, note it in the ledger; the end of the sweep tells the human.
+
+Then, if the charter's earlier end is reached (a number of waves, a share of the week from `lcw usage`), go to stages/hunt.md and do "Ending the sweep"; it ends with "Afterwards: clean up" below. Otherwise, if `lcw status` shows another wave queued, `lcw stage Plan` and `lcw checkpoint "Plan: read stages/plan.md and plan wave <n+1>"`; if none, `lcw stage Hunt` and `lcw checkpoint "Hunt: read stages/hunt.md and start round <r+1>"`. End your turn.

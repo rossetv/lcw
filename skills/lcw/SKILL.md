@@ -1,6 +1,6 @@
 ---
 name: lcw
-description: Large Change Workflow. Use when the user asks for a large change (several features, a new module, a rework) - it captures what they really mean, then plans, builds, reviews and ships it as a draft pull request on its own. Not for a small change such as a fix or a tweak; that needs no run, only the human's go-ahead. If the user says which way they want it, that wins.
+description: Large Change Workflow. Use when the user asks for a large change (several features, a new module, a rework), or hands over an open goal where the work has to be found ("fix all the backlog items", "find and fix any bugs", "until none are left") - it captures what they really mean, then plans, builds, reviews and ships it as draft pull requests on its own. Not for a small change such as a fix or a tweak; that needs no run, only the human's go-ahead. If the user says which way they want it, that wins.
 user-invocable: false
 ---
 
@@ -8,7 +8,17 @@ user-invocable: false
 
 LCW takes a large change from an idea to a draft pull request. The human says what they want; you work out what they really mean, write it down as a spec, and then build it without supervision. They come back to a draft pull request.
 
-What matters most, in this order: capturing the human's intent; a spec that says that intent and nothing else (WHAT, never code); and, while building, never coasting. The human owns WHAT, you own HOW, unless they say otherwise about a particular thing.
+What matters most, in this order: capturing the human's intent; a spec that says that intent and nothing else (WHAT, never code); and, while building, never coasting. In a sweep the charter takes the spec's place: its boundaries hold for the whole sweep, nothing is fixed that was not shown to be a real problem, and nothing the human should decide is guessed. The human owns WHAT, you own HOW, unless they say otherwise about a particular thing.
+
+## Two shapes
+
+From the human's words, decide which of three they ask for. There is no command for them to type.
+
+- A small change (a fix, a tweak): no run. See the end of this file.
+- A Build: a defined large change, one you can say before you start. One brainstorm, one spec, one draft pull request.
+- A Sweep: an open goal, where the work has to be found first: "fix all the backlog items", "find and fix any security holes", "until none are left". You agree a charter with the human, hunt for problems, and fix what you find in waves until none is left.
+
+If the human names a shape, that wins. If you cannot tell a Build from a Sweep, ask one short question, such as "One change, or should I hunt for every case and fix them in waves?".
 
 `lcw` below means the command line the session-start hook printed (`node <plugin>/scripts/lcw.mjs`). Run it from the shell; from a script, pass each argument that holds spaces or quotes as a `${}` value of the `$` template, since a command with escaped quotes inside a string can be refused. It is how everything is recorded, and the status bar shows only what you record, so record as things happen, not in a batch at the end.
 
@@ -42,42 +52,46 @@ Whoever writes a document for people, you or a worker, loads the `lcw:docs` skil
 
 ## The advisor
 
-If this session has an advisor (the human turns it on with `claude --advisor fable`), consult it at every stage: before a big step, when you are stuck, and before you call anything done. That means before the playback you ask the human to approve, before you take the spec, the plan, the build or the review as finished, and before you open the pull request. Weigh what it says as a senior colleague's view: act on what is real, and write in the ledger any decision it changed. With no advisor, carry on without one.
+If this session has an advisor (the human turns it on with `claude --advisor fable`), consult it at every stage: before a big step, when you are stuck, and before you call anything done. That means before the playback or the charter you ask the human to approve, before you take the spec, the plan, the build or the review as finished, and before you open the pull request. Weigh what it says as a senior colleague's view: act on what is real, and write in the ledger any decision it changed. With no advisor, carry on without one.
 
 Only you consult the advisor. Agents never do, and their own files tell them so: a call of theirs sends the agent's whole context to the advisor and holds the agent up for minutes. A doubt in an agent's report is yours to settle, with the advisor when it is a hard call.
 
 ## Starting, or carrying on
 
-If the session-start context named a run for this session, or you were just compacted, or the session restarted: run `lcw status`, read the stage file for the stage it shows, and carry on from its next step and the ledger. Once the run has a worktree (`lcw status` shows it), make sure you are working in it; if not, call EnterWorktree with its path first. Do not start again and do not ask the human what was happening.
+If the session-start context named a run for this session, or you were just compacted, or the session restarted: run `lcw status`, read the stage file for the stage it shows, and carry on from its next step and the ledger. For a sweep, `lcw status` also shows the charter's pull request choice, the round, each wave (shipped, running or queued) and the totals; with charter.md, that is all you need to carry on. Once the run has a worktree (`lcw status` shows it), make sure you are working in it; if not, call EnterWorktree with its path first. If `lcw status` shows the run paused by the human, it stays paused until they say carry on: do not resume it yourself. Do not start again and do not ask the human what was happening.
 
-Otherwise start a run: `lcw start <name> --title "<one line>"`, where name is a short kebab-case slug of the change (it becomes the branch `lcw/<name>`). It prints the run folder, the paths of brainstorm.md, spec.md, plan.md and ledger.md, and the artifacts folder.
+Otherwise start a run: `lcw start <name> --title "<one line>"` for a Build, `lcw start <name> --title "<one line>" --shape sweep` for a Sweep, where name is a short kebab-case slug of the change (it becomes the branch `lcw/<name>`). It prints the run folder, the paths of its records (below) and the artifacts folder.
 
-One session drives one run. For a second large change at the same time, tell the human to open another session and ask there. A new session in the same repository takes a run over only when the person presses Resume on LCW's unfinished-run box (`lcw take <runId>`); then carry on from the run's next step in its worktree, as above.
+One session drives one run, of either shape, and `lcw start` refuses while the session drives an unfinished run. A sweep lives in this open session for all its waves; nothing carries it on in the background. For a second run at the same time, a Build or a Sweep, tell the human to open another session and ask there. A new session in the same repository takes a run over only when the person presses Resume on LCW's unfinished-run box (`lcw take <runId>`); then carry on from the run's next step in its worktree, as above.
 
 ## The stages
 
-Brainstorm, Spec, Plan, Build, Review, Ship. Move with `lcw stage <Stage>` (capitalised). At the start of each stage, and after every compaction, read `stages/<stage>.md` (lower case, e.g. `stages/build.md`) from this skill's base directory. Read `models.md` there before you launch any agent.
+A Build: Brainstorm, Spec, Plan, Build, Review, Ship. A Sweep: Charter, Hunt, then Plan, Build, Review and Ship once for each wave. Move with `lcw stage <Stage>` (capitalised); it accepts only the stages of the run's own shape. At the start of each stage, and after every compaction, read `stages/<stage>.md` (lower case, e.g. `stages/build.md`, `stages/charter.md`) from this skill's base directory. Read `models.md` there before you launch any agent.
 
 | Stage | Ends when |
 |---|---|
-| Brainstorm | the human approves that the intent is understood: the one approval a run needs |
+| Brainstorm | the human approves that the intent is understood: the one approval a Build needs |
 | Spec | the blind review and the feasibility review both pass |
+| Charter | the human approves the charter: the one approval a Sweep needs |
+| Hunt | every finding is sorted into Fix, Park or Drop and the fixes are queued as waves; or nothing is left to fix, and the sweep finishes as the charter's stop line says |
 | Plan | plan.md is written, tasks are recorded and you are in the run's worktree |
-| Build | every task is done or parked and the run branch works |
+| Build | every task is done, parked or dropped and the run branch works |
 | Review | a review round leaves nothing you decide to change |
 | Ship | the draft pull request is open |
 
+In a sweep, the last four rows hold for each wave, with its own plan, and Ship ends when the wave has landed on the sweep's branch `lcw/<name>`. Then the next queued wave starts at Plan, or, with none queued, a new round starts at Hunt.
+
 ## Records
 
-The run folder lives outside the repository (under ~/.lcw), so nothing in it is ever committed. You write brainstorm.md, spec.md and plan.md there with the file tools. Anything else the run makes that is not part of the change itself (a mock, a diagram, sample data, what the probes found) goes in its `artifacts/` folder, never in the repository. Only `lcw` writes state.json and ledger.md. `lcw runs` lists this repository's past runs with their folders. The brainstorm reads them before its first question, they help settle what a spec leaves open, and the human may refer to them at any time. A probe does the reading, not you.
+The run folder lives outside the repository (under ~/.lcw), so nothing in it is ever committed. You write brainstorm.md, spec.md and plan.md there with the file tools. A sweep has no brainstorm.md or spec.md: you write charter.md, findings.md, parked.md (for the human to read) and each wave's waves/<n>/plan.md. Anything else the run makes that is not part of the change itself (a mock, a diagram, sample data, what the probes found) goes in its `artifacts/` folder, never in the repository. Only `lcw` writes state.json and the ledgers: ledger.md, and in a sweep each wave's waves/<n>/ledger.md too. `lcw runs` lists this repository's past runs and sweeps with their folders. The brainstorm and the charter read them before its first question, they help settle what a spec leaves open, and the human may refer to them at any time. A probe does the reading, not you.
 
 The ledger is how a later you knows what was done and what is left. Every command that changes state adds a line; add your own with `lcw ledger "<text>"` for each decision you make on the human's behalf, with its reason.
 
-Keep `health` current with a few plain words of what is happening, such as `lcw set health="on track"` or `lcw set health="2 tasks wait on your answer, the rest carry on"`. Leave times out of it; the bar shows those.
+Keep `health` current with a few plain words of what is happening, such as `lcw set health="on track"` or `lcw set health="2 tasks wait on your answer, the rest carry on"`. Leave times out of it; the bar shows those. In a sweep, while an ask about an earlier wave is open, every `lcw set health` keeps "wave <m> waits on your answer; " in front of its words; after `lcw answer`, set the words again without it.
 
 ## Compaction
 
-`lcw checkpoint "<next step>"` asks for a compaction when your turn ends; then you are prompted to carry on. Write the next step so that a fresh you, with only `lcw status` and this skill, could act on it. Checkpoint at the end of every stage after the brainstorm (when the spec is approved, the plan is written, the build is done and the review has passed) and after each build milestone, then end your turn. The stage files say when.
+`lcw checkpoint "<next step>"` asks for a compaction when your turn ends; then you are prompted to carry on. Write the next step so that a fresh you, with only `lcw status` and this skill, could act on it. Checkpoint at the end of every stage after the brainstorm or the charter (when the spec is approved, the plan is written, the build is done and the review has passed) and after each build milestone, then end your turn. The stage files say when.
 
 ## Agents
 
@@ -85,7 +99,7 @@ Launch agents with the Agent tool and never give one a name, and do not run the 
 
 In Code Mode a launch from a script returns at once, even when you await it: the result says `async_launched` and gives the agent's id, and the agent's report comes later, as a task notification in a turn of its own. So launch the agents that go together (a milestone's workers, a round's reviewers) in one script, keep each id, and end your turn; act on each report as its notification arrives, since the notification carries the report. Do not wait for them inside a script or read their output files.
 
-What the human says to any agent counts. Ask every agent to report anything the human told it. If that changes WHAT is being built, update spec.md, the ledger and the requirements (`lcw req add`, `lcw req <id> rename "<name>"`, `lcw req <id> drop`), and tell the agents it affects; otherwise it only steered that agent.
+What the human says to any agent counts. Ask every agent to report anything the human told it. If that changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements (`lcw req add`, `lcw req <id> rename "<name>"`, `lcw req <id> drop`), and tell the agents it affects; otherwise it only steered that agent.
 
 ## When an agent stalls
 
@@ -100,16 +114,16 @@ Where an extra orchestrator launched the stalled agent, send that orchestrator t
 
 ## Asking the human
 
-After the brainstorm, you decide. Where the spec and the brainstorm leave something open, choose what serves the intent best, write it in the ledger with its reason (`lcw ledger "check: <the decision and why>"`), and carry on. Earlier runs in this repository show what matters to this human, so use them to find the right direction: look first at brainstorm.md's notes from earlier runs, and where those do not cover the question, send a probe to read the earlier brainstorms and specs (`lcw runs` lists their folders) before you choose. Only one that is risky, or that they might regret, goes in the pull request; the rest stay in the ledger. A choice between two reasonable readings is never a reason to stop them.
+After the brainstorm, or a sweep's charter, you decide. Where the spec and the brainstorm, or the charter, leave something open, choose what serves the intent best, write it in the ledger with its reason (`lcw ledger "check: <the decision and why>"`), and carry on. Earlier runs in this repository show what matters to this human, so use them to find the right direction: look first at the notes from earlier runs in brainstorm.md or charter.md, and where those do not cover the question, send a probe to read the earlier brainstorms and specs (`lcw runs` lists their folders) before you choose. Only one that is risky, or that they might regret, goes in the pull request; the rest stay in the ledger. A choice between two reasonable readings is never a reason to stop them.
 
-Go to the human in one case only: something they agreed in the brainstorm cannot be built as agreed, and you cannot get past it yourself. That is a thing that turns out impossible, so the intent itself has to change, or a thing that cannot be built without what only they can give, such as a credential, an account or a payment.
+Go to the human in one case only: something they agreed in the brainstorm or the charter cannot be done as agreed, and you cannot get past it yourself. That is a thing that turns out impossible, so the intent itself has to change, or a thing that cannot be built without what only they can give, such as a credential, an account or a payment. In a sweep, a finding only the human can decide is parked, not asked.
 
-Then use `lcw ask "<what cannot be done, why, and the ways out you see>" --waiting <number of tasks waiting>`, say it in the conversation too, and carry on with everything that does not depend on it. Several asks are numbered, oldest first, and the human answers by number in plain words; record each with `lcw answer <n> "<answer>"`. If the answer changes WHAT is being built, update spec.md, the ledger and the requirements as above.
+Then use `lcw ask "<what cannot be done, why, and the ways out you see>" --waiting <number of tasks waiting>`, say it in the conversation too, and carry on with everything that does not depend on it. Several asks are numbered, oldest first, and the human answers by number in plain words; record each with `lcw answer <n> "<answer>"`. If the answer changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements as above.
 
 ## What the human can say at any time
 
-- Pause ("hold on", "stop for now"): let running agents finish, `lcw pause human`, and wait. Resume ("carry on"): `lcw resume`, `lcw status`, carry on.
-- Stop the run for good: launch nothing more, let running agents finish, `lcw stop`, and say where the records are.
+- Pause ("hold on", "stop for now"): let running agents finish, `lcw pause human`, and wait. A paused sweep opens no pull request. Resume ("carry on"): `lcw resume`, `lcw status`, carry on.
+- Stop the run for good: launch nothing more, let running agents finish, `lcw stop`, and say where the records are (for a sweep, parked.md too). A sweep whose pull request choice is one at the end first opens that pull request for what has landed, only if `lcw/<name>` has commits beyond the default branch: push `lcw/<name>`, open it as a draft against the default branch as Ship does, then `lcw stop --pr <url>`.
 - Change the usage mark ("run up to 80%", "until the limit, 100%"): `lcw mark <percent>`; if the run was paused at the mark, then `lcw resume` and carry on. On pay-per-token billing the same words work, and a figure in dollars ("run up to $5,500") is `lcw mark 5500usd`. Say what `lcw` prints back.
 - Change the weekly cap on pay-per-token billing ("my weekly cap is now $5,000"): `lcw cap 5000`. The session's mark moves with it, unless it was set in dollars. Then `lcw resume` if the run was paused at the mark.
 - Learn how LCW works ("how does LCW work?", "Learn more about how LCW works"): load the `lcw:learn` skill and follow it. A run in progress carries on meanwhile.
@@ -124,6 +138,6 @@ This holds for the blind review, the feasibility review and Review. A review fai
 
 ## After the draft pull request
 
-By then the run's worktree and local branch are gone, because Ship cleans them up. `gh pr checkout <number>` brings the branch back when a follow-up needs it.
+By then the run's worktree and local branch are gone, because Ship cleans them up (in a sweep, once the sweep ends). `gh pr checkout <number>` brings the branch back when a follow-up needs it.
 
 What the human asks for next is a new request: a large one is a new run. A small one is made only on their go-ahead: say in a short paragraph what you would change, where and why, and wait for their yes, unless they have already said exactly what to change. A question gets an answer and no change.

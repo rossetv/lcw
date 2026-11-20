@@ -209,7 +209,7 @@ test('a sample of each approved box has the buttons the plan names, the first fi
   const want = {
     A1: ['now', 'later'], A2: ['ok'], B: ['ok'], D1: ['r90', 'r100', 'wait'], D1usd: ['r90', 'r100', 'wait'], K: ['r90', 'r100', 'wait'],
     K92: ['r100', 'wait'], E: ['fix', 'off', 'later'], F: ['resume', 'abandon', 'later'], H: ['ok', 'learn'], J: ['now', 'later'],
-    L: ['keep', 'later', 'never'], M: ['back', 'keep'], N: ['clean', 'discuss', 'later', 'never'],
+    L: ['keep', 'later', 'never'], M: ['back', 'keep'], N: ['clean', 'discuss', 'later', 'never'], P: ['go1', 'but', 'else'],
   }
   assert.deepEqual(Object.keys(want).sort(), Object.keys(S).sort())
   for (const [name, options] of Object.entries(want)) {
@@ -223,6 +223,7 @@ test('a sample of each approved box has the buttons the plan names, the first fi
 
 test('every row of every box is as wide as the others and at most 92, from a wide terminal to a narrow one', () => {
   for (const name of Object.keys(S)) {
+    if (bannerFor(S[name]).choices) continue // the approval box is drawn over a card; its own test checks its width
     for (const cols of [140, 96, 92, 60, 30]) {
       const rows = bannerRows(bannerFor(S[name]), cols)
       assert.deepEqual([...new Set(rows.map(cells))], [Math.min(cols, 92)], name + ' at ' + cols)
@@ -298,4 +299,51 @@ test('the approval box draws its replies in a column, Go variants on one row, ev
   assert.equal(cells(rows[at('banner:approve:but') - 1].slice(1, -1).filter((s) => s.t.trim())), 0, 'a blank row between replies')
   assert.ok(bannerRows(b, 74, true, true).length < rows.length, 'the tight form is shorter')
   assert.match(rows.map((r) => r.map((s) => s.t).join('')).join('\n'), /It fills your prompt; Enter sends\./)
+})
+
+const APPROVED_CHARTER_BOX = `
+╭─ ◆ LCW Sweep · Charter ready ─────────────────────────────────────────────────────────────────────────────────────────╮
+│  Is this the charter you want?                                                                                        │
+│  The charter is in the chat above.                                                                                    │
+│                                                                                                                       │
+│   Go                starts the hunt                                                                                   │
+│                                                                                                                       │
+│   Yes, but …        with the change you type                                                                          │
+│                                                                                                                       │
+│   Something else    drop this and pick again                                                                          │
+│                                                                                                                       │
+│  It fills your prompt; Enter sends.                                                    click · or ctrl+x, Tab, Enter  │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯`.slice(1)
+
+test("a sweep's Charter asks for the charter in the approved words, and only a reply typed by hand approves", () => {
+  const b = bannerFor(S.P)
+  assert.equal(b.kind, 'approve')
+  assert.equal(bannerRows(b, 121, true).map((r) => r.map((s) => s.t).join('')).join('\n'), APPROVED_CHARTER_BOX)
+  assert.deepEqual(b.options.map((o) => o[0]), ['go1', 'but', 'else'])
+  assert.notEqual(kindOf({ ...S.P, repliedAt: S.P.run.approval.at + 1 }), 'approve', 'a reply ends it')
+})
+
+test("a build's approval box differs from a sweep's in its words, not its replies", () => {
+  const build = bannerFor(approving())
+  const sweep = bannerFor(S.P)
+  assert.equal(build.tag, ' ◆ LCW Build · Brainstorm done ')
+  assert.equal(sweep.tag, ' ◆ LCW Sweep · Charter ready ')
+  assert.equal(build.title, 'Is this what you want built?')
+  assert.equal(sweep.title, 'Is this the charter you want?')
+  assert.deepEqual(build.choices.map((c) => c.ids), sweep.choices.map((c) => c.ids))
+  assert.equal(build.note, sweep.note)
+})
+
+test('the keep-awake box stays out of the Charter and the guide out of a sweep', () => {
+  const awake = (run) => ({ ...S.L, run: { ...S.L.run, ...run } })
+  assert.equal(kindOf(awake({ stage: 'Build', shape: 'sweep' })), 'awake', 'a sweep that runs on its own is kept awake')
+  assert.equal(kindOf(awake({ stage: 'Charter', shape: 'sweep' })), null)
+  assert.equal(kindOf({ ...S.H, run: { ...S.H.run, stage: 'Charter', shape: 'sweep' } }), null)
+})
+
+test("the unfinished run box says which wave a sweep was in, and a build's milestone as before", () => {
+  const text = (u) => bannerFor({ ...S.F, unfinished: { ...S.F.unfinished, ...u } }).lines.join(' ')
+  assert.match(text({ wave: 2 }), /in Build, wave 2: 14 tasks done, 6 left\./)
+  assert.doesNotMatch(text({ wave: 2 }), /milestone 2/)
+  assert.match(text({}), /in Build, milestone 2 of 3: /)
 })

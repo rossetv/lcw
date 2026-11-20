@@ -2,7 +2,7 @@
 
 You decide HOW. Do not ask the human: they care that what they asked for gets built, not how. Plan the simplest build that meets the spec: no layer, abstraction, option or dependency that the spec does not need today.
 
-`lcw set health="planning the build"`. Read map.md in the run folder: the probes launched during Spec mapped the code there. Launch more only for what it leaves open. The map covers the code the change touches, how it is built and tested, where the seams are, how the repository writes its commits, and which checks it asks for before a pull request (lint, type checks, formatting, or a list in a contributing guide, CLAUDE.md or a gates file).
+`lcw set health="planning the build"` (a sweep sets its own words instead, below). Read map.md in the run folder: the probes launched during Spec mapped the code there. Launch more only for what it leaves open. The map covers the code the change touches, how it is built and tested, where the seams are, how the repository writes its commits, and which checks it asks for before a pull request (lint, type checks, formatting, or a list in a contributing guide, CLAUDE.md or a gates file).
 
 ## Tasks
 
@@ -56,3 +56,20 @@ lcw checkpoint "Build: read stages/build.md and launch milestone 1, all its task
 ```
 
 and end your turn.
+
+## In a sweep
+
+A wave has no brainstorm, spec or map.md: its Fix items in findings.md stand in for the spec, and each recipe is a requirement. The rest of this file holds, but in this order:
+
+1. Get into the sweep's worktree. If `lcw status` shows none (the first wave), `lcw worktree` and EnterWorktree with the path it prints; if it shows one you are not in, EnterWorktree with its path. A sweep keeps one worktree for all its waves.
+2. `lcw wave start`. It cuts the wave's branch `lcw/<name>-wave-<n>` from the sweep's branch, so the wave holds every earlier one, and prints the path of the wave's plan, waves/<n>/plan.md. It refuses a worktree that is not clean; if it says a wave is already running, carry on with that one (`lcw status` prints its plan's path).
+3. `lcw set health="planning wave <n>: <its areas>"`. While such an ask is open, leave the line `wave <n> waits on your answer; wave <n+1> is being planned` as it is until the plan is written. Make each of the wave's fixes a requirement under the id findings.md gave it, which is new across the whole sweep, so a wave's ids do not start at F1: `lcw req add F<id> "<recipe in a line>"`. Launch probes only for what the recipes leave open.
+4. Write the wave's plan as "Write plan.md" says, with the F id beside each finding, and, beside a fix findings.md marks "no proof in the repository", the order to commit no test or other proof of the hole and to keep it outside the repository. One task for each area, the areas touching different files, all in the first milestone; files every area shares (a backlog file, generated files) are changed by one task in a milestone after the fixes. A charter's lines settle what a brainstorm would have; the first wave's plan sets the commit convention and later waves keep it. There are no approved examples.
+5. Record the tasks as above, then:
+
+```
+lcw stage Build
+lcw checkpoint "Build: read stages/build.md and launch wave <n>'s milestone 1, all its tasks together: T1, T2, ..."
+```
+
+and end your turn. In the stages that follow, plan.md means the wave's plan.

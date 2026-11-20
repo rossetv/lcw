@@ -73,6 +73,7 @@ test('session-start hook without a run prints the rule and the command', () => {
   const r = run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }) })
   assert.equal(r.code, 0)
   assert.match(r.out, /lcw:lcw skill/)
+  assert.match(r.out, /open goal[^\n]*load the lcw:lcw skill/, 'an open goal loads the skill as a large change does')
   assert.match(r.out, /nothing is changed without the user's go-ahead, whatever its size/)
   assert.match(r.out, /answer it and change nothing/)
   assert.ok(!/just make it/.test(r.out))
@@ -92,6 +93,23 @@ test('session-start hook with an unfinished run names it and the next step', () 
   assert.match(r.out, /Stage Spec, status running/)
   assert.match(r.out, /Next step: run the blind review/)
   assert.match(r.out, /carry on/)
+})
+
+test('session-start hook says why a run is paused: a pause by the user stays until they say so, one at the mark ends when the limit resets', () => {
+  const t = started('hold')
+  const said = () => run(START_HOOK, [], { home: t.home, cwd: t.repo, input: JSON.stringify({ session_id: 's1', cwd: t.repo }) }).out
+  t.cli('pause', 'human')
+  const human = said()
+  assert.match(human, /status paused \(paused by the user\)/)
+  assert.match(human, /stays paused until they say carry on/)
+  assert.ok(!/Load the lcw:lcw skill and carry on/.test(human), human)
+  t.cli('resume')
+  t.cli('pause', 'mark')
+  const mark = said()
+  assert.match(mark, /status paused \(paused at the usage mark\)/)
+  assert.ok(!/stays paused until they say/.test(mark), mark)
+  assert.match(mark, /lcw\.mjs resume/)
+  assert.match(mark, /still says at the mark, the run stays paused and you end your turn/)
 })
 
 test('session start finds the run of a resumed session by its transcript', () => {

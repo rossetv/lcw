@@ -48,3 +48,6 @@ export const N = { ...base, cleanup: {
     'The worktree ../shop-react is a clean copy of deps/react-19.',
   ],
 } }
+// A sweep's Charter, waiting for the one approval.
+export const P = { ...base, run: { id: '20241121-backlog-sweep', title: 'backlog-sweep', stage: 'Charter', status: 'with-you', shape: 'sweep', asks: [],
+  approval: { go: ['Go'], meaning: 'starts the hunt', at: at(21, 15, 50) } } }
