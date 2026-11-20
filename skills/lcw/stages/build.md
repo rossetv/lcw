@@ -14,7 +14,7 @@ Workers share the run's worktree, and a milestone's tasks own separate files; th
 A worker never saw the brainstorm, so its brief is all it knows of the intent. Give it:
 
 - what to build and why, in the words of the requirements it serves and anything from the brainstorm that bears on it;
-- what done means and how to test it with the tests of its own part;
+- what done means, and its own test command from plan.md, the only tests it runs. Never write a whole-suite command or "all suites pass" into a worker's brief, even where the repository's own instructions list the suites as checks: Review runs them once a round;
 - the files it owns, its tests included, as paths relative to the run's worktree (never the worktree's absolute path: in a real run two workers mistyped it and wrote their files elsewhere);
 - its task id, the full `lcw` command line and the commit convention from plan.md, because a worker commits its own files and marks its own task done;
 - the path of spec.md for reference.
@@ -45,9 +45,9 @@ Ask the human only as SKILL.md allows. Only the tasks that depend on the answer 
 
 ## Milestones
 
-When a milestone's tasks are all done or parked, launch the milestone-reviewer agent, the blind correctness review of the milestone's code, on the model plan.md gives that milestone (effort high). Give it the milestone's tasks with the files each one owns, the commit the milestone started from, and how the tests are run, from plan.md, and nothing about the spec or the run's decisions. It reads the code for what would go wrong, runs the tests the milestone touched, checks that each task kept to its own files, and looks for what will not last and for anything over-built. You do not repeat its work.
+When a milestone's tasks are all done or parked, launch the milestone-reviewer agent, the blind correctness review of the milestone's code, on the model plan.md gives that milestone (effort high). Give it the milestone's tasks with the files each one owns, the commit the milestone started from, and its tasks' own test commands from plan.md, never the whole suites, and nothing about the spec or the run's decisions. It reads the code for what would go wrong, runs the tests the milestone touched, checks that each task kept to its own files, and looks for what will not last and for anything over-built. You do not repeat its work.
 
-It has not seen the run's decisions, so it may challenge one. Make the call on each problem, as stages/review.md says under Judging: accept it as it is, with the reason in the ledger, or make it a task for a worker (`lcw task add F1 "<fix>" --model sonnet --effort medium`). Launch the fixes together, and once they are done a fresh milestone-reviewer, on the same model, checks the fixes only: give it the fix tasks with the files each owns, the commit the fixes started from, and how their tests are run. It runs those tests and checks those changes, not the rest of the milestone again. When a check comes back clean: `lcw ledger "milestone <n>: <what works now>"`, then, unless it was the last milestone (see Done), `lcw checkpoint "<the next milestone and its tasks>"` and end your turn. The next milestone starts on a fresh context.
+It has not seen the run's decisions, so it may challenge one. Make the call on each problem, as stages/review.md says under Judging: accept it as it is, with the reason in the ledger, or make it a task for a worker (`lcw task add F1 "<fix>" --model sonnet --effort medium`). Launch the fixes together, and once they are done a fresh milestone-reviewer, on the same model, checks the fixes only: give it the fix tasks with the files each owns, the commit the fixes started from, and their own test commands. It runs those tests and checks those changes, not the rest of the milestone again. When a check comes back clean: `lcw ledger "milestone <n>: <what works now>"`, then, unless it was the last milestone (see Done), `lcw checkpoint "<the next milestone and its tasks>"` and end your turn. The next milestone starts on a fresh context.
 
 ## At the usage mark
 

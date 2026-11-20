@@ -6,7 +6,7 @@ You decide HOW. Do not ask the human: they care that what they asked for gets bu
 
 ## Tasks
 
-Split the spec into tasks. A good task is something one worker can build and test on its own, with a clear edge: the files it owns, its tests included.
+Split the spec into tasks. A good task is something one worker can build and test on its own, with a clear edge: the files it owns, its tests included. Give each task its own test command: the one that runs the test files it owns, by name, and nothing wider. Where the repository's runner cannot run less than a whole suite, that suite is the task's command. A task with nothing to test, such as a document or a skill's text, has no test command: write "none". It does not run the suites instead.
 
 Group the tasks into milestones. A milestone is a set of tasks that all run in parallel: none of them needs another's result, and each owns its own files, because workers share the run's worktree. A task that needs another task's result, or a file another task owns, goes in a later milestone. Milestones run one after another: when a milestone's tasks are done a milestone reviewer checks it and you checkpoint, and only then does the next one start. So lay the work out in as few milestones as its dependencies allow, each as wide as it can be, up to about ten tasks; split a wider one in two.
 
@@ -36,7 +36,7 @@ If the spec lists approved examples, decide how Review will reach each of their 
 
 ## Write plan.md
 
-In the run folder: the shape and the reason for it; the milestones in order, each with its tasks (id, title, the files it owns, which requirements it serves, model, effort) and the model of its milestone check; the commit convention, with one example message; and how the whole will be tested on the run branch: each test suite on its own (for example backend and frontend), with its command and the code it covers; the repository's own checks before a pull request, each with its command; the review groups, each with its requirements and its reviewer's model; and, if the spec lists approved examples, how each state is reached. Then record it:
+In the run folder: the shape and the reason for it; the milestones in order, each with its tasks (id, title, the files it owns, its own test command, which requirements it serves, model, effort) and the model of its milestone check; the commit convention, with one example message; and how the whole will be tested on the run branch, which Review does once a round and nobody else does: each test suite on its own (for example backend and frontend), with its command and the code it covers; the repository's own checks before a pull request, each with its command; the review groups, each with its requirements and its reviewer's model; and, if the spec lists approved examples, how each state is reached. Then record it:
 
 ```
 lcw task add T1 "<title>" --model sonnet --effort medium
