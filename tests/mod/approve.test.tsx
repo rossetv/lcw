@@ -10,9 +10,9 @@ const BAND = {
   props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 40, bodyColumns: 100, scroll: { offset: 0, bodyRows: 39 }, view: {} },
 } as const
 
-const approving = (approval: object = { go: ['Go (a)', 'Go (b)'], meaning: 'build it, with (a) wrapped or (b) short rows', at: NOW - 1000 }) => ({
+const approving = (approval: object = { go: ['Go (a)', 'Go (b)'], meaning: 'build it, with (a) wrapped or (b) short rows', at: NOW - 1000 }, over: object = {}) => ({
   '/lcw/sessions/s1.json': JSON.stringify({ runDir: RUN, billing: 'subscription' }),
-  [RUN + '/state.json']: JSON.stringify({ id: 'r1', name: 'phone-rows', status: 'with-you', stage: 'Brainstorm', stageSince: NOW - 60000, tasks: [], asks: [], approval }),
+  [RUN + '/state.json']: JSON.stringify({ id: 'r1', name: 'phone-rows', status: 'with-you', stage: 'Brainstorm', stageSince: NOW - 60000, tasks: [], asks: [], approval, ...over }),
 })
 
 function engine(on: any, files: Record<string, string>, opts: { draft?: string; fills?: boolean } = {}) {
@@ -100,5 +100,17 @@ test('a prompt the person sends ends the box', async ($, on) => {
   await w.clock.advance(2000)
   const band = await $.ui.mount(BAND)
   expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeUndefined()
+  await band.unmount()
+})
+test("a sweep's charter box asks for the charter, and its Go only fills the prompt", async ($, on) => {
+  const w = engine(on, approving({ go: [], at: NOW - 1000 }, { shape: 'sweep', stage: 'Charter', name: 'backlog-sweep' }))
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /Is this the charter you want\?/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /LCW Sweep · Charter ready/ })).toBeDefined()
+  await band.press({ key: 'banner:approve:go1' })
+  expect(w.filled).toEqual(['Go'])
+  expect(w.prompts).toEqual([])
+  expect(w.toasts).toEqual([])
   await band.unmount()
 })

@@ -32,18 +32,21 @@ export function runFact(state, kept) {
     id: state.id, title: state.name || state.id, stage: state.stage, status: state.status, pausedReason: state.pausedReason ?? undefined,
     pausedAt: state.pausedAt ?? undefined, runningSince: state.runningSince ?? undefined, ...taskCounts(state),
     asks: asks.filter((a) => Number.isFinite(a?.n)).map((a) => ({ n: a.n, text: String(a.text ?? ''), waiting: a.waiting, at: a.at })).sort((a, b) => a.n - b.n),
-    awake: !!kept, guide: state.guide === true, firstOnMachine: state.firstOnMachine === true,
+    awake: !!kept, guide: state.guide === true, firstOnMachine: state.firstOnMachine === true, shape: shapeOf(state),
     approval: approvalOf(state),
   }
 }
 
-/** The approval the Brainstorm's playback asks for (lcw approval), while the run is still with the person in it; else undefined. */
+const shapeOf = (state) => (state?.shape === 'sweep' ? 'sweep' : 'build')
+
+/** The approval the Brainstorm's playback (a sweep's Charter) asks for with lcw approval, while the run is still with the person in it; else undefined. */
 function approvalOf(state) {
   const a = state.approval
-  if (state.stage !== 'Brainstorm' || state.status !== 'with-you' || !Number.isFinite(a?.at)) return undefined
+  const sweep = shapeOf(state) === 'sweep'
+  if (state.stage !== (sweep ? 'Charter' : 'Brainstorm') || state.status !== 'with-you' || !Number.isFinite(a?.at)) return undefined
   const go = (Array.isArray(a.go) ? a.go : []).map((g) => String(g ?? '').replace(/\s+/g, ' ').trim().slice(0, 20)).filter(Boolean).slice(0, 3)
   const meaning = String(a.meaning ?? '').replace(/\s+/g, ' ').trim()
-  return { go: go.length ? go : ['Go'], meaning: meaning || 'build it as played back', at: a.at }
+  return { go: go.length ? go : ['Go'], meaning: meaning || (sweep ? 'starts the hunt' : 'build it as played back'), at: a.at }
 }
 
 /** What a reply on the approval box puts in the prompt: Go's label as it is, the other two ready for the person's words. */
@@ -53,8 +56,8 @@ export function approveText(banner, option) {
   return banner.options.find(([id]) => id === option)?.[1]
 }
 
-/** Whether the keep-awake box can apply: the run runs on its own, past the Brainstorm. */
-export const awakeApplies = (state) => state?.status === 'running' && !!state.stage && state.stage !== 'Brainstorm'
+/** Whether the keep-awake box can apply: the run runs on its own, past the Brainstorm (a sweep's Charter). */
+export const awakeApplies = (state) => state?.status === 'running' && !!state.stage && state.stage !== 'Brainstorm' && state.stage !== 'Charter'
 
 /**
  * The week against the mark: the run's mark, else the session's, against usage.json's figure (one past its reset
@@ -124,6 +127,14 @@ export function unfinishedCandidates(runs, now, ownDir, dismissed) {
     .sort((a, b) => b.shownAt - a.shownAt)
 }
 
+/** The wave a sweep is in: the one running, else the next queued; none for a build or between waves. */
+function waveOf(state) {
+  if (shapeOf(state) !== 'sweep') return {}
+  const waves = Array.isArray(state.sweep?.waves) ? state.sweep.waves : []
+  const w = waves.find((x) => x?.status === 'running') ?? waves.find((x) => x?.status === 'queued')
+  return Number.isFinite(w?.n) ? { wave: w.n } : {}
+}
+
 /** The unfinished-run box's facts for one candidate, with its ledger's text for the next step. */
 export function unfinishedFact(run, ledger) {
   const s = run.state
@@ -131,7 +142,7 @@ export function unfinishedFact(run, ledger) {
   const milestone = s.milestone == null ? '' : String(s.milestone).trim()
   return {
     id: s.id, name: s.name || s.id, title: s.title || undefined, stage: s.stage, status: s.status, pausedReason: s.pausedReason ?? undefined,
-    ...(milestone ? { milestone } : {}), ...taskCounts(s), nextStep: nextStepOf(ledger) ?? undefined, stoppedAt: run.shownAt,
+    ...(milestone ? { milestone } : {}), ...waveOf(s), ...taskCounts(s), nextStep: nextStepOf(ledger) ?? undefined, stoppedAt: run.shownAt,
     worktree: !!s.worktree, branch: !!s.branch,
   }
 }

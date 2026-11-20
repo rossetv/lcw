@@ -26,7 +26,9 @@ export interface BannerRun {
   /** at: when the question was asked; numbers come back once their question is answered, times do not. */
   done?: number; left?: number; asks?: { n: number; text: string; waiting?: number; at?: Time }[]
   awake?: boolean; guide?: boolean; firstOnMachine?: boolean
-  /** The Brainstorm's playback waits for approval: Go's labels (one, or one per variant), what Go builds, and when it asked. */
+  /** 'sweep' asks for the charter's approval; anything else is a build. */
+  shape?: 'build' | 'sweep'
+  /** The Brainstorm's playback (a sweep's Charter) waits for approval: Go's labels (one, or one per variant), what Go builds, and when it asked. */
   approval?: { go: string[]; meaning: string; at: number }
 }
 
@@ -47,7 +49,7 @@ export interface BannerFacts {
   /** lastError: the stored phrase for what went wrong ('printed "401 Unauthorized"', 'took longer than 30 s'). */
   spendFailing?: { fails: number; since?: Time; lastError?: string | null } | null
   /** name is the run's name; title the one line it was started with ("Add a CSV export ..."); milestone as Build records it ("2 of 3"). Without name, title is the name. */
-  unfinished?: { id: string; name?: string; title: string; stage?: string; milestone?: string | number; done?: number; left?: number; nextStep?: string; stoppedAt?: Time; worktree?: boolean; branch?: boolean } | null
+  unfinished?: { id: string; name?: string; title: string; stage?: string; milestone?: string | number; wave?: number; done?: number; left?: number; nextStep?: string; stoppedAt?: Time; worktree?: boolean; branch?: boolean } | null
   sleep?: { canHold?: boolean; heldByOther?: boolean } | null
   update?: {
     running?: string
