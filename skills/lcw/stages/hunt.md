@@ -1,6 +1,6 @@
 # Hunt
 
-Each round of a sweep starts here: probes look for problems in the areas the charter names, and you sort what they find. Entering Hunt adds one to the round. A later round starts once no wave is queued and every open wave is holding in Ship; it does not wait for their final checks or merges, which go on alongside it (stages/ship.md). You do not read code: probes do, and they report.
+Each round of a sweep starts here: probes look for problems in the areas the charter names, and you sort what they find. Entering Hunt adds one to the round. A later round starts with `lcw stage Hunt` once no wave is queued and every open wave is holding in Ship; it does not wait for their final checks or merges, which go on alongside it (stages/ship.md). You do not read code: probes do, and they report.
 
 `lcw set health="hunting, area by area"` in round 1, `health="hunting again, round <n>"` in a later one. Read charter.md and, in a later round, findings.md, both in the run folder.
 
@@ -84,7 +84,7 @@ and do as it says (SKILL.md, Compaction).
 
 ## Ending the sweep
 
-The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix. A stop line that counts fixes counts what the charter's goals line calls done, which is `fixed` in `lcw status`: a partly fixed fix is not one, so the sweep goes on to find a replacement. It ends short of the count only when a round finds nothing more to fix, and says why. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it. The sweep ends with no wave open: a wave still open is taken through its Ship first, and no queued wave starts.
+The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix. A stop line that counts fixes counts what the charter's goals line calls done, which is `fixed` in `lcw status`: a partly fixed fix is not one, so the sweep goes on to find a replacement. It ends short of the count only when a round finds nothing more to fix, and says why. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it. The sweep ends with no wave open: a wave still open is taken through its Ship first, and no queued wave starts. A wave held at merging on the human's answer about its push, and each wave after it at merging, is recorded shipped with no pull request, in order (`lcw wave shipped --wave <n>`), and stays unpushed.
 
 Before you report, settle the pull requests as the charter's PRs line says. Whichever it is, run `lcw status` just before `lcw finish` and keep what it prints, the totals and each wave's pull request: once the run is finished, the session is no longer bound to it.
 
@@ -106,7 +106,7 @@ Before you report, settle the pull requests as the charter's PRs line says. Whic
 - **one at the end**: if any wave shipped with commits (`git rev-list --count <default branch>..lcw/<name>` prints more than 0), push the sweep's branch (`git push -u origin lcw/<name>`), load the `lcw:pull-request` skill and write the one draft pull request for everything as it says, open it against the default branch (`gh pr create --draft --head lcw/<name> --base <default branch> --title "<title>" --body-file <file>`), and `lcw finish --pr <url>`. With no GitHub remote or no way to push, `lcw finish --branch lcw/<name>`, tell the human the work is on `lcw/<name>` and why there is no pull request, and put the text in the conversation, as stages/ship.md says. If none did, there is nothing to open: `lcw finish`, and the report says no pull request was opened because no wave changed anything.
 - **stacked**: `lcw finish`.
 
-In stacked or merged as it goes, a wave whose push still waits on the human's answer ends the sweep unpushed, with every wave after it: the report says so, and clean-up's checks keep the worktree and its branches.
+In stacked or merged as it goes, a wave whose push still waits on the human's answer ends the sweep unpushed, with every wave after it: the report names each as unpushed, and clean-up's checks keep its branches and any worktree still there.
 
 Then clean up as stages/ship.md says under "Afterwards: clean up", for the waves' worktrees still there and the sweep's local branches.
 

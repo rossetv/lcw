@@ -58,7 +58,7 @@ A wave in Ship holds: its review has passed and its closures are checked, and it
 **Final checks.** They run for one wave at a time, in wave order, on everything beneath the wave:
 
 1. Wait until every earlier open wave's final checks have passed (it is at merging, or has shipped) and no worker is committing to this wave: every worker of the wave has reported, and its head is settled. `lcw wave step "final checks"` refuses while an earlier wave's have not passed.
-2. Take in the wave before it again, `lcw wave take --wave <n>`, resolving a conflict as stages/review.md says. Check with `git -C <its worktree> status` that everything is committed; if it is not, launch a worker to sort it out.
+2. Take in the wave before it again, `lcw wave take --wave <n>`, resolving a conflict as stages/review.md says, its resolution checked by a reviewer as it says there before step 3; a wrong one goes back to a worker, and the reviewer checks again. Check with `git -C <its worktree> status` that everything is committed; if it is not, launch a worker to sort it out.
 3. `lcw wave step "final checks" --wave <n>`. It records the head the checks run on and prints it.
 4. Launch one reviewer agent (Sonnet, high) with that commit, briefed as the reviewer who runs the suites in stages/review.md: the test suites and the repository's own checks, the checks tied to a shared service included, in a throwaway worktree at that commit, against charter.md's baseline.
 5. When they pass, `lcw wave step merging --wave <n>`. If it refuses because the head moved, that run does not count: wait until the head settles, and run them again from step 2.
@@ -79,7 +79,7 @@ lcw wave shipped --wave <n> --pr <number>
 
 Between the push and the pull request, check (here and anywhere else this file compares a wave with its remote branch, in a sweep) that `git rev-parse lcw/<name>-wave-<n>` equals `git rev-parse origin/lcw/<name>-wave-<n>`. The base is the branch of the last earlier wave that has an unmerged pull request (`gh pr view <number> --json state`), else the default branch.
 
-If the push or the pull request needs something only the human can give (the token has no write access, say), the wave holds at merging and waits: `lcw ask --wave <n> "<question>"` as SKILL.md says. The other waves carry on with their builds, reviews and final checks; only their landing waits, since waves land in order. Once the human answers, push and open the pull requests in order, each against the base above, and run `lcw wave shipped` for each.
+If the push or the pull request needs something only the human can give (the token has no write access, say), the wave holds at merging and waits: `lcw ask --wave <n> "<question>"` as SKILL.md says. The other waves carry on with their builds, reviews and final checks; only their landing waits, since waves land in order. Once the human answers, push and open the pull requests in order, each against the base above, and run `lcw wave shipped --wave <n> --pr <number>` for each.
 
 **Merged as it goes**, then: go through the shipped waves not yet merged, in order, passing over a wave with no commits (`lcw status` shows it empty). The first wave that falls short stops the pass: it stays open, with every wave after it, until a pass finds it meets the charter's criteria. Each pass looks at every one of them again, from the first; only a second "gh could not merge" and "merged into another branch" below leave a wave open for good. A wave whose pull request waits on the human's answer falls short.
 
