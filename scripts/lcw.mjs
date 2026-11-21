@@ -127,7 +127,8 @@ const inside = (p, dir) => p === dir || p.startsWith(`${dir}/`)
 
 /**
  * The wave a command acts on: the one --wave names, else the open wave whose worktree this is run in, else the only
- * open wave; null when none is open, so the run's own lists and stage apply. With several open and none of these,
+ * running wave; null when none runs, so the run's own lists and stage apply. A shipped wave held for its merge is
+ * reached only by --wave or from its worktree, so it never takes a command meant for the run. With several running and none of these,
  * a command refuses, or gets null when `several` is 'run'. `shipped` lets --wave name a wave that has shipped.
  */
 function waveOf(s, { several = 'refuse', shipped = false } = {}) {
@@ -144,8 +145,9 @@ function waveOf(s, { several = 'refuse', shipped = false } = {}) {
   try { here = fs.realpathSync(cwd) } catch {}
   const mine = open.find((w) => w.worktree && inside(here, w.worktree))
   if (mine) return mine
-  if (open.length < 2 || several === 'run') return open.length === 1 ? open[0] : null
-  fail(`Waves ${open.map((w) => w.n).join(' and ')} are open: pass --wave <n>. Nothing was changed.`)
+  const running = open.filter((w) => w.status === 'running')
+  if (running.length < 2 || several === 'run') return running.length === 1 ? running[0] : null
+  fail(`Waves ${running.map((w) => w.n).join(' and ')} are open: pass --wave <n>. Nothing was changed.`)
 }
 
 // an open wave in these stages is being built or reviewed; one in Ship holds
@@ -953,7 +955,13 @@ const commands = {
       const empty = Number(git(root, 'rev-list', '--count', `${s.branch}..${tip}`)) === 0
       if (empty && pr) fail(`${wave.branch} has no commits, so there is no pull request to record. Nothing was changed.`)
       try { git(root, 'merge-base', '--is-ancestor', s.branch, tip) } catch { fail(`${s.branch} has commits ${wave.branch} does not, so it cannot fast-forward to the wave. Nothing was changed.`) }
-      try { git(root, 'branch', '-f', s.branch, tip) } catch (e) { fail(`git could not move ${s.branch} to ${tip}: ${firstLine(e)}. Nothing was changed.`) }
+      // a sweep from before waves had worktrees of their own may keep one on its branch, and git moves a checked-out branch only there
+      let oldOnBranch = false
+      try { oldOnBranch = Boolean(s.worktree) && git(s.worktree, 'symbolic-ref', '-q', 'HEAD') === `refs/heads/${s.branch}` } catch {}
+      try {
+        if (oldOnBranch) git(s.worktree, 'merge', '--ff-only', '-q', tip)
+        else git(root, 'branch', '-f', s.branch, tip)
+      } catch (e) { fail(`git could not move ${s.branch} to ${tip}: ${firstLine(e)}. Nothing was changed.`) }
       const fixed = wave.requirements.filter((r) => r.status === 'pass').length
       const partial = wave.requirements.filter((r) => r.status === 'partial').length
       // the newest shipped wave's worktree holds the sweep's latest work; an earlier one's goes once nothing in it would be lost
@@ -1235,6 +1243,7 @@ function listItem(cmd, field, statuses, make) {
     const item = find(list, 'id', id)
     // a running wave counts its dropped fixes when it ships; a shipped wave has counted its own already
     const running = wave?.status === 'running'
+    if (wave && !running && item.status !== 'parked') fail(`${id} is ${item.status} in wave ${wave.n}, which has shipped; a shipped wave drops only its parked fixes. Nothing was changed.`)
     change(run, `req ${id} dropped: ${item.name}`, (s) => {
       if (item.status === 'parked') { s.sweep.parked--; if (!running) s.sweep.dropped++ }
       list.splice(list.indexOf(item), 1)

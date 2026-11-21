@@ -1067,3 +1067,56 @@ test('a sweep from before waves kept their own records has its running wave\'s s
   assert.deepEqual([s.tasks, s.requirements, s.worktree, s.stage], [[], [], null, 'Review'])
   assert.equal(s.sweep.waves[0].stage, undefined, 'a shipped wave is left as it was')
 })
+
+test('a shipped wave held for its merge is not the default wave: run-level commands act on the run, and a new wave on itself', () => {
+  const t = hunting()
+  t.cli('set', 'sweep.prs=merged')
+  t.cli('wave', 'add', '1')
+  t.start()
+  t.cli('stage', 'Ship')
+  commit(t.wt, 'b.txt', 'fix\n')
+  assert.equal(t.ship('--pr', '5').code, 0)
+  assert.equal(t.cli('stage', 'Hunt').code, 0, 'wave 1 holds for its merge')
+  const wave = (n) => t.state().sweep.waves[n - 1]
+  assert.equal(t.cli('ask', 'about the run').code, 0)
+  assert.equal(wave(1).waiting, false)
+  assert.equal(t.cli('ask', 'merge it?', '--wave', '1').code, 0)
+  assert.equal(wave(1).waiting, true, 'still reached with --wave')
+  for (const a of [['task', 'add', 'T1', 'one'], ['req', 'add', 'F1', 'fix'], ['set', 'plan.tasks=2']]) assert.equal(t.cli(...a).code, 0, a.join(' '))
+  assert.deepEqual([t.state().tasks.length, t.state().requirements.length, t.state().plan.tasks, wave(1).tasks.length], [1, 1, 2, 0])
+
+  t.cli('wave', 'add', '1')
+  t.start()
+  assert.equal(t.cli('task', 'add', 'T1', 'two').code, 0, 'the running wave, not a refusal for two open')
+  assert.equal(t.cli('stage', 'Build').code, 0)
+  assert.deepEqual([wave(2).tasks.length, wave(2).stage, wave(1).stage], [1, 'Build', 'Ship'])
+})
+
+test('a shipped wave drops only its parked fixes, and a fix that passed keeps its count', () => {
+  const t = shipping(2)
+  t.cli('req', 'add', 'F1', 'one')
+  t.cli('req', 'F1', 'pass')
+  t.cli('req', 'add', 'F2', 'two')
+  t.cli('req', 'F2', 'park')
+  commit(t.wt, 'b.txt', 'fix\n')
+  t.ship()
+  assert.equal(t.cli('req', 'F1', 'drop', '--wave', '1').code, 1)
+  const s = t.state().sweep
+  assert.deepEqual([s.waves[0].requirements.map((r) => r.id), s.fixed, s.dropped], [['F1', 'F2'], 1, 0])
+  assert.equal(t.cli('req', 'F2', 'drop', '--wave', '1').code, 0)
+})
+
+test('a sweep whose worktree from before waves had their own sits on its branch ships a wave and moves that worktree with the branch', () => {
+  const t = hunting()
+  const old = `${tmp('old')}/wt`
+  git(t.repo, 'worktree', 'add', '-q', old, 'lcw/tidy')
+  t.edit((s) => { s.worktree = old })
+  t.cli('wave', 'add', '1')
+  t.start()
+  t.cli('stage', 'Ship')
+  const tip = commit(t.wt, 'b.txt', 'fix\n')
+  const r = t.ship()
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual([git(t.repo, 'rev-parse', 'lcw/tidy'), git(old, 'rev-parse', 'HEAD'), git(old, 'symbolic-ref', 'HEAD')], [tip, tip, 'refs/heads/lcw/tidy'])
+  assert.equal(fs.readFileSync(`${old}/b.txt`, 'utf8'), 'fix\n')
+})
