@@ -241,6 +241,96 @@ test('at most two waves are built or reviewed at once: a third waits until one o
   assert.equal(t.state().sweep.waves[2].after, 'lcw/tidy-wave-2')
 })
 
+/** Waves 1 and 2 started: wave 1 with a commit, in Review; wave 2 cut from it, in Build. at(n, ...) runs a command for wave n. */
+function overlapping() {
+  const t = hunting()
+  t.cli('wave', 'add', '1', '1')
+  t.start()
+  const wt1 = t.wt
+  commit(wt1, 'b.txt', 'one\n')
+  t.cli('stage', 'Review')
+  t.start()
+  const at = (n, ...a) => t.cli(...a, '--wave', String(n))
+  at(2, 'stage', 'Build')
+  return { ...t, wt1, wt2: t.wt, at, w: (n) => t.state().sweep.waves[n - 1] }
+}
+
+test('a wave takes in what the wave before it changed since it started, before its own review', () => {
+  const t = overlapping()
+  const fix = commit(t.wt1, 'c.txt', 'review fix\n')
+  const r = t.at(2, 'stage', 'Review')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /wave take/)
+  assert.equal(t.w(2).stage, 'Build')
+  assert.equal(t.at(2, 'wave', 'take').code, 0)
+  assert.equal(git(t.wt2, 'rev-parse', 'HEAD^2'), fix, 'a merge commit of wave 1\'s tip')
+  assert.equal(t.at(2, 'stage', 'Review').code, 0)
+  assert.deepEqual([t.w(2).stage, t.w(2).round], ['Review', 1])
+  t.at(2, 'wave', 'round')
+  assert.equal(t.w(2).round, 2)
+  assert.equal(t.at(2, 'wave', 'step', 'final checks').code, 1, 'final checks are a step of Ship')
+  assert.equal(t.at(2, 'wave', 'step', 'closures').code, 0)
+  assert.equal(t.w(2).step, 'closures')
+})
+
+test('a take-in that conflicts is undone, and names the worktree and the branch to resolve it in', () => {
+  const t = overlapping()
+  commit(t.wt2, 'b.txt', 'two\n')
+  commit(t.wt1, 'b.txt', 'one, reviewed\n')
+  const had = git(t.wt2, 'rev-parse', 'HEAD')
+  const r = t.at(2, 'wave', 'take')
+  assert.equal(r.code, 1)
+  assert.ok(r.out.includes(t.wt2) && r.out.includes('lcw/tidy-wave-2') && r.out.includes('b.txt'), r.out)
+  assert.equal(git(t.wt2, 'rev-parse', 'HEAD'), had)
+  assert.equal(git(t.wt2, 'status', '--porcelain'), '')
+})
+
+/** overlapping(), with both waves in Ship and wave 1's final checks passed: it is merging. */
+function bothShipping() {
+  const t = overlapping()
+  t.at(2, 'stage', 'Review')
+  t.at(1, 'stage', 'Ship')
+  t.at(2, 'stage', 'Ship')
+  commit(t.wt1, 'd.txt', 'closure\n')
+  return t
+}
+
+test('final checks run one wave at a time, in wave order, on a head that holds the wave before it', () => {
+  const t = bothShipping()
+  const r = t.at(2, 'wave', 'step', 'final checks')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /Wave 1/)
+  assert.equal(t.at(1, 'wave', 'step', 'final checks').code, 0)
+  assert.equal(t.at(2, 'wave', 'step', 'final checks').code, 1, 'wave 1\'s are still running')
+  assert.equal(t.at(1, 'wave', 'step', 'merging').code, 0)
+  assert.match(t.at(2, 'wave', 'step', 'final checks').out, /wave take/, 'wave 2 lacks wave 1\'s closure')
+  t.at(2, 'wave', 'take')
+  assert.equal(t.at(2, 'wave', 'step', 'final checks').code, 0)
+  assert.deepEqual([t.w(2).step, t.w(2).checked], ['final checks', git(t.wt2, 'rev-parse', 'HEAD')])
+})
+
+test('a wave whose head moved during its final checks does not merge until they run again on the settled head', () => {
+  const t = shipping(1)
+  commit(t.wt, 'b.txt', 'fix\n')
+  t.cli('wave', 'step', 'final checks')
+  const moved = commit(t.wt, 'c.txt', 'late fix\n')
+  assert.equal(t.cli('wave', 'step', 'merging').code, 1)
+  t.cli('wave', 'step', 'final checks')
+  assert.equal(t.state().sweep.waves[0].checked, moved)
+  assert.equal(t.cli('wave', 'step', 'merging').code, 0)
+})
+
+test('a wave sent back from Ship clears its own final checks and those of the waves after it', () => {
+  const t = bothShipping()
+  t.at(1, 'wave', 'step', 'final checks')
+  t.at(1, 'wave', 'step', 'merging')
+  t.at(2, 'wave', 'take')
+  t.at(2, 'wave', 'step', 'final checks')
+  assert.equal(t.at(1, 'stage', 'Build').code, 0)
+  assert.deepEqual([t.w(1).step, t.w(1).checked, t.w(2).step, t.w(2).checked], [null, null, null, null])
+  assert.equal(t.at(2, 'wave', 'step', 'final checks').code, 1)
+})
+
 test('wave defer moves fixes to the next queued wave, or queues a new wave for them', () => {
   const t = hunting()
   t.cli('wave', 'add', '4', '2')

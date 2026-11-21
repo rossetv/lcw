@@ -149,6 +149,8 @@ function waveOf(s, { several = 'refuse', shipped = false } = {}) {
 
 // an open wave in these stages is being built or reviewed; one in Ship holds
 const BUSY = ['Plan', 'Build', 'Review']
+// each step of a wave and the stage it belongs to: 'merging' means its final checks passed and it is landing
+const STEPS = { closures: 'Review', 'final checks': 'Ship', merging: 'Ship', none: true }
 /** What a wave cut after `after` takes in: that open wave's branch, or the sweep's own once that wave has shipped onto it. */
 function takesFrom(s, after) {
   const before = s.sweep.waves.find((x) => x.branch === after)
@@ -871,6 +873,54 @@ const commands = {
       return out(`wave ${next.n} on ${branch}`, `worktree: ${worktree}`, `plan: ${dir}/plan.md`, ...changedFiles(s, open))
     }
     if (sub === 'files') return out(...changedFiles(s, openWaves(s)))
+    if (sub === 'round') {
+      const wave = mustRun(waveOf(s) || fail('No wave is open. Nothing was changed.'))
+      if (wave.stage !== 'Review') fail(`Wave ${wave.n} is in ${wave.stage}; a review round is raised in Review. Nothing was changed.`)
+      change(run, `wave ${wave.n}: review round ${(wave.round ?? 0) + 1}`, () => { wave.round = (wave.round ?? 0) + 1 }, wave)
+      return out(`wave ${wave.n}: round ${wave.round}`)
+    }
+    if (sub === 'step') {
+      const step = words.join(' ')
+      if (!STEPS[step]) fail(`Usage: lcw wave step <${Object.keys(STEPS).join('|')}> [--wave n]`)
+      const wave = mustRun(waveOf(s) || fail('No wave is open. Nothing was changed.'))
+      if (STEPS[step] !== true && wave.stage !== STEPS[step]) fail(`The step ${step} is in ${STEPS[step]}; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
+      let checked = null
+      if (step === 'final checks') {
+        // one wave's final checks at a time, in order: each earlier wave's have passed, and this wave runs on all of them
+        const before = openWaves(s).find((x) => x.n < wave.n && x.status === 'running' && x.step !== 'merging')
+        if (before) fail(`Wave ${before.n}'s final checks have not passed yet (it is in ${before.stage}${before.step ? `, ${before.step}` : ''}); final checks run one wave at a time, in order. Nothing was changed.`)
+        if (!hasTakenIn(s, wave)) fail(notTakenIn(s, wave, 'its final checks'))
+        checked = tipOf(s, wave)
+      }
+      if (step === 'merging') {
+        if (wave.step !== 'final checks' || !wave.checked) fail(`Wave ${wave.n} has no final checks running; they pass before it merges. Nothing was changed.`)
+        const tip = tipOf(s, wave)
+        if (tip !== wave.checked) fail(`${wave.branch} moved from ${wave.checked} to ${tip} while its final checks ran, so they do not count; run them again on the settled head. Nothing was changed.`)
+        checked = wave.checked
+      }
+      change(run, `wave ${wave.n} step: ${step}${checked ? ` at ${checked}` : ''}`, (st) => {
+        if (step !== 'merging' && (wave.step === 'final checks' || wave.step === 'merging')) clearLater(st, wave)
+        Object.assign(wave, { step: step === 'none' ? null : step, checked })
+      }, wave)
+      return out(`wave ${wave.n} step ${step}${checked ? ` at ${checked}` : ''}`)
+    }
+    if (sub === 'take') {
+      const wave = mustRun(waveOf(s) || fail('No wave is open. Nothing was changed.'))
+      const wt = wave.worktree && fs.existsSync(wave.worktree) ? wave.worktree : fail(`Wave ${wave.n} has no worktree to merge in. Nothing was changed.`)
+      const from = takesFrom(s, wave.after)
+      const had = tipOf(s, wave)
+      try { git(wt, 'merge', '--no-ff', '--no-edit', '-q', from) } catch (e) {
+        let conflicted = ''
+        try { git(wt, 'rev-parse', '-q', '--verify', 'MERGE_HEAD'); conflicted = git(wt, 'diff', '--name-only', '--diff-filter=U').split('\n').join(', ') } catch {}
+        if (!conflicted) fail(`git could not merge ${from} into ${wave.branch}: ${firstLine(e)}. Nothing was changed.`)
+        git(wt, 'merge', '--abort')
+        fail(`Taking ${from} into ${wave.branch} conflicts in ${conflicted}, so the merge was undone. A worker runs git merge --no-ff ${from} in ${wt}, on ${wave.branch}, resolves it and commits. Nothing was changed.`)
+      }
+      const tip = tipOf(s, wave)
+      const note = tip === had ? `wave ${wave.n} had all of ${from} already` : `wave ${wave.n} took in ${from}: ${wave.branch} now at ${tip}`
+      change(run, note, () => {}, wave)
+      return out(note)
+    }
     if (sub === 'defer') {
       const wave = mustRun(waveOf(s) || fail('No wave is open. Nothing was changed.'))
       const k = wholeNumber(words[0], 'lcw wave defer')
@@ -1029,9 +1079,12 @@ function enterStage(s, stage) {
 
 /** lcw stage for one of a sweep's open waves: its own stage, and the run's stage follows the newest open wave. */
 function waveStage(run, wave, stage) {
+  if (stage === 'Review' && !hasTakenIn(run.state, wave)) fail(notTakenIn(run.state, wave, 'its review'))
   change(run, `wave ${wave.n} stage: ${stage}`, (s) => {
     if (stage === 'Review' && wave.stage !== 'Review') wave.round = 1
-    Object.assign(wave, { stage, stageSince: now(), step: null, milestone: null })
+    // its final checks no longer count, and nor do those of the waves after it, which ran on top of it
+    if (wave.step === 'final checks' || wave.step === 'merging') clearLater(s, wave)
+    Object.assign(wave, { stage, stageSince: now(), step: null, milestone: null, checked: null })
     const { stage: was, stageSince: since } = s
     enterStage(s, stage)
     if (was === 'Hunt') Object.assign(s, { stage: was, stageSince: since })
@@ -1039,6 +1092,19 @@ function waveStage(run, wave, stage) {
   }, wave)
   out(`wave ${wave.n} stage ${stage}`)
 }
+
+/** Whether a wave's branch holds all the work now on the branch it takes in. */
+function hasTakenIn(s, w) {
+  try { git(s.repoRoot, 'merge-base', '--is-ancestor', `refs/heads/${takesFrom(s, w.after)}`, `refs/heads/${w.branch}`); return true } catch { return false }
+}
+const notTakenIn = (s, w, what) => `Wave ${w.n} has not taken in the latest of ${takesFrom(s, w.after)}; take it in with lcw wave take --wave ${w.n} before ${what}. Nothing was changed.`
+
+/** The later open waves' final checks ran on top of this wave as it was, so they no longer count. */
+function clearLater(s, wave) {
+  for (const x of openWaves(s)) if (x.n > wave.n && x.status === 'running' && (x.step === 'final checks' || x.step === 'merging')) Object.assign(x, { step: null, checked: null })
+}
+
+const tipOf = (s, w) => git(s.repoRoot, 'rev-parse', `refs/heads/${w.branch}`)
 
 /** A sweep's part of lcw status: the pull request choice, the round, each wave, the totals and its files. */
 function sweepStatus(run) {
