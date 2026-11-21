@@ -19,7 +19,7 @@ Teach LCW as it really works. From this skill's base directory, read `../lcw/SKI
 3. **Build.** Workers, milestones and reviewers: draw who does what.
 4. **Review and Ship.** How the work is checked against what was agreed, and what the draft pull request holds.
 5. **Charter (a Sweep).** The rules agreed line by line with the person, and the one approval, typed as a reply: goals, non-goals, anti-goals, no-go zones, kinds of change, proof, what to park, when to stop, wave size, pull requests.
-6. **Hunt and waves (a Sweep).** Probes go to every area and bring back a recipe for each problem; each is sorted to Fix, Park (only the person can decide) or Drop (with the reason); fixes become waves, each run through Build's Plan, Build, Review and Ship, one at a time; a new round hunts again only where there were changes, until one finds nothing to fix. Say how the pull requests go as the charter chose: stacked, merged as it goes, or one at the end.
+6. **Hunt and waves (a Sweep).** Probes go to every area and bring back a recipe for each problem; each is sorted to Fix, Park (only the person can decide) or Drop (with the reason); fixes become waves, each run through Build's Plan, Build, Review and Ship in its own worktree, the next starting once the one before it is built, at most two built or reviewed at once, merging in order; a new round hunts again only where there were changes, until one finds nothing to fix. Say how the pull requests go as the charter chose: stacked, merged as it goes, or one at the end.
 7. **Pause, carry on, stop.** What the person can say at any time, and how a question for them shows.
 8. **The usage mark.** Where a run stops starting agents, how the person raises it, and when it carries on by itself.
 
@@ -63,8 +63,9 @@ Build  you ─▶ Brainstorm ─▶ Spec ─▶ Plan ─▶ Build ─▶ Review 
               ╰ with you ╯  ╰──────────────── on its own ─────────────╯
 
 Sweep  you ─▶ Charter ─▶ Hunt ─▶ Plan ─▶ Build ─▶ Review ─▶ Ship ─▶ draft PRs
-              ╰ you ╯     ▲                                  │
-                          └──── next wave, or hunt again ────┘
+              ╰ you ╯     ▲       ▲                 │        │
+                          │       └─── next wave ───┘        │
+                          └─────────── hunt again ───────────┘
 ```
 
 ```
