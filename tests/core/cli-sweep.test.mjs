@@ -1019,6 +1019,7 @@ test('with two waves open a wave command needs --wave, except inside a wave\'s w
   assert.deepEqual([t.state().tasks, t.state().requirements], [[], []])
   assert.equal(t.cli('stage', 'Ship').code, 1)
   assert.equal(t.cli('task', 'add', 'T2', 'x', '--wave', '3').code, 1, 'no wave 3')
+  assert.equal(t.cli('set', 'sweep.open=1', '--wave', '1').code, 1, 'the charter\'s settings are the run\'s')
 })
 
 test('a ledger line about one wave goes to its own ledger too, and one with several waves open to the run\'s only', () => {

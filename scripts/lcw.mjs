@@ -413,6 +413,7 @@ const commands = {
     })
     // a wave keeps its own plan and milestone
     const ofWave = (k) => ['plan', 'milestone'].includes(k.split('.')[0])
+    if (flags.wave !== undefined && !pairs.some(([k]) => ofWave(k))) fail('set --wave is for a wave\'s plan.* and milestone. Nothing was changed.')
     const wave = pairs.some(([k]) => ofWave(k)) ? waveOf(run.state) : null
     if (wave) mustRun(wave)
     // no ledger line: set is called often and would drown the ledger
