@@ -16,13 +16,18 @@ function sweep(name = 'tidy') {
   return { home, repo, o, dir, started, state, edit, cli: (...a) => lcw(a, o) }
 }
 
-/** A sweep past its charter, in Hunt, with its worktree. */
+/** A sweep past its charter, in Hunt, with its branch; start() starts the front queued wave and sets wt to its worktree. */
 function hunting(name) {
   const t = sweep(name)
   fs.writeFileSync(`${t.dir}/charter.md`, 'goals: fix the backlog\n')
   t.cli('approval')
   t.cli('stage', 'Hunt')
-  t.wt = t.cli('worktree').out.trim()
+  t.cli('worktree')
+  t.start = (...a) => {
+    const r = t.cli('wave', 'start', ...a)
+    if (r.code === 0) t.wt = /^worktree: (.+)$/m.exec(r.out)[1]
+    return r
+  }
   return t
 }
 
@@ -30,7 +35,7 @@ function hunting(name) {
 function shipping(fixes = 3, name) {
   const t = hunting(name)
   t.cli('wave', 'add', String(fixes))
-  t.cli('wave', 'start')
+  t.start()
   t.cli('stage', 'Ship')
   return t
 }
@@ -190,21 +195,85 @@ test('wave add queues a wave for each number, and a repeat while they wait is re
   ])
 })
 
-test('wave start is refused with no worktree, with no wave queued, with a dirty worktree, and while a wave runs', () => {
+test('wave add queues more waves while waves are open, as long as none is queued', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1')
+  t.start()
+  assert.equal(t.cli('wave', 'add', '2').code, 0)
+  assert.deepEqual(t.state().sweep.waves.map((w) => w.status), ['running', 'queued'])
+})
+
+test('the next wave starts once the wave before it is built, cut from that wave\'s branch in its own worktree, and is told the files it changed', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '2', '2')
+  t.start()
+  const wt1 = t.wt
+  commit(wt1, 'b.txt', 'one\n')
+  for (const stage of ['Plan', 'Build']) {
+    t.cli('stage', stage)
+    assert.equal(t.cli('wave', 'start').code, 1, stage)
+  }
+  assert.deepEqual(t.state().sweep.waves.map((w) => w.status), ['running', 'queued'])
+  t.cli('stage', 'Review')
+  assert.match(t.cli('wave', 'files').out, /^ {2}b\.txt \(wave 1\)$/m)
+  const r = t.start()
+  assert.equal(r.code, 0, r.out)
+  assert.match(r.out, /^ {2}b\.txt \(wave 1\)$/m)
+  const w2 = t.state().sweep.waves[1]
+  assert.deepEqual([w2.stage, w2.after, w2.base, w2.worktree], ['Plan', 'lcw/tidy-wave-1', git(wt1, 'rev-parse', 'HEAD'), fs.realpathSync(`${t.repo}/.claude/worktrees/tidy-wave-2`)])
+  assert.equal(git(t.wt, 'rev-parse', 'HEAD'), w2.base, 'wave 2 builds on wave 1\'s work')
+  assert.deepEqual([t.state().stage, t.state().sweep.waves[0].stage], ['Plan', 'Review'], 'the run\'s stage follows the newest wave')
+})
+
+test('at most two waves are built or reviewed at once: a third waits until one of them holds in Ship', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1', '1', '1')
+  t.start()
+  t.cli('stage', 'Review')
+  t.start()
+  t.cli('stage', 'Review', '--wave', '2')
+  const r = t.cli('wave', 'start')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /1 and 2/)
+  t.cli('stage', 'Ship', '--wave', '1')
+  assert.equal(t.start().code, 0)
+  assert.deepEqual(t.state().sweep.waves.map((w) => w.stage), ['Ship', 'Review', 'Plan'])
+  assert.equal(t.state().sweep.waves[2].after, 'lcw/tidy-wave-2')
+})
+
+test('wave defer moves fixes to the next queued wave, or queues a new wave for them', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '4', '2')
+  t.start()
+  assert.equal(t.cli('wave', 'defer', '1').code, 0)
+  assert.equal(t.cli('wave', 'defer', '4').code, 1, 'more than the wave holds')
+  assert.equal(t.cli('wave', 'defer', '0').code, 1)
+  t.cli('stage', 'Review')
+  t.start()
+  assert.equal(t.cli('wave', 'defer', '2', '--wave', '2').code, 0)
+  assert.deepEqual(t.state().sweep.waves.map((w) => [w.fixes, w.status]), [[3, 'running'], [1, 'running'], [2, 'queued']])
+})
+
+test('a sweep\'s worktree command makes only its branch, and wave start is refused before it and with no wave queued', () => {
   const t = sweep()
   fs.writeFileSync(`${t.dir}/charter.md`, 'goals\n')
   t.cli('approval')
   t.cli('stage', 'Hunt')
   t.cli('wave', 'add', '2')
-  assert.equal(t.cli('wave', 'start').code, 1, 'no worktree')
-  const wt = t.cli('worktree').out.trim()
-  fs.writeFileSync(`${wt}/stray.txt`, 'left over\n')
-  assert.equal(t.cli('wave', 'start').code, 1, 'untracked file')
-  fs.rmSync(`${wt}/stray.txt`)
-  assert.equal(t.cli('wave', 'start').code, 0)
-  assert.equal(t.cli('wave', 'start').code, 1, 'a wave is running')
+  assert.equal(t.cli('wave', 'start').code, 1, 'no branch')
+  assert.equal(t.cli('worktree').out.trim(), 'lcw/tidy')
+  assert.equal(git(t.repo, 'worktree', 'list').split('\n').length, 1, 'no worktree for the sweep itself')
+  assert.equal(t.state().worktree, null)
+  fs.writeFileSync(`${t.repo}/stray.txt`, 'left over\n')
+  const r = t.cli('wave', 'start')
+  assert.equal(r.code, 0, 'the main checkout need not be clean')
+  const wt = /^worktree: (.+)$/m.exec(r.out)[1]
+  assert.equal(wt, fs.realpathSync(`${t.repo}/.claude/worktrees/tidy-wave-1`))
   assert.equal(git(wt, 'rev-parse', '--abbrev-ref', 'HEAD'), 'lcw/tidy-wave-1')
-  assert.deepEqual(t.state().sweep.waves.map((w) => w.status), ['running'])
+  assert.equal(git(t.repo, 'rev-parse', '--abbrev-ref', 'HEAD'), 'main', 'the main checkout stays where it was')
+  assert.ok(!git(t.repo, 'status', '--porcelain').includes('.claude'), 'the wave worktrees are kept out of the main checkout\'s status')
+  assert.equal(lcw(['task', 'add', 'T1', 'x'], { home: t.home, cwd: wt }).code, 0, 'lcw run in the wave\'s worktree finds the run')
+  assert.equal(t.state().sweep.waves[0].tasks.length, 1)
 
   const u = hunting('empty')
   assert.equal(u.cli('wave', 'start').code, 1, 'no wave queued')
@@ -216,14 +285,15 @@ test('a wave runs on its own branch from the sweep\'s, starts clean, and its led
   t.cli('task', 'add', 'T9', 'left from before')
   t.cli('req', 'add', 'F9', 'left from before')
   t.cli('set', 'plan.tasks=4')
-  const r = t.cli('wave', 'start')
+  const r = t.start()
   assert.equal(r.code, 0, r.out)
   const plan = `${t.dir}/waves/1/plan.md`
   assert.ok(r.out.includes(plan) && fs.existsSync(plan))
   const s = t.state()
-  assert.deepEqual([s.tasks, s.requirements, s.plan.tasks], [[], [], 0])
-  assert.equal(s.base, git(t.repo, 'rev-parse', 'lcw/tidy'))
-  assert.equal(s.sweep.waves[0].branch, 'lcw/tidy-wave-1')
+  const w = s.sweep.waves[0]
+  assert.deepEqual([s.tasks, s.requirements, s.plan.tasks, w.tasks, w.plan.tasks], [[], [], 0, [], 0])
+  assert.deepEqual([w.stage, s.stage, w.branch, w.after, w.worktree], ['Plan', 'Plan', 'lcw/tidy-wave-1', 'lcw/tidy', t.wt])
+  assert.equal(w.base, git(t.repo, 'rev-parse', 'lcw/tidy'))
   t.cli('ledger', 'worker launched')
   const last = (f) => fs.readFileSync(f, 'utf8').trim().split('\n').at(-1)
   assert.match(last(`${t.dir}/waves/1/ledger.md`), /worker launched$/)
@@ -234,7 +304,7 @@ test('a wave runs on its own branch from the sweep\'s, starts clean, and its led
 test('wave shipped fast-forwards the sweep\'s branch, counts what passed and what was dropped, and the next wave builds on it', () => {
   const t = hunting()
   t.cli('wave', 'add', '3', '1')
-  t.cli('wave', 'start')
+  t.start()
   t.cli('stage', 'Ship')
   for (const id of ['F1', 'F2', 'F3']) t.cli('req', 'add', id, `fix ${id}`)
   t.cli('req', 'F1', 'pass')
@@ -253,7 +323,7 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
   assert.equal(t.cli('wave', 'shipped').code, 1, 'no wave running')
   assert.equal(t.state().sweep.fixed, 2)
 
-  assert.equal(t.cli('wave', 'start').code, 0)
+  assert.equal(t.start().code, 0)
   assert.deepEqual(t.state().sweep.waves[1].requirements, [], 'wave 2 starts its own list')
   assert.equal(t.state().sweep.waves[0].requirements.length, 2, 'wave 1 keeps its own')
   assert.equal(git(t.wt, 'rev-parse', 'HEAD'), tip, 'wave 2 starts from the sweep\'s branch as wave 1 left it')
@@ -264,7 +334,7 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
 test('a partly fixed fix ships but is not counted as fixed, and status says how many were partly fixed', () => {
   const t = hunting()
   t.cli('wave', 'add', '2')
-  t.cli('wave', 'start')
+  t.start()
   t.cli('req', 'add', 'F1', 'fix one')
   t.cli('req', 'add', 'F2', 'fix two')
   t.cli('req', 'F1', 'pass')
@@ -375,8 +445,8 @@ test('a pull request GitHub shows merged into a wave branch is not recorded, and
 
 test('merge deletes the remote wave branch through the api and leaves the local branch, its tracking ref and the worktree alone', () => {
   const t = shippedWaves()
-  const wt = t.cli('worktree').out.trim()
-  git(wt, 'checkout', '-q', '-b', 'lcw/tidy-wave-1')
+  const wt = `${tmp('wt')}/w`
+  git(t.repo, 'worktree', 'add', '-q', '-b', 'lcw/tidy-wave-1', wt)
   git(t.repo, 'update-ref', 'refs/remotes/origin/lcw/tidy-wave-1', 'HEAD')
   const before = git(t.repo, 'for-each-ref')
   const gh = fakeGh()
@@ -487,7 +557,7 @@ test('abandoning a sweep left alone during a wave removes its worktree and keeps
   fs.mkdirSync(`${claudeDir}/sessions`)
   const t = hunting()
   t.cli('wave', 'add', '1')
-  t.cli('wave', 'start')
+  t.start()
   const old = new Date(Date.now() - 20 * 60000)
   for (const f of ['state.json', 'ledger.md']) fs.utimesSync(`${t.dir}/${f}`, old, old)
   const r = lcw(['abandon', t.state().id], { home: t.home, cwd: t.repo, session: 's2', env: { CLAUDE_CONFIG_DIR: claudeDir } })
@@ -506,7 +576,7 @@ test('stop --pr records the pull request a stopped sweep opened', () => {
 test('wave shipped is refused outside Ship, and nothing moves', () => {
   const t = hunting()
   t.cli('wave', 'add', '1')
-  t.cli('wave', 'start')
+  t.start()
   commit(t.wt, 'b.txt', 'fix\n')
   for (const stage of ['Build', 'Review']) {
     t.cli('stage', stage)
@@ -534,7 +604,7 @@ test('a wave with no commits ships empty with no pull request, and the waves aft
 
   t.cli('set', 'sweep.prs=merged')
   t.cli('wave', 'add', '1')
-  t.cli('wave', 'start')
+  t.start()
   t.cli('stage', 'Ship')
   commit(t.wt, 'b.txt', 'fix\n')
   assert.equal(t.cli('wave', 'shipped', '--pr', '9').code, 0)
@@ -569,7 +639,7 @@ test('req park takes a fix out of the running wave once, and the wave ships coun
   const t = hunting()
   t.cli('wave', 'add', '3')
   assert.equal(t.cli('req', 'F1', 'park').code, 1, 'no wave runs')
-  t.cli('wave', 'start')
+  t.start()
   for (const id of ['F1', 'F2', 'F3']) t.cli('req', 'add', id, `fix ${id}`)
   assert.equal(t.cli('req', 'F1', 'park').code, 0)
   assert.equal(t.cli('req', 'F1', 'park').code, 0)
@@ -597,7 +667,7 @@ test('Hunt is refused while a wave is queued or an open wave is short of Ship, a
   t.cli('wave', 'add', '1')
   t.cli('stage', 'Ship')
   assert.equal(t.cli('stage', 'Hunt').code, 1, 'queued')
-  t.cli('wave', 'start')
+  t.start()
   t.cli('stage', 'Review')
   assert.equal(t.cli('stage', 'Hunt').code, 1, 'in Review')
   assert.equal(t.state().stage, 'Review')
@@ -650,7 +720,7 @@ test('finish and stop take a pull request as a bare number or a URL', () => {
 test('a parked fix cannot also be passed, failed or reset, it can be dropped once, and parking it again is harmless', () => {
   const t = hunting()
   t.cli('wave', 'add', '1')
-  t.cli('wave', 'start')
+  t.start()
   t.cli('req', 'add', 'F1', 'fix one')
   t.cli('req', 'F1', 'park')
   for (const s of ['pass', 'failing', 'todo']) {

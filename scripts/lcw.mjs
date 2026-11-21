@@ -147,6 +147,14 @@ function waveOf(s, { several = 'refuse', shipped = false } = {}) {
   fail(`Waves ${open.map((w) => w.n).join(' and ')} are open: pass --wave <n>. Nothing was changed.`)
 }
 
+// an open wave in these stages is being built or reviewed; one in Ship holds
+const BUSY = ['Plan', 'Build', 'Review']
+/** What a wave cut after `after` takes in: that open wave's branch, or the sweep's own once that wave has shipped onto it. */
+function takesFrom(s, after) {
+  const before = s.sweep.waves.find((x) => x.branch === after)
+  return before?.status === 'running' ? after : s.branch
+}
+
 const mustRun = (w) => (w.status === 'running' ? w : fail(`Wave ${w.n} has shipped. Nothing was changed.`))
 
 /** The run's stage follows its newest open wave, except while a hunt round runs alongside the waves. */
@@ -698,19 +706,21 @@ const commands = {
   worktree() {
     const run = need()
     const s = run.state
-    if (s.worktree) return out(s.worktree)
-    const dir = `${s.repoRoot}/.claude/worktrees/${s.name}`
     const branch = `lcw/${s.name}`
+    // a sweep's session stays in the main checkout and each wave gets its own worktree, so the sweep has only its branch
+    if (isSweep(s)) {
+      if (s.branch) return out(s.branch)
+      const caughtUp = catchUp(s.repoRoot)
+      git(s.repoRoot, 'branch', branch)
+      const base = git(s.repoRoot, 'rev-parse', `refs/heads/${branch}`)
+      change(run, `branch ${branch} from ${base}`, (st) => { st.branch = branch; st.base = base })
+      return out(branch, ...(caughtUp ? [`note: ${caughtUp}`] : []))
+    }
+    if (s.worktree) return out(s.worktree)
     const caughtUp = catchUp(s.repoRoot)
-    git(s.repoRoot, 'worktree', 'add', '-b', branch, dir)
-    const exclude = path.resolve(s.repoRoot, git(s.repoRoot, 'rev-parse', '--git-path', 'info/exclude'))
-    fs.mkdirSync(path.dirname(exclude), { recursive: true })
-    const text = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : ''
-    if (!text.split('\n').includes('.claude/worktrees/')) fs.appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}.claude/worktrees/\n`)
-    const real = fs.realpathSync(dir)
+    const real = addWorktree(run, `${s.repoRoot}/.claude/worktrees/${s.name}`, branch)
     const base = git(real, 'rev-parse', 'HEAD') // the commit the run branched from: reviewers read the change from it
     change(run, `worktree ${real} on ${branch} from ${base}`, (st) => { st.worktree = real; st.branch = branch; st.base = base })
-    writeJson(placeFile(home(), real), { runDir: run.dir })
     out(real, ...(caughtUp ? [`note: ${caughtUp}`] : []))
   },
 
@@ -759,18 +769,13 @@ const commands = {
     const run = need()
     const s = run.state
     change(run, 'abandoned', (st) => { st.status = 'stopped' })
-    const wt = s.worktree
+    const wts = worktreesOf(s)
     const lines = [`abandoned ${s.id}: stopped for good`]
-    if (!wt) lines.push('no worktree to remove')
-    else if (!fs.existsSync(wt)) lines.push(`worktree ${wt} was already gone`)
-    else {
-      const why = keepWorktree(s)
-      if (!why) {
-        try { git(s.repoRoot, 'worktree', 'remove', wt) } catch (e) { lines.push(`worktree kept: ${wt}, because git would not remove it: ${String(e.stderr || e.message).trim().split('\n')[0]}`) }
-        if (!fs.existsSync(wt)) lines.push(`worktree removed: ${wt}`)
-      } else lines.push(`worktree kept: ${wt}, because ${why}`)
+    if (!wts.length) lines.push('no worktree to remove')
+    for (const wt of wts) {
+      lines.push(dropWorktree(s, wt))
+      fs.rmSync(placeFile(home(), wt), { force: true })
     }
-    if (wt) fs.rmSync(placeFile(home(), wt), { force: true })
     if (s.branch) lines.push(`${branchesOf(s).length > 1 ? 'branches' : 'branch'} kept: ${branchesOf(s).join(', ')}`)
     appendLedger(run.paths, lines.slice(1).join('; '), soleOpen(run.state))
     out(...lines)
@@ -829,8 +834,8 @@ const commands = {
       if (!words.length) fail('Usage: lcw wave add <fixes> [<fixes> ...]')
       const sizes = words.map((x) => wholeNumber(x, 'A wave'))
       if (sizes.includes(0)) fail('A wave holds at least one fix. Nothing was changed.')
-      const waiting = w.waves.filter((x) => x.status !== 'shipped')
-      if (waiting.length) fail(`Waves ${waiting.map((x) => x.n).join(', ')} are already queued or running; a new round's waves are added once those have shipped. Nothing was changed.`)
+      const queued = w.waves.filter((x) => x.status === 'queued')
+      if (queued.length) fail(`Waves ${queued.map((x) => x.n).join(', ')} are already queued; a new round's waves are added once none is. Nothing was changed.`)
       const first = w.waves.length + 1
       change(run, `waves queued: ${sizes.map((f, i) => `${first + i} (${f} fixes)`).join(', ')}`, (st) => {
         sizes.forEach((fixes, i) => st.sweep.waves.push({ n: first + i, fixes, status: 'queued', branch: null, pr: null, merged: false, dropped: 0 }))
@@ -838,39 +843,59 @@ const commands = {
       return out(`queued waves ${first}${sizes.length > 1 ? `-${first + sizes.length - 1}` : ''}`)
     }
     if (sub === 'start') {
-      const on = s.sweep.waves.find((x) => x.status === 'running')
-      if (on) fail(`Wave ${on.n} is running on ${on.branch}; ship it with lcw wave shipped first. Nothing was changed.`)
-      if (!s.worktree || !fs.existsSync(s.worktree)) fail('The sweep has no worktree yet: run lcw worktree first. Nothing was changed.')
+      if (!s.branch) fail('The sweep has no branch yet: run lcw worktree first. Nothing was changed.')
+      const open = openWaves(s)
+      const newest = open.at(-1)
+      if (newest?.status === 'running' && ['Plan', 'Build'].includes(newest.stage)) fail(`Wave ${newest.n} is in ${newest.stage}; the next wave starts once it is built and in Review. Nothing was changed.`)
+      const busy = open.filter((x) => x.status === 'running' && BUSY.includes(x.stage))
+      if (busy.length >= 2) fail(`Waves ${busy.map((x) => x.n).join(' and ')} are being built or reviewed, and at most two are at once; the next wave starts once one of them holds in Ship. Nothing was changed.`)
       const next = w.waves.find((x) => x.status === 'queued') || fail('No wave is queued: queue one with lcw wave add. Nothing was changed.')
-      if (git(s.worktree, 'status', '--porcelain', '--untracked-files=all')) fail(`The worktree ${s.worktree} has uncommitted or untracked files; commit or remove them first. Nothing was changed.`)
+      const after = newest?.branch ?? s.branch
+      const from = takesFrom(s, after)
       const branch = `${s.branch}-wave-${next.n}`
-      try { git(s.worktree, 'checkout', '-q', '-b', branch, s.branch) } catch (e) { fail(`git could not cut ${branch} from ${s.branch}: ${firstLine(e)}. Nothing was changed.`) }
-      const base = git(s.worktree, 'rev-parse', 'HEAD')
+      const wanted = `${s.repoRoot}/.claude/worktrees/${s.name}-wave-${next.n}`
+      let worktree
+      try { worktree = addWorktree(run, wanted, branch, from) } catch (e) { fail(`git could not make the worktree ${wanted} on ${branch} from ${from}: ${firstLine(e)}. Nothing was changed.`) }
+      const base = git(s.repoRoot, 'rev-parse', `refs/heads/${branch}`)
       const dir = waveDir(run.dir, next.n)
       fs.mkdirSync(dir, { recursive: true })
       for (const f of ['plan.md', 'ledger.md']) if (!fs.existsSync(`${dir}/${f}`)) fs.writeFileSync(`${dir}/${f}`, '')
-      change(run, `wave ${next.n} started on ${branch} from ${base}`, (st) => {
-        const wave = st.sweep.waves.find((x) => x.n === next.n)
-        Object.assign(wave, {
+      change(run, `wave ${next.n} started in ${worktree} on ${branch} from ${after} at ${base}`, (st) => {
+        Object.assign(next, {
           status: 'running', branch, stage: 'Plan', stageSince: now(), step: null, round: 0, waiting: false,
-          tasks: [], requirements: [], plan: freshPlan(), milestone: null, worktree: st.worktree, after: st.branch, base, checked: null,
+          tasks: [], requirements: [], plan: freshPlan(), milestone: null, worktree, after, base, checked: null,
         })
         Object.assign(st, { tasks: [], requirements: [], plan: freshPlan(), milestone: null })
         enterStage(st, 'Plan')
       }, next)
-      return out(`wave ${next.n} on ${branch}`, `plan: ${dir}/plan.md`)
+      return out(`wave ${next.n} on ${branch}`, `worktree: ${worktree}`, `plan: ${dir}/plan.md`, ...changedFiles(s, open))
+    }
+    if (sub === 'files') return out(...changedFiles(s, openWaves(s)))
+    if (sub === 'defer') {
+      const wave = mustRun(waveOf(s) || fail('No wave is open. Nothing was changed.'))
+      const k = wholeNumber(words[0], 'lcw wave defer')
+      if (k < 1 || k > wave.fixes) fail(`Wave ${wave.n} holds ${wave.fixes} fixes, so it defers 1 to ${wave.fixes} of them. Nothing was changed.`)
+      const later = w.waves.find((x) => x.status === 'queued')
+      const n = later?.n ?? w.waves.length + 1
+      change(run, `wave ${wave.n}: ${k} fixes deferred to wave ${n}`, (st) => {
+        wave.fixes -= k
+        if (later) later.fixes += k
+        else st.sweep.waves.push({ n, fixes: k, status: 'queued', branch: null, pr: null, merged: false, dropped: 0 })
+      }, wave)
+      return out(`wave ${wave.n}: ${wave.fixes} fixes; wave ${n} queued with ${later?.fixes ?? k}`)
     }
     if (sub === 'shipped') {
-      if (s.stage !== 'Ship') fail(`A wave ships in Ship; this sweep is in ${s.stage}. Nothing was changed.`)
       const wave = mustRun(waveOf(s) || fail('No wave is running. Nothing was changed.'))
+      if (wave.stage !== 'Ship') fail(`A wave ships in Ship; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
       if (flags.pr !== undefined && s.sweep.prs === 'end') fail('The charter chose one pull request at the end, so a wave has no pull request of its own. Nothing was changed.')
       const pr = flags.pr === undefined ? null : prOf(flags.pr).number || fail(`--pr takes the pull request's number, not ${flags.pr}. Nothing was changed.`)
-      const tip = git(s.worktree, 'rev-parse', `refs/heads/${wave.branch}`)
+      const root = s.repoRoot
+      const tip = git(root, 'rev-parse', `refs/heads/${wave.branch}`)
       // every fix dropped or parked: nothing to land, so no pull request and nothing for the waves after it to wait on
-      const empty = Number(git(s.worktree, 'rev-list', '--count', `${s.branch}..${tip}`)) === 0
+      const empty = Number(git(root, 'rev-list', '--count', `${s.branch}..${tip}`)) === 0
       if (empty && pr) fail(`${wave.branch} has no commits, so there is no pull request to record. Nothing was changed.`)
-      try { git(s.worktree, 'merge-base', '--is-ancestor', s.branch, tip) } catch { fail(`${s.branch} has commits ${wave.branch} does not, so it cannot fast-forward to the wave. Nothing was changed.`) }
-      try { git(s.worktree, 'branch', '-f', s.branch, tip) } catch (e) { fail(`git could not move ${s.branch} to ${tip}: ${firstLine(e)}. Nothing was changed.`) }
+      try { git(root, 'merge-base', '--is-ancestor', s.branch, tip) } catch { fail(`${s.branch} has commits ${wave.branch} does not, so it cannot fast-forward to the wave. Nothing was changed.`) }
+      try { git(root, 'branch', '-f', s.branch, tip) } catch (e) { fail(`git could not move ${s.branch} to ${tip}: ${firstLine(e)}. Nothing was changed.`) }
       const fixed = wave.requirements.filter((r) => r.status === 'pass').length
       const partial = wave.requirements.filter((r) => r.status === 'partial').length
       const note = `wave ${wave.n} shipped${empty ? ' empty, with no commits' : ''}: ${s.branch} now at ${tip}; ${fixed} fixed, ${partial ? `${partial} partly fixed, ` : ''}${wave.dropped} dropped${pr ? `; PR #${pr}` : ''}`
@@ -892,7 +917,7 @@ const commands = {
       if (wave.pr) fail(`Wave ${wave.n} has pull request #${wave.pr} already. Nothing was changed.`)
       if (w.prs === 'end') fail('The charter chose one pull request at the end, so a wave has no pull request of its own. Nothing was changed.')
       const pr = prOf(ref).number || fail(`A pull request is its number or its URL, not ${ref}. Nothing was changed.`)
-      change(run, `wave ${wave.n}: PR #${pr}`, () => { wave.pr = pr })
+      change(run, `wave ${wave.n}: PR #${pr}`, () => { wave.pr = pr }, wave)
       return out(`wave ${wave.n}: PR #${pr}`)
     }
     fail('Usage: lcw wave add <fixes> ... | wave start | wave shipped [--pr <number>] | wave pr <n> <number|url>')
@@ -966,6 +991,30 @@ function checkSweepSetting(s, key, value) {
   if (!ok[key]) fail(`${key} is ${{ 'sweep.charter': 'a whole number from 0 to 10', 'sweep.open': 'a whole number', 'sweep.prs': 'stacked, merged or end' }[key]}, not ${JSON.stringify(value)}. Nothing was changed.`)
 }
 
+/** A new worktree on a new branch, kept out of the main checkout's git status, where lcw finds this run. Returns its real path. */
+function addWorktree(run, dir, branch, from) {
+  const root = run.state.repoRoot
+  git(root, 'worktree', 'add', '-b', branch, dir, ...(from ? [from] : []))
+  const exclude = path.resolve(root, git(root, 'rev-parse', '--git-path', 'info/exclude'))
+  fs.mkdirSync(path.dirname(exclude), { recursive: true })
+  const text = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : ''
+  if (!text.split('\n').includes('.claude/worktrees/')) fs.appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}.claude/worktrees/\n`)
+  const real = fs.realpathSync(dir)
+  writeJson(placeFile(home(), real), { runDir: run.dir })
+  return real
+}
+
+/** The files the given waves have changed since they were cut: a fix planned in a later wave must not need one. */
+function changedFiles(s, waves) {
+  const by = new Map()
+  for (const w of waves) {
+    if (!w.base || !w.branch) continue
+    for (const f of git(s.repoRoot, 'diff', '--name-only', `${w.base}..refs/heads/${w.branch}`).split('\n').filter(Boolean)) by.set(f, [...(by.get(f) ?? []), w.n])
+  }
+  const files = [...by].sort(([a], [b]) => a.localeCompare(b)).map(([f, ns]) => `  ${f} (wave ${ns.join(', ')})`)
+  return [files.length ? 'files the open waves have changed:' : 'files the open waves have changed: none', ...files]
+}
+
 /** What entering a stage does to the run itself. */
 function enterStage(s, stage) {
   s.stage = stage
@@ -1003,13 +1052,23 @@ function sweepStatus(run) {
   ]
 }
 
-/** Why a run's worktree must stay when the run is abandoned, or null when removing it loses nothing. */
-function keepWorktree(s) {
-  const wt = s.worktree
+/** A run's worktrees: a build's own, and in a sweep each wave's that is still there to remove. */
+const worktreesOf = (s) => [...new Set([s.worktree, ...(s.sweep?.waves ?? []).map((w) => w.worktree)].filter(Boolean))]
+
+/** Removes one of a run's worktrees when nothing in it would be lost, keeping its branch; says what became of it. */
+function dropWorktree(s, wt) {
+  if (!fs.existsSync(wt)) return `worktree ${wt} was already gone`
+  const why = keepWorktree(s, wt)
+  if (why) return `worktree kept: ${wt}, because ${why}`
+  try { git(s.repoRoot, 'worktree', 'remove', wt) } catch (e) { return `worktree kept: ${wt}, because git would not remove it: ${firstLine(e)}` }
+  return `worktree removed: ${wt}`
+}
+
+/** Why one of a run's worktrees must stay, or null when removing it loses nothing. */
+function keepWorktree(s, wt) {
   const here = fs.realpathSync(cwd)
-  const inside = (p) => p === wt || p.startsWith(`${wt}/`)
-  if (inside(here)) return 'this session is in it'
-  if (sessionFolders().some(inside)) return 'an open Claude Code session is in it'
+  if (inside(here, wt)) return 'this session is in it'
+  if (sessionFolders().some((p) => inside(p, wt))) return 'an open Claude Code session is in it'
   try {
     // every untracked file, whatever status.showUntrackedFiles says: git worktree remove would delete them
     if (git(wt, 'status', '--porcelain', '--untracked-files=all')) return 'it has uncommitted or untracked files'
