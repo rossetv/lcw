@@ -8,12 +8,12 @@ const RUN = '/lcw/repos/r/runs/x'
 
 // The world beneath the mod: files in memory, the prompt box, the prompts it submits, and a clock that jumps.
 // Each timer fires once per jump, so a wait of many minutes costs one step.
-function engine(on: any, opts: { run?: string; reason?: string | null; drop?: string } = {}) {
+function engine(on: any, opts: { run?: string; shape?: string; reason?: string | null; drop?: string } = {}) {
   const files: Record<string, string> = {}
   if (opts.run) {
     files['/lcw/sessions/s1.json'] = JSON.stringify({ runDir: RUN })
     files[RUN + '/state.json'] = JSON.stringify({
-      id: '20261121-x', name: 'x', status: opts.run, pausedReason: opts.run === 'paused' ? (opts.reason === undefined ? 'human' : opts.reason) : null, stage: 'Build', stageSince: NOW, createdAt: NOW,
+      id: '20261121-x', name: 'x', status: opts.run, pausedReason: opts.run === 'paused' ? (opts.reason === undefined ? 'human' : opts.reason) : null, shape: opts.shape, stage: 'Build', stageSince: NOW, createdAt: NOW,
     })
     files[RUN + '/mod-alive'] = String(NOW)
   }
@@ -86,13 +86,48 @@ test('a lost connection is carried on after a minute, then after 5 and 15 minute
   expect(w.prompts.length).toBe(3)
 })
 
-test('a billing error is not carried on', async ($, on) => {
+test('the wait stays at 30 minutes after the third failed try, each measured from that failed try', async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($, 'billing_error')
-  await w.pass(30)
-  expect(w.prompts.length).toBe(0)
+  await fail($)
+  await w.pass(1.1)
+  await fail($)
+  await w.pass(5.1)
+  await fail($)
+  await w.pass(15.1)
+  expect(w.prompts).toHaveLength(3)
+  await fail($)
+  await w.pass(29.8)
+  expect(w.prompts).toHaveLength(3)
+  await w.pass(0.4)
+  expect(w.prompts).toHaveLength(4)
+  await fail($)
+  await w.pass(29.8)
+  expect(w.prompts).toHaveLength(4)
+  await w.pass(0.4)
+  expect(w.prompts).toHaveLength(5)
 })
+
+for (const error of ['authentication_failed', 'billing_error', 'invalid_request', 'model_not_found', 'rate_limit', 'unknown']) {
+  test(`an error of kind ${error} is not carried on`, async ($, on) => {
+    const w = engine(on)
+    await start($)
+    await fail($, error)
+    await w.pass(30)
+    expect(w.prompts.length).toBe(0)
+  })
+}
+
+for (const shape of ['build', 'sweep']) {
+  test(`a running ${shape} is carried on`, async ($, on) => {
+    const w = engine(on, { run: 'running', shape })
+    await start($)
+    await fail($)
+    await w.pass(1.1)
+    expect(w.prompts).toHaveLength(1)
+    expect(w.prompts[0]).toMatch(/try 1\b/)
+  })
+}
 
 test("a subagent's API error is not carried on", async ($, on) => {
   const w = engine(on)
