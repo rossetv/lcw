@@ -8,15 +8,9 @@ Each round of a sweep starts here: probes look for problems in the areas the cha
 
 In round 1, every area the charter names.
 
-In a later round, only an area that had a finding sorted to Fix in the round before, or that a wave has changed since. An area that came up clean, or whose findings were all parked or dropped, and that no wave changed, is not hunted again. To see what the waves changed, take the commit the last round read (findings.md records it) and run `git diff --name-only <that commit> lcw/<name>`; an area whose files are in that list has changed.
+In a later round, only an area that had a finding sorted to Fix in the round before, or that a wave has changed since. An area that came up clean, or whose findings were all parked or dropped, and that no wave changed, is not hunted again. While a stop line that counts fixes is not met, a later round also hunts the charter's items or areas that no round has hunted yet. To see what the waves changed, take the commit the last round read (findings.md records it) and run `git diff --name-only <that commit> lcw/<name>`; an area whose files are in that list has changed.
 
 Probes read the code where the sweep stands: the main checkout in round 1, before the sweep has a worktree; `lcw/<name>` in its worktree after that. Start the round's heading in findings.md with the commit they read (`git rev-parse HEAD` there).
-
-## The baseline
-
-In round 1, where the charter's PRs line names checks run on this machine, launch one more probe (Sonnet, medium) with the round's probes, to run those checks once on the commit the hunt reads, before any fix. It runs them as the repository says, in a throwaway worktree at that commit, made ready as the repository needs; a check that runs only from the main checkout runs there, changing no tracked file. A check that needs a shared service, such as a dev stack, uses it as it stands: the probe never starts, stops or rebuilds it, and if the check cannot run that way, it reports why instead. A long check runs in the background. It reports, for each check, whether it passed, how long it took, and for each failing test whether the fault looks like the code's or this machine's (a stopped container, a missing tool). Write the report under "Baseline" in charter.md.
-
-If a check fails, act on what the charter says a check already failing means. Where that is to wait for the human, `lcw ask` them now, while the charter is fresh in their mind: only the merges wait on the answer, and the hunt and the waves carry on.
 
 ## Sending the probes
 
@@ -30,11 +24,13 @@ List the round's parts in findings.md, then launch the probes in batches of up t
 lcw hunt --areas 36 --hunted 14 --running 6 --findings 23
 ```
 
-Write each report into findings.md under its part as it arrives, so after a compaction you can see which parts have reported. A report with no recipe is not a finding: ask the probe for what is missing, and if it cannot say, leave it out. A finding already parked or dropped in an earlier round is not sorted again; one written in during a wave (what a partly fixed fix left, a replacement found early) is sorted with this round's.
+Write each report into findings.md under its part as it arrives, so after a compaction you can see which parts have reported. A report with no recipe is not a finding: ask the probe for what is missing, and if it cannot say, leave it out. A finding already parked or dropped in an earlier round is not sorted again; one written in during a wave (what a partly fixed fix left) is sorted with this round's.
 
 ## Sorting
 
-When every part has reported, sort each finding against the charter, and write the sort and its reason beside it in findings.md. Give each finding an id that is new in this sweep (F1, F2, and on across rounds); a fix keeps its id when its wave's Plan records it.
+When every part has reported, and in round 1 the baseline the charter launched too (charter.md, "Baseline"), sort each finding against the charter, and write the sort and its reason beside it in findings.md.
+
+A check the baseline found failing is handled as the charter's PRs line says. Where the charter says to fix it, it is a finding like any other, its recipe taken from the baseline's report, and sorted to Fix, so it lands in the first wave. Where the charter says to wait for the human, `lcw ask` them now: only the merges wait on the answer, and the waves carry on. Give each finding an id that is new in this sweep (F1, F2, and on across rounds); a fix keeps its id when its wave's Plan records it.
 
 - **Fix**: it goes into a wave.
 - **Park**: a decision only the human can make (the finding names a problem but not what should happen instead, and the charter does not settle it), or what the charter's park line says to park. A fix that would need a no-go zone, or a kind of change the charter does not allow, is parked, not built. Say why.
@@ -81,7 +77,7 @@ and end your turn.
 
 ## Ending the sweep
 
-The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix. A stop line that counts fixes counts what the charter's goals line calls done, which is `fixed` in `lcw status`: a partly fixed fix is not one, so the sweep goes on to a replacement, or ends short of the count and says why. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it.
+The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix. A stop line that counts fixes counts what the charter's goals line calls done, which is `fixed` in `lcw status`: a partly fixed fix is not one, so the sweep goes on to find a replacement. It ends short of the count only when a round finds nothing more to fix, and says why. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it.
 
 Before you report, settle the pull requests as the charter's PRs line says. Whichever it is, run `lcw status` just before `lcw finish` and keep what it prints, the totals and each wave's pull request: once the run is finished, the session is no longer bound to it.
 

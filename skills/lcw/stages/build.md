@@ -78,7 +78,7 @@ and end your turn. The review starts on a fresh context.
 - If a fix can meet the charter's done line only in part (the item stays partly true, or its row cannot be closed), it builds what the charter allows and reports it as partly fixed, with what is left and why.
 - A security fix in a public repository commits no test and no other proof of the hole; the proof stays in the sweep's records. A fix findings.md marks "no proof in the repository" is briefed so: it commits no test or other proof of the hole, and keeps any proof outside the repository.
 
-When a worker reports a fix as partly fixed, write what is left into findings.md as a new finding under its own id, not yet sorted: the next round of Hunt sorts it with the rest. A partly fixed fix does not count toward a stop line that counts fixes. If the charter's stop line does, launch a probe at once, like Hunt's spares, for one replacement among what is not yet hunted, and write its report into findings.md the same way, so the next round sorts it without waiting for it.
+When a worker reports a fix as partly fixed, record it at once, `lcw req <F id> partial` and `lcw ledger "<F id> partly fixed: <what is left>"`, and write what is left into findings.md as a new finding under its own id, not yet sorted: the next round of Hunt sorts it with the rest.
 
 When a worker reports a dropped fix, it has recorded the drop itself: run none of those commands again. Move the finding to Drop in findings.md with the worker's reason. It is never passed to a more capable model to try again.
 

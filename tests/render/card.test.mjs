@@ -687,3 +687,9 @@ test("a parked fix is neither to go nor dropped on the fixes row, and the wave's
   const s = buildView(j).sweep;
   assert.deepEqual([s.fixed, s.parked, s.dropped], [j.state.sweep.fixed + 1, j.state.sweep.parked, j.state.sweep.dropped + j.state.sweep.waves[1].dropped]);
 });
+
+test('in a wave\'s review a partly fixed fix counts as reviewed, not as one to go', () => {
+  const requirements = [{ id: 'F1', name: 'a', status: 'pass' }, { id: 'F2', name: 'b', status: 'partial' }, { id: 'F3', name: 'c', status: 'todo' }];
+  const view = buildView({ state: { shape: 'sweep', stage: 'Review', status: 'running', requirements, sweep: { waves: [] } }, now: NOW });
+  assert.deepEqual([view.detail.pass, view.detail.toGo, view.detail.total], [2, 1, 3]);
+});

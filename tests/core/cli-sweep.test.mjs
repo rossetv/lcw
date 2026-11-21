@@ -278,7 +278,9 @@ test('req partial is refused in a build', () => {
   const o = { home, cwd: makeRepo(), session: 's1' }
   lcw(['start', 'b', '--title', 'B'], o)
   lcw(['req', 'add', 'R1', 'one'], o)
-  assert.equal(lcw(['req', 'R1', 'partial'], o).code, 1)
+  const r = lcw(['req', 'R1', 'partial'], o)
+  assert.equal(r.code, 1)
+  assert.match(r.out, /Usage: lcw req <id> <todo\|pass\|failing>/)
 })
 
 test('wave shipped is refused when the sweep\'s branch cannot fast-forward to the wave, and nothing moves', () => {
