@@ -10,7 +10,7 @@ import { buildView, renderCard } from '../lib/card.mjs'
 import { hex } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import {
-  addTotals, addUsage, buttons, checkpointCompacts, countsTurn, compactInstructions, gateFor, keptPrompt, isAnimating, isShown, layout, measureStep, nudgeable, quietCounts, reopenDue,
+  addTotals, addUsage, buttons, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep, nudgeable, quietCounts, reopenDue,
   reopenPrompt, resumePrompt, retryGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt, wakeable, wakeDue, wakePrompt,
 } from './lcw-mod.mjs'
 import type { CardAgent, Nudged, Row, Seen, Span, Totals } from './lcw-mod.mjs'
@@ -551,12 +551,6 @@ async function checkpoint($: EngineInterface) {
   // The step stays in its file until the compaction has happened: one refused because a turn has started is
   // tried again when a turn next ends.
   $.clock.after(700, () => void (async () => {
-    const usage = await $.session.usage().catch(() => null)
-    if (!checkpointCompacts(usage?.context)) {
-      await $.fs.write(run.paths.checkpoint, '')
-      await $.prompt.submit({ text: keptPrompt(step) })
-      return
-    }
     await $.session.compact({ instructions: compactInstructions(run.state, run.runDir, step) })
     await $.fs.write(run.paths.checkpoint, '')
     await $.prompt.submit({ text: resumePrompt($.plugin.root, step) })

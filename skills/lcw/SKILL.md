@@ -91,7 +91,13 @@ Keep `health` current with a few plain words of what is happening, such as `lcw 
 
 ## Compaction
 
-`lcw checkpoint "<next step>"` asks for a compaction when your turn ends; then you are prompted to carry on. LCW compacts only a context of 250K tokens or more (or 60% of a smaller window); a smaller one is kept, and the prompt says so. Write the next step so that a fresh you, with only `lcw status` and this skill, could act on it. Checkpoint at the end of every stage after the brainstorm or the charter (when the spec is approved, the plan is written, the build is done and the review has passed) and after each build milestone, then end your turn. The stage files say when.
+Checkpoint at the end of every stage after the brainstorm or the charter (when the spec is approved, the plan is written, the build is done and the review has passed) and after each build milestone; the stage files say when. `lcw checkpoint "<next step>"` records the next step and says what happens to the context, and what it says overrides the stage files' "end your turn":
+
+- Under 200K tokens, nothing compacts: carry on with the next step at once, in the same turn.
+- From 200K, the call is yours. `lcw checkpoint --compact` when a fresh start serves the next step better: end your turn, and after the compaction you are prompted with the next step. `lcw checkpoint --keep "<why>"` when the next step needs what is in view, such as the findings a fix round is about to act on; carry on in the same turn. Weigh it as the one who answers for the run: every turn re-reads the whole context, so 500K costs five times what 100K does on each one, and a compaction keeps only what the records hold. Above 200K, `lcw stage`, `set` and `status` remind you of the size.
+- Near the window's end (80% of it), or when lcw cannot see the size, it compacts: end your turn.
+
+`lcw checkpoint --compact "<next step>"` compacts at any size, when you judge a fresh start is better. Write the next step so that a fresh you, with only `lcw status` and this skill, could act on it.
 
 ## Agents
 

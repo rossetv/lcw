@@ -317,3 +317,11 @@ test('two runs in one repository: each session counts and names only its own run
   assert.match(bar('s2'), /· lcw\/beta\s+│\s+\+3$/)
   assert.match(bar('s3'), /· main$/, 'a session with no run of its own sees neither')
 })
+
+test('the status line saves its session\'s context size for lcw checkpoint', () => {
+  const input = JSON.stringify({ session_id: 'ctx1', cwd: tmp('cwd'), context_window: { used_percentage: 31, context_window_size: 1_000_000 } })
+  const { home } = line(input)
+  const saved = readJson(`${home}/cache/context-ctx1.json`)
+  assert.equal(saved.tokens, 310_000)
+  assert.equal(saved.window, 1_000_000)
+})

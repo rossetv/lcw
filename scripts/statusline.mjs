@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { usageFile, activityFile, sessionFile, runPaths } from '../lib/key.mjs'
+import { usageFile, activityFile, sessionFile, runPaths, contextFile } from '../lib/key.mjs'
 import { home, readJson, writeJson, git, mainCheckout } from './lib/store.mjs'
 import { findRun } from './lib/runs.mjs'
 import { applyGate, sessionIds, sessionMark, DEFAULT_MARK } from './lib/gate.mjs'
@@ -133,6 +133,9 @@ export async function main({ margin = 5 } = {}) {
     // Claude Code hands each session the figure it saw at its own last reply, so two bars can differ. The newest
     // one any session has reported is kept in usage.json, and that is what every bar and mascot shows: nothing
     // once the week it was read in is over.
+    // The context's size for lcw checkpoint, which cannot see it: the share Claude Code reports of the window it reports.
+    const pct = num(inp.context_window?.used_percentage), win = num(inp.context_window?.context_window_size)
+    if (pct !== null && win) for (const id of ids) try { writeJson(contextFile(home(), id), { tokens: Math.round(pct / 100 * win), window: win, at: now }) } catch {}
     let usage = readJson(usageFile(home()))
     if (mapped.usage) {
       try {

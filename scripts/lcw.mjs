@@ -2,7 +2,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { runsDir, repoKey, runPaths, placeFile, slug, sessionFile, spendFile } from '../lib/key.mjs'
+import { runsDir, repoKey, runPaths, placeFile, slug, sessionFile, spendFile, contextFile } from '../lib/key.mjs'
+import { compactChoice, tokensText, KEEP_UNDER } from '../lib/checkpoint.mjs'
 import { home, readJson, writeJson, writeAtomic, git, mainCheckout, saveState, appendLedger as appendRunLedger, loadState } from './lib/store.mjs'
 import { findRun, bindSession, unbindSession, listRuns, open, runOf, lastShown, machineRunCount } from './lib/runs.mjs'
 import { sessionFolders } from './lib/cleanup.mjs'
@@ -23,10 +24,10 @@ const now = () => (Number.isFinite(Number(process.env.LCW_NOW)) && process.env.L
 // flags each command takes (all take a value); --session is accepted everywhere
 const COMMAND_FLAGS = {
   start: ['title', 'shape'], task: ['model', 'effort'], ask: ['waiting'], approval: ['meaning'], finish: ['pr', 'branch'], stop: ['pr'],
-  hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr'],
+  hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr'], checkpoint: ['keep'],
 }
 // flags that take no value
-const SWITCHES = { where: ['json'], awake: ['check'] }
+const SWITCHES = { where: ['json'], awake: ['check'], checkpoint: ['compact'] }
 const MUTATING = ['stage', 'set', 'task', 'req', 'ask', 'answer', 'approval', 'mark', 'pause', 'resume', 'stop', 'finish', 'worktree', 'take', 'abandon', 'hunt', 'wave', 'merge']
 // commands that name their run by its id, rather than acting on the run this session drives
 const BY_ID = ['take', 'abandon']
@@ -51,6 +52,7 @@ take <runId> makes this session take over a run of this repository that no sessi
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
 flags: --session <id> (any command); start --title --shape; task --model --effort; ask --waiting; approval --meaning; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
+checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
 const refuse = (msg) => { console.log(msg); process.exit(1) }
 const help = () => { console.log(USAGE); process.exit(0) }
@@ -128,6 +130,12 @@ function githubRepo(root) {
 const gh = (cwd, ...a) => execFileSync('gh', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 const firstLine = (e) => String(e.stderr || e.message).trim().split('\n')[0]
 const wholeNumber = (text, what) => (/^\d+$/.test(String(text)) ? Number(text) : fail(`${what} takes a whole number, not ${text}. Nothing was changed.`))
+
+/** The context the status line last saw for this session, { tokens, window }, or null when there is no fresh reading. */
+function contextOf(id) {
+  const c = id ? readJson(contextFile(home(), id)) : null
+  return c && Number(c.tokens) > 0 && now() - Number(c.at) < 10 * 60000 ? c : null
+}
 
 function nextStepOf(run) {
   const line = fs.readFileSync(run.paths.ledger, 'utf8').split('\n').reverse().find((l) => l.includes(' checkpoint: '))
@@ -381,10 +389,30 @@ const commands = {
   checkpoint() {
     const run = need()
     const step = rest.join(' ')
-    if (!step) fail('Usage: lcw checkpoint "<next step>"')
-    writeAtomic(run.paths.checkpoint, step)
-    appendLedger(run.paths, `checkpoint: ${step}`)
-    out('checkpoint written; compaction happens when this turn ends')
+    const usage = 'Usage: lcw checkpoint "<next step>" | checkpoint --compact ["<next step>"] | checkpoint --keep "<why>"'
+    const ctx = contextOf(sessionId)
+    const size = ctx ? `context ${tokensText(ctx.tokens)}` : 'context size unknown'
+    const compact = (s) => {
+      writeAtomic(run.paths.checkpoint, s)
+      out(`${size}: checkpoint written; compaction happens when this turn ends, so end your turn now`)
+    }
+    if (flags.keep !== undefined) {
+      if (flags.compact || step) fail(usage)
+      if (compactChoice(ctx) === 'compact') fail(`${size}${ctx ? ", too near the window's end to keep" : ', so it cannot be kept'}: run lcw checkpoint --compact. Nothing was changed.`)
+      appendLedger(run.paths, `${size} kept: ${flags.keep}`)
+      return out(`${size} kept; carry on with the next step now, in this turn`)
+    }
+    const next = step || (flags.compact ? nextStepOf(run) : null)
+    if (!next) fail(usage)
+    if (step) appendLedger(run.paths, `checkpoint: ${step}`)
+    if (flags.compact) return compact(next)
+    const choice = compactChoice(ctx)
+    if (choice === 'compact') return compact(next)
+    if (choice === 'keep') return out(`${size}, under ${tokensText(KEEP_UNDER)}: nothing compacts. Carry on with the next step now, in this turn; do not end it.`)
+    out(`${size}: yours to decide.`,
+      '  lcw checkpoint --compact          compacts when this turn ends, then you are prompted with the next step',
+      '  lcw checkpoint --keep "<why>"     carries on with this context, in this turn',
+      `Every turn re-reads the whole context, so keeping it costs more on each one; a compaction keeps only what the records hold. Choose what serves the next step.`)
   },
 
   // The mark belongs to the session it is said in, run or no run; a run uses the mark of the session that drives it.
@@ -1004,6 +1032,11 @@ try {
     commands[command]()
   })
   else await commands[command]()
+  // A reminder above the line, on the commands the orchestrator runs; workers' lcw calls never see it.
+  if (['stage', 'set', 'status'].includes(command)) {
+    const ctx = contextOf(sessionId)
+    if (compactChoice(ctx) === 'ask') out(`context ${tokensText(ctx.tokens)}: compact at your next checkpoint unless the work needs this context`)
+  }
 } catch (e) {
   if (e instanceof Fail) console.log(e.message)
   else console.log(String(e.stderr || e.message).trim())

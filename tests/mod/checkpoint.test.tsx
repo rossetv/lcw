@@ -13,7 +13,7 @@ const files = (more: Record<string, string> = {}) => ({
 })
 
 // The world beneath the mod: files in memory, a clock the test moves, compactions that can be refused, and the prompts sent.
-function engine(on: any, files: Record<string, string>, opts: { refuse?: number; slowWrites?: boolean; context?: { tokens: number; window: number } } = {}) {
+function engine(on: any, files: Record<string, string>, opts: { refuse?: number; slowWrites?: boolean } = {}) {
   const clock = mock.clock(on, { now: NOW })
   const prompts: string[] = []
   const compacts: unknown[] = []
@@ -38,7 +38,6 @@ function engine(on: any, files: Record<string, string>, opts: { refuse?: number;
     return { messages: [{ role: 'user', text: 'the summary', toolUses: [] }] }
   })
   on('prompt.submit', (_: any, e: any) => { prompts.push(e.text); return { text: e.text } })
-  if (opts.context) on('session.usage', () => ({ value: { startedAt: NOW, context: opts.context, rateLimits: [] } }))
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
   on('ui.invalidate', () => ({ value: undefined }))
@@ -58,35 +57,6 @@ test('a checkpoint compacts the session when the turn ends, then empties its fil
   expect(w.files[RUN + '/checkpoint']).toBe('')
   expect(w.resumes().length).toBe(1)
   expect(w.resumes()[0]).toContain(STEP)
-})
-
-test('a checkpoint keeps a context under 250K tokens and sends the next step without compacting', async ($, on) => {
-  const w = engine(on, files({ [RUN + '/checkpoint']: STEP }), { context: { tokens: 249_000, window: 1_000_000 } })
-  await start($)
-  await turnEnds($)
-  await w.clock.advance(1000)
-  expect(w.compacts.length).toBe(0)
-  expect(w.files[RUN + '/checkpoint']).toBe('')
-  expect(w.resumes().length).toBe(1)
-  expect(w.resumes()[0]).toContain('not compacted')
-  expect(w.resumes()[0]).toContain(STEP)
-})
-
-test('a checkpoint compacts a context of 250K tokens', async ($, on) => {
-  const w = engine(on, files({ [RUN + '/checkpoint']: STEP }), { context: { tokens: 250_000, window: 1_000_000 } })
-  await start($)
-  await turnEnds($)
-  await w.clock.advance(1000)
-  expect(w.compacts.length).toBe(1)
-  expect(w.resumes()[0]).toContain('was compacted')
-})
-
-test('in a window too small to reach 250K, a checkpoint compacts at 60% of it', async ($, on) => {
-  const w = engine(on, files({ [RUN + '/checkpoint']: STEP }), { context: { tokens: 120_000, window: 200_000 } })
-  await start($)
-  await turnEnds($)
-  await w.clock.advance(1000)
-  expect(w.compacts.length).toBe(1)
 })
 
 test('a compaction refused because a turn has started keeps the checkpoint, and the next turn to end tries again', async ($, on) => {
