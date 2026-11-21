@@ -71,6 +71,7 @@ test('the state the cli writes for two open waves is drawn as a lane for each, w
   assert.equal(r.length, 3 + 2, 'three rows and one for each open wave')
 
   // wave 1 in Ship at its final checks, wave 2 (having taken wave 1 in) in Review
+  t.at(2, 'task', 'T3', 'done')
   t.at(2, 'wave', 'take')
   for (const [id, status] of [['R1', 'pass'], ['R2', 'todo']]) {
     t.at(2, 'req', 'add', id, `fix ${id}`)
