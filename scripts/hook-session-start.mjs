@@ -11,6 +11,7 @@ import { paygLines } from './lib/payg-note.mjs'
 import { alive } from './lib/awake.mjs'
 import { signInKind } from '../lib/billing.mjs'
 import { sessionFile } from '../lib/key.mjs'
+import { openWaves } from '../lib/banner.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const cli = `node ${root}/scripts/lcw.mjs`
@@ -109,8 +110,12 @@ try {
       : null
     const paused = s.status === 'paused'
     const byYou = s.pausedReason !== 'mark'
+    const open = openWaves(s)
+    const waves = open.length
+      ? ` Open waves: ${open.map((w) => `wave ${w.n} in ${w.stage}${w.step ? ` (${w.step})` : ''}${w.waiting ? ', waiting on an answer' : ''}${w.worktree ? `, worktree ${w.worktree}` : ''}`).join('; ')}.`
+      : ''
     lines.push(
-      `Unfinished LCW run: ${s.id} (${s.title}). Stage ${s.stage}, status ${s.status}${paused ? ` (${byYou ? 'paused by the user' : 'paused at the usage mark'})` : ''}. Folder ${run.dir}.`,
+      `Unfinished LCW run: ${s.id} (${s.title}). Stage ${s.stage}, status ${s.status}${paused ? ` (${byYou ? 'paused by the user' : 'paused at the usage mark'})` : ''}.${waves} Folder ${run.dir}.`,
       `Next step: ${next || 'see the ledger'}.`,
       !paused ? `Load the lcw:lcw skill and carry on (run "${cli} status" first).`
         : byYou ? `The user paused it, so it stays paused until they say carry on: do not resume it yourself. Load the lcw:lcw skill when they do.`

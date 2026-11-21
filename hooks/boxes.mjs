@@ -3,6 +3,7 @@
 import { thresholds as TH } from '../lib/theme.mjs'
 import { DEFAULT_CAP_USD } from '../lib/spend.mjs'
 import { dollars } from '../lib/format.mjs'
+import { openWaves, workOf } from '../lib/banner.mjs'
 
 /** A run no session has shown for this long is no longer open anywhere (lcw take and abandon use the same). */
 export const SHOWN_WITHIN_MS = 15 * 60000
@@ -20,7 +21,7 @@ const count = (tasks, ...statuses) => tasks.filter((t) => statuses.includes(t?.s
 
 /** The tasks done and left, or nothing while the run has no tasks (before Build). */
 function taskCounts(state) {
-  const tasks = Array.isArray(state?.tasks) ? state.tasks : []
+  const { tasks } = workOf(state)
   return tasks.length ? { done: count(tasks, 'done'), left: count(tasks, 'todo', 'running') } : {}
 }
 
@@ -138,11 +139,13 @@ export function unfinishedCandidates(runs, now, ownDir, dismissed) {
     .sort((a, b) => b.shownAt - a.shownAt)
 }
 
-/** The wave a sweep is in: the one running, else the next queued; none for a build or between waves. */
+/** The waves a sweep has open, else its next queued wave; none for a build or between waves. */
 function waveOf(state) {
   if (shapeOf(state) !== 'sweep') return {}
   const waves = Array.isArray(state.sweep?.waves) ? state.sweep.waves : []
-  const w = waves.find((x) => x?.status === 'running') ?? waves.find((x) => x?.status === 'queued')
+  const open = openWaves(state)
+  if (open.length) return { wave: open[0].n, waves: open.map(({ n, stage, step, waiting }) => ({ n, stage, step, waiting })) }
+  const w = waves.find((x) => x?.status === 'queued')
   return Number.isFinite(w?.n) ? { wave: w.n } : {}
 }
 

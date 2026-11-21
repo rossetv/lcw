@@ -325,3 +325,18 @@ test('the status line saves its session\'s context size for lcw checkpoint', () 
   assert.equal(saved.tokens, 310_000)
   assert.equal(saved.window, 1_000_000)
 })
+
+test('the mascot counts the open waves of a sweep, not the empty run-level lists', () => {
+  const { home, dir, input } = startRun(10)
+  const state = readJson(dir + '/state.json')
+  const face = () => (bare(line(input, { home }).out).match(/T/g) ?? []).length
+  const baseline = face()
+  const sweep = { ...state, shape: 'sweep', stage: 'Build', tasks: [], requirements: [], sweep: { prs: 'stacked', waves: [
+    { n: 1, status: 'shipped', merged: false, requirements: [{ id: 'R1', status: 'failing' }], tasks: [] },
+    { n: 2, status: 'running', stage: 'Build', tasks: [{ id: 'T1', status: 'todo' }], requirements: [{ id: 'R1', status: 'pass' }] }] } }
+  fs.writeFileSync(dir + '/state.json', JSON.stringify(sweep))
+  assert.equal(face(), baseline, 'a failing requirement of a wave that is not open does not count')
+  sweep.sweep.waves[1].requirements.push({ id: 'R2', status: 'failing' })
+  fs.writeFileSync(dir + '/state.json', JSON.stringify(sweep))
+  assert.ok(face() > baseline, 'a failing requirement of an open wave makes it cry')
+})

@@ -507,3 +507,15 @@ test('session start removes the temp files a stopped writer left an hour ago or 
   for (const f of old) assert.equal(fs.existsSync(f), false, f)
   for (const f of [fresh, ...others]) assert.equal(fs.existsSync(f), true, f)
 })
+
+test('session-start hook names each open wave of a sweep with its stage and worktree', () => {
+  const t = started('multi')
+  const s = t.state()
+  fs.writeFileSync(`${t.dir}/state.json`, JSON.stringify({ ...s, shape: 'sweep', stage: 'Build', sweep: { prs: 'stacked', waves: [
+    { n: 1, status: 'running', stage: 'Ship', step: 'final checks', worktree: '/w/one' },
+    { n: 2, status: 'running', stage: 'Build', step: null, worktree: '/w/two' },
+    { n: 3, status: 'queued' }] } }))
+  const r = run(START_HOOK, [], { home: t.home, cwd: t.repo, input: JSON.stringify({ session_id: 's1', cwd: t.repo }) })
+  assert.match(r.out, /wave 1 in Ship \(final checks\), worktree \/w\/one; wave 2 in Build, worktree \/w\/two\./)
+  assert.doesNotMatch(r.out, /wave 3/)
+})

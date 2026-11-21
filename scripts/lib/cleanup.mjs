@@ -96,8 +96,10 @@ function survey(cwd, lcwHome) {
 
   const trees = worktreeList(main).filter((w) => w.path && w.path !== real(main) && !w.bare).map((w) => {
     const t = { type: 'worktree', path: w.path, branch: w.branch, head: w.head }
-    const liveRun = live.find((s) => s.worktree && real(s.worktree) === w.path)
-    const endedRun = runs.find((s) => ended(s) && s.worktree && real(s.worktree) === w.path)
+    // A live sweep's waves keep their worktrees: an open one is being worked in, a shipped one holds the latest work.
+    const holds = (s) => [s.worktree, ...(Array.isArray(s.sweep?.waves) ? s.sweep.waves.map((x) => x?.worktree) : [])].some((p) => p && real(p) === w.path)
+    const liveRun = live.find(holds)
+    const endedRun = runs.find((s) => ended(s) && holds(s))
     // The folder was deleted by hand: only git's record of it is left. A branch keeps its commits when that record
     // goes; a detached commit that is nowhere else would be lost with it, so that worktree stays.
     const gone = !!w.prunable && !w.locked
