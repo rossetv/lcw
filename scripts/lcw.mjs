@@ -45,13 +45,14 @@ const args = []
 const argv = process.argv.slice(2)
 const USAGE = `lcw commands: ${'start status stage set task req ask answer question approval ledger checkpoint mark cap spend-command usage pause resume stop finish worktree pictures runs where take abandon awake hunt wave merge'}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
-In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked and charter.md written.
-hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number; wave start runs the front queued wave on lcw/<name>-wave-<n>, cut from lcw/<name> in the worktree, and prints its plan; wave shipped [--pr <number>], in Ship only, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request); wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
-req <id> rename "<name>" and req <id> drop change a requirement when what is built changes; in a sweep's running wave req <id> park takes a fix out of the wave for the person, and req <id> partial marks a fix that was built but leaves the charter's done line unmet: it is not counted as fixed.
+In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked, charter.md written, no wave queued and every open wave in Ship. worktree makes only the branch lcw/<name>; the session stays in the main checkout and each wave gets its own worktree.
+hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>), once that wave is in Review and while fewer than two waves are in Plan, Build or Review; it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges the latest of the wave it was cut after into it, in its worktree; stage Review and the final checks need it. wave round raises the review round. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging), merging (on the head its final checks started on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the clean worktrees of the waves shipped before it; wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
+--wave <n> names the wave that stage Plan|Build|Review|Ship, task, req, set plan.* or milestone, ledger, ask and wave round|step|take|defer|shipped act on. Without it they act on the open wave whose worktree lcw runs in, else the only open wave; with several open they refuse, but ledger writes the run's ledger only and ask is the run's own. ask --wave marks the wave waiting until its asks are answered.
+req <id> rename "<name>" and req <id> drop change a requirement when what is built changes; in a sweep's running wave req <id> park takes a fix out of the wave for the person, and req <id> partial marks a fix that was built but leaves the charter's done line unmet: it is not counted as fixed. req <id> drop --wave <n> drops a fix a shipped wave parked.
 approval ["<Go label>" ...] [--meaning "<what Go builds>"] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. Asked again, it replaces the last; a new stage clears it.
 take <runId> makes this session take over a run of this repository that no session has shown for 15 minutes; abandon <runId> stops such a run for good and removes its worktree when nothing in it is uncommitted, keeping its branch.
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
-flags: --session <id> (any command); start --title --shape; task --model --effort; ask --waiting; approval --meaning; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr; where --json; awake --check
+flags: --session <id> (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --wave; approval --meaning; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
 question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] puts a short question to the person in LCW's box, in a sweep; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
 checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
@@ -763,7 +764,9 @@ const commands = {
     change(run, 'taken over by this session (Resume)', () => {})
     out(`took over ${run.state.id}`)
     commands.status()
-    out(`worktree: ${run.state.worktree ?? 'none yet'}`)
+    const open = openWaves(run.state)
+    if (open.length) out(...open.map((x) => `worktree of wave ${x.n}: ${x.worktree ?? 'none'}`))
+    else out(`worktree: ${run.state.worktree ?? 'none yet'}`)
   },
 
   // Abandon on the unfinished-run box: stopped for good; its worktree goes only when nothing in it would be lost.
@@ -937,10 +940,14 @@ const commands = {
     if (sub === 'shipped') {
       const wave = mustRun(waveOf(s) || fail('No wave is running. Nothing was changed.'))
       if (wave.stage !== 'Ship') fail(`A wave ships in Ship; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
+      if (wave.step !== 'merging') fail(`Wave ${wave.n}'s final checks have not passed${wave.step ? ` (it is at ${wave.step})` : ''}: lcw wave step "final checks" when they start, then lcw wave step merging. Nothing was changed.`)
+      const before = w.waves.find((x) => x.n < wave.n && x.status !== 'shipped')
+      if (before) fail(`Wave ${before.n} has not shipped yet, and waves land in order. Nothing was changed.`)
       if (flags.pr !== undefined && s.sweep.prs === 'end') fail('The charter chose one pull request at the end, so a wave has no pull request of its own. Nothing was changed.')
       const pr = flags.pr === undefined ? null : prOf(flags.pr).number || fail(`--pr takes the pull request's number, not ${flags.pr}. Nothing was changed.`)
       const root = s.repoRoot
-      const tip = git(root, 'rev-parse', `refs/heads/${wave.branch}`)
+      const tip = tipOf(s, wave)
+      if (tip !== wave.checked) fail(`${wave.branch} moved from ${wave.checked} to ${tip} since its final checks started, so they do not count; run them again on the settled head. Nothing was changed.`)
       // every fix dropped or parked: nothing to land, so no pull request and nothing for the waves after it to wait on
       const empty = Number(git(root, 'rev-list', '--count', `${s.branch}..${tip}`)) === 0
       if (empty && pr) fail(`${wave.branch} has no commits, so there is no pull request to record. Nothing was changed.`)
@@ -948,13 +955,20 @@ const commands = {
       try { git(root, 'branch', '-f', s.branch, tip) } catch (e) { fail(`git could not move ${s.branch} to ${tip}: ${firstLine(e)}. Nothing was changed.`) }
       const fixed = wave.requirements.filter((r) => r.status === 'pass').length
       const partial = wave.requirements.filter((r) => r.status === 'partial').length
-      const note = `wave ${wave.n} shipped${empty ? ' empty, with no commits' : ''}: ${s.branch} now at ${tip}; ${fixed} fixed, ${partial ? `${partial} partly fixed, ` : ''}${wave.dropped} dropped${pr ? `; PR #${pr}` : ''}`
+      // the newest shipped wave's worktree holds the sweep's latest work; an earlier one's goes once nothing in it would be lost
+      const cleared = w.waves.filter((x) => x.n < wave.n && x.status === 'shipped' && x.worktree).map((x) => {
+        const said = dropWorktree(s, x.worktree)
+        const gone = !fs.existsSync(x.worktree)
+        if (gone) fs.rmSync(placeFile(home(), x.worktree), { force: true })
+        return { x, said, gone }
+      })
+      const note = `wave ${wave.n} shipped${empty ? ' empty, with no commits' : ''}: ${s.branch} now at ${tip}; ${fixed} fixed, ${partial ? `${partial} partly fixed, ` : ''}${wave.dropped} dropped${pr ? `; PR #${pr}` : ''}${cleared.map((c) => `; ${c.said}`).join('')}`
       change(run, note, (st) => {
-        const x = st.sweep.waves.find((y) => y.n === wave.n)
-        Object.assign(x, { status: 'shipped', pr, fixed, ...(partial ? { partial } : {}), ...(empty ? { empty: true } : {}) })
+        for (const c of cleared) if (c.gone) c.x.worktree = null
+        Object.assign(wave, { status: 'shipped', pr, fixed, ...(partial ? { partial } : {}), ...(empty ? { empty: true } : {}) })
         st.sweep.fixed += fixed
         st.sweep.partial = (st.sweep.partial ?? 0) + partial
-        st.sweep.dropped += x.dropped
+        st.sweep.dropped += wave.dropped
       }, wave)
       return out(note)
     }
@@ -970,7 +984,7 @@ const commands = {
       change(run, `wave ${wave.n}: PR #${pr}`, () => { wave.pr = pr }, wave)
       return out(`wave ${wave.n}: PR #${pr}`)
     }
-    fail('Usage: lcw wave add <fixes> ... | wave start | wave shipped [--pr <number>] | wave pr <n> <number|url>')
+    fail('Usage: lcw wave add <fixes> ... | wave start | wave files | wave defer <k> | wave take | wave round | wave step <closures|final checks|merging|none> | wave shipped [--pr <number>] | wave pr <n> <number|url>, each acting on one wave taking [--wave <n>]')
   },
 
   merge() {
@@ -1106,15 +1120,30 @@ function clearLater(s, wave) {
 
 const tipOf = (s, w) => git(s.repoRoot, 'rev-parse', `refs/heads/${w.branch}`)
 
-/** A sweep's part of lcw status: the pull request choice, the round, each wave, the totals and its files. */
+/** A sweep's part of lcw status: the pull request choice, the round, each wave, each open wave's own records and its files. */
 function sweepStatus(run) {
-  const w = run.state.sweep
-  const wave = soleOpen(run.state)
+  const s = run.state
+  const w = s.sweep
   return [
     `pull requests: ${PR_CHOICES[w.prs] ?? 'not chosen yet'}  round: ${w.round}  fixed: ${w.fixed}  ${w.partial ? `partly fixed: ${w.partial}  ` : ''}parked: ${w.parked}  dropped: ${w.dropped}`,
     'waves:', ...(w.waves.length ? w.waves.map((x) => `  ${x.n} [${x.status}] ${x.fixes} fixes  branch: ${x.branch ?? 'none yet'}  ${x.pr ? `PR #${x.pr} ${x.merged ? 'merged' : 'not merged'}` : x.empty ? 'empty, no PR' : 'no PR'}`) : ['  none queued']),
+    ...openWaves(s).flatMap((x) => waveStatus(run, x)),
+    // the newest wave's worktree holds the sweep's latest work, and a hunt reads it there
+    `latest work: ${[...w.waves].reverse().find((x) => x.worktree && fs.existsSync(x.worktree))?.worktree ?? s.repoRoot}`,
     `folder: ${run.dir}`, `charter: ${run.dir}/charter.md`, `findings: ${run.dir}/findings.md`, `parked: ${run.dir}/parked.md`, `ledger: ${run.paths.ledger}`,
-    ...(wave ? [`plan: ${waveDir(run.dir, wave.n)}/plan.md`] : []),
+  ]
+}
+
+/** One open wave in lcw status: where it stands, where its work is, what its review reads, and its own lists. */
+function waveStatus(run, x) {
+  const where = [x.stage, x.step, x.round ? `round ${x.round}` : '', x.waiting ? 'waits on an answer' : ''].filter(Boolean).join(', ')
+  const dir = waveDir(run.dir, x.n)
+  return [
+    `wave ${x.n}: ${where}  branch: ${x.branch}  worktree: ${x.worktree ?? 'none'}${x.checked ? `  final checks on: ${x.checked}` : ''}`,
+    `  review range: git diff ${takesFrom(run.state, x.after)}...${x.branch}`,
+    `  plan: ${dir}/plan.md`, `  ledger: ${dir}/ledger.md`,
+    '  tasks:', ...((x.tasks ?? []).length ? x.tasks.map((t) => `    ${t.id} [${t.status}] ${t.title}`) : ['    none']),
+    '  requirements:', ...((x.requirements ?? []).length ? x.requirements.map((r) => `    ${r.id} [${r.status}] ${r.name}`) : ['    none']),
   ]
 }
 
