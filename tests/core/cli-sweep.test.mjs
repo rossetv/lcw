@@ -257,6 +257,30 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
   assert.equal(t.state().base, tip)
 })
 
+test('a partly fixed fix ships but is not counted as fixed, and status says how many were partly fixed', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '2')
+  t.cli('wave', 'start')
+  t.cli('req', 'add', 'F1', 'fix one')
+  t.cli('req', 'add', 'F2', 'fix two')
+  t.cli('req', 'F1', 'pass')
+  assert.equal(t.cli('req', 'F2', 'partial').code, 0)
+  t.cli('stage', 'Ship')
+  commit(t.wt, 'b.txt', 'fix\n')
+  assert.match(t.cli('wave', 'shipped').out, /1 fixed, 1 partly fixed/)
+  const s = t.state().sweep
+  assert.deepEqual([s.fixed, s.partial, s.waves[0].fixed, s.waves[0].partial], [1, 1, 1, 1])
+  assert.match(t.cli('status').out, /fixed: 1 {2}partly fixed: 1 {2}parked/)
+})
+
+test('req partial is refused in a build', () => {
+  const home = tmp('home')
+  const o = { home, cwd: makeRepo(), session: 's1' }
+  lcw(['start', 'b', '--title', 'B'], o)
+  lcw(['req', 'add', 'R1', 'one'], o)
+  assert.equal(lcw(['req', 'R1', 'partial'], o).code, 1)
+})
+
 test('wave shipped is refused when the sweep\'s branch cannot fast-forward to the wave, and nothing moves', () => {
   const t = shipping(1)
   commit(t.wt, 'b.txt', 'fix\n')

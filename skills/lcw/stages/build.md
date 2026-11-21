@@ -75,7 +75,10 @@ and end your turn. The review starts on a fresh context.
 - A fix to behaviour starts as a failing test written from its recipe, and is done when that test passes.
 - If it cannot make the test fail, it leaves that fix unbuilt, drops it itself (`lcw req <F id> drop`, `lcw ledger "<F id> dropped: <reason>"`, and `lcw task <id> dropped` if all its fixes go) and reports why.
 - A fix with nothing to test (a comment, a document, a pinned version, a setting) has no test.
+- If a fix can meet the charter's done line only in part (the item stays partly true, or its row cannot be closed), it builds what the charter allows and reports it as partly fixed, with what is left and why.
 - A security fix in a public repository commits no test and no other proof of the hole; the proof stays in the sweep's records. A fix findings.md marks "no proof in the repository" is briefed so: it commits no test or other proof of the hole, and keeps any proof outside the repository.
+
+When a worker reports a fix as partly fixed, write what is left into findings.md as a new finding under its own id, and sort it at once as Hunt says (Fix, Park or Drop). A partly fixed fix does not count toward a stop line that counts fixes: if the charter's stop line does, launch a probe at once, as Hunt's spares, for one replacement over what is not yet hunted, so the next wave or round has it without waiting.
 
 When a worker reports a dropped fix, it has recorded the drop itself: run none of those commands again. Move the finding to Drop in findings.md with the worker's reason. It is never passed to a more capable model to try again.
 

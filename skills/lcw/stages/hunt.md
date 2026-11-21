@@ -75,7 +75,7 @@ and end your turn.
 
 ## Ending the sweep
 
-The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it.
+The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix. A stop line that counts fixes counts what the charter's goals line calls done, which is `fixed` in `lcw status`: a partly fixed fix is not one, so the sweep goes on to a replacement, or ends short of the count and says why. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it.
 
 Before you report, settle the pull requests as the charter's PRs line says. Whichever it is, run `lcw status` just before `lcw finish` and keep what it prints, the totals and each wave's pull request: once the run is finished, the session is no longer bound to it.
 
