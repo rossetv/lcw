@@ -1,6 +1,6 @@
 {
   "name": "lcw",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "Say what you want built, or hand over an open goal such as every bug in an area. Claude works out what you mean, then plans, builds, reviews and opens draft pull requests on its own, with a status bar to watch it.",
   "author": {
     "name": "rossetv"
