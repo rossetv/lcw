@@ -216,7 +216,9 @@ test('the mascot worries within five points of the usage mark and cries once the
   const face = (used) => {
     const input = JSON.stringify({ session_id: 'pet-' + used, cwd: tmp('cwd'), rate_limits: { seven_day: { used_percentage: used, resets_at: now / 1000 + 3 * 86400 } } })
     // Only the creature's cells at the start of each row: the folder name further along can hold a T too.
-    const out = bare(line(input, { env: { LCW_NOW: String(now), TZ: 'UTC' } }).out) // the creature yawns at night, local time.split('\n').map((row) => [...row].slice(0, 6).join('')).join('\n')
+    // TZ is pinned because the creature yawns at night, local time.
+    const whole = bare(line(input, { env: { LCW_NOW: String(now), TZ: 'UTC' } }).out)
+    const out = whole.split('\n').map((row) => [...row].slice(0, 6).join('')).join('\n')
     return (out.match(/T/g) ?? []).length === 2 ? 'crying' : /ó/.test(out) && /ò/.test(out) ? 'worried' : 'neither'
   }
   assert.equal(face(60), 'neither') // the mark is 75 unless the person moves it
