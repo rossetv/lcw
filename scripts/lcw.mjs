@@ -791,7 +791,7 @@ const commands = {
   abandon() {
     const run = need()
     const s = run.state
-    const latest = isSweep(s) ? endHunts(s) : null // before the state forgets where the hunt worktree was
+    const latest = isSweep(s) ? endHunts(s) : null
     change(run, 'abandoned', (st) => { st.status = 'stopped'; if (st.sweep) st.sweep.latest = null })
     const wts = worktreesOf(s)
     const lines = [`abandoned ${s.id}: stopped for good`]
