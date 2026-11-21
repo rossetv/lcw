@@ -93,6 +93,29 @@ test('where the full box does not fit above the card, the tight one is drawn', a
   await band.unmount()
 })
 
+test('where even the tight box does not fit above the card, the box stays and the card gives way', async ($, on) => {
+  engine(on, approving())
+  await start($)
+  const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 13 } })
+  expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /in Brainstorm/ })).toBeUndefined()
+  await band.unmount()
+})
+
+test("a sweep's question stays in a short window, with the card giving way", async ($, on) => {
+  const question = { id: 'Q1', text: 'Drop the old export route?', why: 'nothing calls it', status: 'open', options: [{ key: 'a', label: 'Drop it', meaning: 'removed next wave' }] }
+  engine(on, approving(null as any, { shape: 'sweep', stage: 'Build', status: 'running', name: 'backlog-sweep', questions: [question] }))
+  await start($)
+  const tall = await $.ui.mount(BAND)
+  expect(await tall.find({ type: 'Text', text: /Drop the old export route\?/ })).toBeDefined()
+  expect(await tall.find({ type: 'Text', text: /in Build/ })).toBeDefined()
+  await tall.unmount()
+  const short = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 6 } })
+  expect(await short.find({ type: 'Text', text: /Drop the old export route\?/ })).toBeDefined()
+  expect(await short.find({ type: 'Text', text: /in Build/ })).toBeUndefined()
+  await short.unmount()
+})
+
 test('a prompt the person sends ends the box', async ($, on) => {
   const w = engine(on, approving())
   await start($)

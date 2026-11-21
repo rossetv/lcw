@@ -708,16 +708,23 @@ export const register: Register = (on) => {
         }
         const markBox = drawn.length > 0 && shown?.kind === 'mark'
         card = draw(room, markBox)
-        // The approval box has a tight form, one row shorter, for where the full one would have to wait for room above the card.
+        // The approval box has a tight form, one row shorter, for where the full one does not fit above the card.
         if (shown?.kind === 'approve' && drawn.length && room - drawn.length - 1 < Math.min(CARD_ROOM, card.length)) banner = drawn = bannerRows(shown, cols, true, true)
         // A question has a short form too: the question and its buttons in a row, without what each one means.
         if (shown?.kind === 'question' && drawn.length && room - drawn.length - 1 < Math.min(CARD_ROOM, card.length)) banner = drawn = bannerRows({ ...shown, choices: undefined, lines: [] }, cols, true)
-        // Where both do not fit, the card keeps the rows it needs (up to CARD_ROOM) and the box waits: the card
-        // carries what is waiting on the person.
-        if (drawn.length && room - drawn.length - 1 < Math.min(CARD_ROOM, card.length)) {
-          banner = []
-          if (markBox) card = draw(room, false)
-        } else if (drawn.length) card = draw(room - drawn.length - 1, markBox)
+        // Where both do not fit, the approval or the question box stays and the card takes what is left, or goes:
+        // only the box asks it. Any other box waits and the card keeps the rows it needs (up to CARD_ROOM), since
+        // the card carries what that box says.
+        const left = room - drawn.length - 1
+        if (drawn.length && left < Math.min(CARD_ROOM, card.length)) {
+          if (shown?.kind === 'approve' || shown?.kind === 'question') {
+            card = draw(left, false)
+            if (card.length > left) card = []
+          } else {
+            banner = []
+            if (markBox) card = draw(room, false)
+          }
+        } else if (drawn.length) card = draw(left, markBox)
       }
       if (!card.length && !banner.length) return next(e)
       // The band's focus ring is a place in its list of buttons, not a button: when the focused one goes and another
