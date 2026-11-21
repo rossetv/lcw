@@ -80,9 +80,9 @@ export function approveKey(run: BannerRun & { approval: NonNullable<BannerRun['a
 export function bannerRows(banner: Banner | null, cols: number, overCard?: boolean, tight?: boolean): Row[]
 
 export type OpenWave = { n: number; stage: string; step: string | null; waiting: boolean; worktree?: string; tasks: any[]; requirements: any[] }
-/** The open waves of a sweep (running, or shipped and awaiting its merge), each with its own lists; none for a build. */
 /** Whether a wave of a sweep's state is open: running, or shipped and unmerged while the charter merges as it goes, never an empty one. */
 export function isOpenWave(state: any, wave: any): boolean
+/** The open waves of a sweep (running, or shipped and awaiting its merge), each with its own lists; none for a build. */
 export function openWaves(state: any): OpenWave[]
 /** The tasks and requirements a run stands on: the open waves' added up in a sweep, else the run's own. */
 export function workOf(state: any): { tasks: any[]; requirements: any[] }

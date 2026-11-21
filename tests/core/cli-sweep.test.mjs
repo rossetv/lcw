@@ -1164,3 +1164,17 @@ test('a run-level ledger line during a hunt stays out of a shipped wave held for
   assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /hunt, round/)
   assert.ok(!fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8').includes('hunt, round'))
 })
+
+test('ask and ledger with no --wave, run from the main checkout while one wave is held and another runs, are the run\'s own', () => {
+  const t = shippedWaves()
+  t.edit((s) => { s.sweep.waves.pop(); s.sweep.waves.push({ n: 2, fixes: 1, status: 'running', branch: 'lcw/tidy-wave-2', worktree: `${t.repo}/.claude/worktrees/tidy-wave-2`, stage: 'Build', step: null, round: 0, waiting: false, tasks: [], requirements: [], plan: { tasks: 0, atOnce: 0, models: {} } }) })
+  assert.equal(t.cli('ask', 'which way?').code, 0)
+  assert.equal(t.cli('ledger', 'a note for the run').code, 0)
+  assert.equal(t.state().sweep.waves[1].waiting, false)
+  assert.equal(t.state().asks[0].wave, undefined)
+  const own = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
+  assert.match(own, /which way\?/)
+  assert.match(own, /a note for the run/)
+  const wl = `${t.dir}/waves/2/ledger.md`
+  assert.equal(fs.existsSync(wl) && /which way|a note for the run/.test(fs.readFileSync(wl, 'utf8')), false)
+})

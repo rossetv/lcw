@@ -15,6 +15,7 @@ import { weekOf, weekShare } from '../lib/card.mjs'
 import { moneyFrom, runSpend, markUsdOf, machineSpend, readingOf, SPEND_COMMAND_FAILS, DEFAULT_CAP_USD } from '../lib/spend.mjs'
 import { runCommand, readSetting, writeSetting, clearSetting, readReading, recordResult, claimWindow } from './lib/spend-command.mjs'
 import { dollars, ageText } from '../lib/format.mjs'
+import { isOpenWave } from '../lib/banner.mjs'
 
 class Fail extends Error {}
 const fail = (msg) => { throw new Fail(msg) }
@@ -116,25 +117,27 @@ const waveDir = (dir, n) => `${dir}/waves/${n}`
 const sweepOnly = (run) => (isSweep(run.state) ? run.state.sweep : fail(`lcw ${command} is for a sweep; run ${run.state.id} is a build. Nothing was changed.`))
 const freshPlan = () => ({ tasks: 0, atOnce: 0, models: {} })
 
-/**
- * Open: started and not yet landed for good. Under merged-as-it-goes a shipped wave stays open until its pull request
- * merges: it holds at Ship, and its checks count as passed for the waves after it.
- */
-const isOpen = (s, w) => w.status === 'running' || (w.status === 'shipped' && !w.merged && !w.empty && s.sweep?.prs === 'merged')
-const openWaves = (s) => (s.sweep?.waves ?? []).filter((w) => isOpen(s, w))
+const openWaves = (s) => (s.sweep?.waves ?? []).filter((w) => isOpenWave(s, w))
 const inside = (p, dir) => p === dir || p.startsWith(`${dir}/`)
-/** The open wave whose worktree this is run in, else the only running wave, else null; with several running, a list of them. */
-function waveHere(s) {
+/**
+ * The open wave whose worktree this is run in, else the only running wave, else null; with several running, a list of them.
+ * With `own` (ask, ledger), outside a worktree only a lone open wave counts: with several open the note is the run's.
+ */
+function waveHere(s, own = false) {
   const open = openWaves(s)
   let here = cwd
   try { here = fs.realpathSync(cwd) } catch {}
   const mine = open.find((w) => w.worktree && inside(here, w.worktree))
   if (mine) return mine
+  if (own && open.length > 1) return null
   const running = open.filter((w) => w.status === 'running')
   return running.length < 2 ? running[0] ?? null : running
 }
 /** The wave a ledger line with no --wave is about, or null: a held wave or one of several is never assumed. */
 const ledgerWave = (s) => { const w = waveHere(s); return Array.isArray(w) ? null : w }
+
+/** The wave an ask or ledger line with no --wave is about: as ledgerWave, but with several open and outside their worktrees, the run's own. */
+const ownWave = (s) => { const w = waveHere(s, true); return Array.isArray(w) ? null : w }
 
 /**
  * The wave a command acts on: the one --wave names, else the open wave whose worktree this is run in, else the only
@@ -148,7 +151,7 @@ function waveOf(s, { several = 'refuse', shipped = false } = {}) {
     const n = wholeNumber(flags.wave, '--wave')
     const w = s.sweep.waves.find((x) => x.n === n) || fail(`No wave ${n}. Nothing was changed.`)
     if (w.status === 'queued') fail(`Wave ${n} is queued and has not started. Nothing was changed.`)
-    if (!shipped && !isOpen(s, w)) fail(`Wave ${n} has shipped. Nothing was changed.`)
+    if (!shipped && !isOpenWave(s, w)) fail(`Wave ${n} has shipped. Nothing was changed.`)
     return w
   }
   const w = waveHere(s)
@@ -437,7 +440,7 @@ const commands = {
     const run = need()
     const text = rest.join(' ')
     if (!text) fail('Usage: lcw ask "<question>" [--waiting N] [--wave N]')
-    const wave = waveOf(run.state, { several: 'run' })
+    const wave = flags.wave === undefined ? ownWave(run.state) : waveOf(run.state)
     let n
     change(run, `ask: ${text}`, (s) => {
       // an ask keeps its number until it is answered, so the numbers the human sees never shift under them
@@ -480,7 +483,7 @@ const commands = {
     const run = need()
     const text = rest.join(' ')
     if (!text) fail('Usage: lcw ledger "<text>"')
-    appendLedger(run.paths, text, waveOf(run.state, { several: 'run' }))
+    appendLedger(run.paths, text, flags.wave === undefined ? ownWave(run.state) : waveOf(run.state))
     out('ledger: written')
   },
 
