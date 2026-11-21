@@ -791,10 +791,10 @@ const commands = {
   abandon() {
     const run = need()
     const s = run.state
-    change(run, 'abandoned', (st) => { st.status = 'stopped' })
+    const latest = isSweep(s) ? endHunts(s) : null // before the state forgets where the hunt worktree was
+    change(run, 'abandoned', (st) => { st.status = 'stopped'; if (st.sweep) st.sweep.latest = null })
     const wts = worktreesOf(s)
     const lines = [`abandoned ${s.id}: stopped for good`]
-    const latest = isSweep(s) ? endHunts(s) : null
     if (!wts.length && !latest) lines.push('no worktree to remove')
     for (const wt of wts) {
       lines.push(dropWorktree(s, wt))
@@ -1149,6 +1149,7 @@ function enterStage(s, stage) {
 
 /** lcw stage for one of a sweep's open waves: its own stage, and the run's stage follows the newest open wave. */
 function waveStage(run, wave, stage) {
+  if (wave.stage === stage) return out(`wave ${wave.n} stage ${stage}`) // already there: a repeat must not clear its step, checked head or the later waves' checks
   if (stage === 'Review') mustHoldRange(run.state, wave, 'its review')
   if (stage === 'Ship' && wave.stage === 'Review') mustHoldRange(run.state, wave, 'leaving Review')
   if (wave.stage === 'Ship' && BUSY.includes(stage)) {

@@ -434,6 +434,22 @@ test('a wave sent back from Ship clears its own final checks and those of the wa
   assert.equal(t.at(2, 'wave', 'step', 'final checks').code, 1)
 })
 
+test('a wave moved to the stage it is already in keeps its step, checked head and the later waves\' checks, and writes no ledger line', () => {
+  const t = bothShipping()
+  t.at(1, 'wave', 'step', 'final checks')
+  t.at(1, 'wave', 'step', 'merging')
+  t.at(2, 'wave', 'take')
+  t.at(2, 'wave', 'step', 'final checks')
+  const before = JSON.stringify(t.state().sweep.waves)
+  const ledger = () => fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8')
+  const lines = ledger()
+  const r = t.at(1, 'stage', 'Ship')
+  assert.equal(r.code, 0, r.out)
+  assert.match(r.out, /wave 1 stage Ship/)
+  assert.equal(JSON.stringify(t.state().sweep.waves), before)
+  assert.equal(ledger(), lines)
+})
+
 test('wave defer moves fixes to the next queued wave, or queues a new wave for them', () => {
   const t = hunting()
   t.cli('wave', 'add', '4', '2')
@@ -764,6 +780,18 @@ test('a sweep left alone with two waves open is taken over with both worktrees n
   assert.ok(!fs.existsSync(t.wt1) && !fs.existsSync(t.wt2), r.out)
   assert.match(r.out, /lcw\/tidy, lcw\/tidy-wave-1, lcw\/tidy-wave-2/)
   assert.notEqual(git(t.repo, 'branch', '--list', 'lcw/tidy-wave-2'), '')
+})
+
+test('abandoning a sweep clears where its latest work was', () => {
+  const claudeDir = tmp('claude')
+  fs.mkdirSync(`${claudeDir}/sessions`)
+  const t = overlapping()
+  t.edit((s) => { s.sweep.latest = `${t.repo}/.claude/worktrees/gone-latest` })
+  const old = new Date(Date.now() - 20 * 60000)
+  for (const f of ['state.json', 'ledger.md']) fs.utimesSync(`${t.dir}/${f}`, old, old)
+  const r = lcw(['abandon', t.state().id], { home: t.home, cwd: t.repo, session: 's2', env: { CLAUDE_CONFIG_DIR: claudeDir } })
+  assert.equal(r.code, 0, r.out)
+  assert.equal(t.state().sweep.latest, null)
 })
 
 test('stop --pr records the pull request a stopped sweep opened', () => {
