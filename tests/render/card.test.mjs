@@ -792,7 +792,8 @@ test('at 100 columns nothing is lost, at 80 the longer words go first, and below
   assert.match(laneOf(full, 1), /18 of 23 fixes pass · 1 failing · round 2 +34m$/);
   assert.match(full.find(l => l.startsWith('waves ')), /2 open · 1 queued +round 1 · 2 parked$/);
   const eighty = at(80);
-  assert.match(laneOf(eighty, 1), /18 of 23 pass +34m$/);
+  // The later review round goes before the failing fix, the last to lose.
+  assert.match(laneOf(eighty, 1), /18 of 23 pass · 1 failing +34m$/);
   assert.match(laneOf(eighty, 2), /7 of 12 done +22m$/);
   const fifty = at(50);
   assert.match(fifty.find(l => l.startsWith('waves ')), /^waves {3}▰▰▱ {2}2 open · 1 queued/);
@@ -805,6 +806,30 @@ test('at 100 columns nothing is lost, at 80 the longer words go first, and below
   for (const board of Object.keys(LANES)) for (const w of [140, 100, 80, 70, 60, 50, 44, 43, 36, 30]) {
     laneRows(inputsOf(board), w).forEach(l => assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l));
   }
+});
+
+test('framed at 100 columns the heading keeps the totals: its counts move closer before a total goes', () => {
+  const heading = board => strip(toAnsi(card(board, { width: 100, frame: true }), 'dark', 100)).split('\n').find(l => l.startsWith('│ waves '));
+  assert.match(heading('29-lanes-hunt-and-final-checks'), / {2}2 merged +round 2 · 43 fixed · 2 parked · 3 dropped │$/);
+  // The long sweep has no room for all: the open count goes, which the lanes show, and then the dropped.
+  assert.match(heading('28-lanes-a-long-sweep'), / {2}5 merged · 2 queued +round 3 · 61 fixed · 170 parked │$/);
+});
+
+test('a lane with nothing to count keeps its shape and draws its stage empty, with no figure', () => {
+  const parked = [{ id: 'F1', name: 'a', status: 'parked' }, { id: 'F2', name: 'b', status: 'dropped' }];
+  assert.match(laneOf(laneRows(withWave1({ requirements: parked })), 1), /^wave 1  ▰{6}  ▰{7}  ▱{8}  ▱{6} +34m$/);
+  assert.match(laneOf(laneRows(withWave1({ stage: 'Build', tasks: [] })), 1), /^wave 1  ▰{6}  ▱{7}  ▱{8}  ▱{6} +34m$/);
+});
+
+test('a hunt round beside open waves has its lane before any area is recorded', () => {
+  const i = inputsOf('29-lanes-hunt-and-final-checks');
+  i.state.sweep.hunt = { areas: 0, hunted: 0, running: 0, findings: 0 };
+  assert.match(laneRows(i).find(l => l.startsWith('round 2 ')), /^round 2  › Hunt  ▱{25} {4}starting +5m$/);
+});
+
+test('a wave whose stage has no start time draws no clock', () => {
+  const held = { status: 'shipped', merged: false, pr: 41, stage: 'Review', step: null, stageSince: undefined };
+  assert.match(laneOf(laneRows(withWave1(held, { prs: 'merged' })), 1), /▰{6} {4}merging$/);
 });
 
 test("a sweep's waves row keeps to 24 cells however many waves are queued", () => {

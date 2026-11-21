@@ -351,10 +351,11 @@ test("the unfinished run box says which wave a sweep was in, and a build's miles
 test('the unfinished run box names every open wave in the status bar words', () => {
   const text = (waves) => bannerFor({ ...S.F, unfinished: { ...S.F.unfinished, wave: waves[0].n, waves } }).lines.join(' ')
   const t = text([{ n: 1, stage: 'Ship', step: 'final checks' }, { n: 2, stage: 'Build' }])
-  assert.match(t, /with wave 1 in its final checks, wave 2 in Build: /)
+  assert.match(t, /with wave 1 in its final checks, wave 2 building: /)
   assert.match(text([{ n: 1, stage: 'Ship', step: 'merging' }, { n: 2, stage: 'Build', waiting: true }]), /wave 1 merging, wave 2 waits on your answer/)
-  assert.match(text([{ n: 1, stage: 'Review', step: 'closures' }, { n: 2, stage: 'Build' }]), /wave 1 on its closures, wave 2 in Build/)
-  assert.match(text([{ n: 1, stage: 'Ship' }, { n: 2, stage: 'Build' }]), /wave 1 with its final checks next, wave 2 in Build/)
+  assert.match(text([{ n: 1, stage: 'Review', step: 'closures' }, { n: 2, stage: 'Build' }]), /wave 1 on its closures, wave 2 building/)
+  assert.match(text([{ n: 1, stage: 'Ship' }, { n: 2, stage: 'Build' }]), /wave 1 with its final checks next, wave 2 building/)
+  assert.match(text([{ n: 1, stage: 'Review' }, { n: 2, stage: 'Build' }]), /with wave 1 in review, wave 2 building: /)
   assert.doesNotMatch(t, /shipped|running/)
 })
 
