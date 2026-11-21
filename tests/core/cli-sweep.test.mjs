@@ -246,19 +246,19 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
   assert.equal(git(t.repo, 'rev-parse', 'lcw/tidy'), tip)
   const s = t.state().sweep
   assert.deepEqual([s.fixed, s.dropped], [2, 1])
-  const { tasks, requirements, ...wave } = s.waves[0]
-  assert.deepEqual(wave, { n: 1, fixes: 3, status: 'shipped', branch: 'lcw/tidy-wave-1', pr: 12, merged: false, dropped: 1, fixed: 2 })
+  const { n, status, branch, pr, merged, dropped, fixed, tasks, requirements } = s.waves[0]
+  assert.deepEqual({ n, status, branch, pr, merged, dropped, fixed }, { n: 1, status: 'shipped', branch: 'lcw/tidy-wave-1', pr: 12, merged: false, dropped: 1, fixed: 2 })
   assert.deepEqual([tasks, requirements.map((r) => r.id + ' ' + r.status)], [[], ['F1 pass', 'F2 pass']])
   assert.match(fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8'), /wave 1 shipped/)
   assert.equal(t.cli('wave', 'shipped').code, 1, 'no wave running')
   assert.equal(t.state().sweep.fixed, 2)
 
   assert.equal(t.cli('wave', 'start').code, 0)
-  assert.deepEqual(t.state().requirements, [], 'wave 2 starts its own list')
+  assert.deepEqual(t.state().sweep.waves[1].requirements, [], 'wave 2 starts its own list')
   assert.equal(t.state().sweep.waves[0].requirements.length, 2, 'wave 1 keeps its own')
   assert.equal(git(t.wt, 'rev-parse', 'HEAD'), tip, 'wave 2 starts from the sweep\'s branch as wave 1 left it')
   assert.equal(git(t.wt, 'rev-parse', '--abbrev-ref', 'HEAD'), 'lcw/tidy-wave-2')
-  assert.equal(t.state().base, tip)
+  assert.equal(t.state().sweep.waves[1].base, tip)
 })
 
 test('a partly fixed fix ships but is not counted as fixed, and status says how many were partly fixed', () => {
@@ -574,7 +574,7 @@ test('req park takes a fix out of the running wave once, and the wave ships coun
   assert.equal(t.cli('req', 'F1', 'park').code, 0)
   assert.equal(t.cli('req', 'F1', 'park').code, 0)
   assert.equal(t.cli('req', 'nope', 'park').code, 1)
-  assert.deepEqual(t.state().requirements.map((r) => r.status), ['parked', 'todo', 'todo'])
+  assert.deepEqual(t.state().sweep.waves[0].requirements.map((r) => r.status), ['parked', 'todo', 'todo'])
   assert.equal(t.state().sweep.parked, 1)
   t.cli('req', 'F2', 'pass')
   t.cli('req', 'F3', 'park')
@@ -592,22 +592,19 @@ test('req park is refused in a build', () => {
   assert.equal(lcw(['req', 'R1', 'park'], o).code, 1)
 })
 
-test('Hunt is refused while a wave is queued or running, and allowed once every wave has shipped', () => {
+test('Hunt is refused while a wave is queued or an open wave is short of Ship, and allowed once every open wave holds in Ship', () => {
   const t = hunting()
-  t.cli('wave', 'add', '1', '1')
+  t.cli('wave', 'add', '1')
   t.cli('stage', 'Ship')
   assert.equal(t.cli('stage', 'Hunt').code, 1, 'queued')
   t.cli('wave', 'start')
-  assert.equal(t.cli('stage', 'Hunt').code, 1, 'running')
-  assert.equal(t.state().stage, 'Ship')
-  commit(t.wt, 'b.txt', 'fix\n')
-  t.cli('wave', 'shipped')
-  assert.equal(t.cli('stage', 'Hunt').code, 1, 'wave 2 is still queued')
-  t.cli('wave', 'start')
-  commit(t.wt, 'c.txt', 'fix\n')
-  t.cli('wave', 'shipped')
-  assert.equal(t.cli('stage', 'Hunt').code, 0)
-  assert.equal(t.state().sweep.round, 2)
+  t.cli('stage', 'Review')
+  assert.equal(t.cli('stage', 'Hunt').code, 1, 'in Review')
+  assert.equal(t.state().stage, 'Review')
+  t.cli('stage', 'Ship')
+  assert.equal(t.cli('stage', 'Hunt').code, 0, 'holding in Ship, its final checks and merge still to come')
+  assert.deepEqual([t.state().stage, t.state().sweep.round, t.state().sweep.waves[0].stage], ['Hunt', 2, 'Ship'])
+  assert.equal(t.cli('hunt', '--areas', '3').code, 0, 'the hunt round records while the wave holds')
 })
 
 test('going back to Charter clears the approval, so Hunt needs the charter put to the person again', () => {
@@ -662,19 +659,21 @@ test('a parked fix cannot also be passed, failed or reset, it can be dropped onc
     assert.match(r.out, /stays parked; it can only be dropped/)
   }
   assert.equal(t.cli('req', 'F1', 'park').code, 0)
-  assert.deepEqual([t.state().requirements[0].status, t.state().sweep.parked, t.state().sweep.waves[0].dropped], ['parked', 1, 0])
+  const wave = () => t.state().sweep.waves[0]
+  assert.deepEqual([wave().requirements[0].status, t.state().sweep.parked, wave().dropped], ['parked', 1, 0])
   assert.equal(t.cli('req', 'F1', 'drop').code, 0)
-  assert.deepEqual([t.state().requirements.length, t.state().sweep.parked, t.state().sweep.waves[0].dropped], [0, 0, 1])
+  assert.deepEqual([wave().requirements.length, t.state().sweep.parked, wave().dropped], [0, 0, 1])
 })
 
-test('dropping a parked fix with no wave running counts it dropped once, and the shipped wave does not take it', () => {
+test('dropping a parked fix of a shipped wave counts it dropped once, and the shipped wave does not take it', () => {
   const t = shipping(1)
   t.cli('req', 'add', 'F1', 'fix one')
   t.cli('req', 'F1', 'park')
   commit(t.wt, 'b.txt', 'fix\n')
   t.cli('wave', 'shipped')
   assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped], [1, 0])
-  assert.equal(t.cli('req', 'F1', 'drop').code, 0)
+  assert.equal(t.cli('req', 'F1', 'pass', '--wave', '1').code, 1, 'a shipped wave\'s lists stay as they shipped')
+  assert.equal(t.cli('req', 'F1', 'drop', '--wave', '1').code, 0)
   assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped, t.state().sweep.waves[0].dropped], [0, 1, 0])
 })
 
@@ -739,4 +738,83 @@ test('questions are a sweep\'s own', () => {
   const r = lcw(['question', 'add', 'Q1', '--text', 't', '--a', 'x: y', '--b', 'z: w'], o)
   assert.equal(r.code, 1)
   assert.match(r.out, /is for a sweep/)
+})
+
+/** A sweep with waves 1 and 2 open, each with its own folder as its worktree, written straight into the state. */
+function twoOpen() {
+  const t = hunting()
+  const wts = [1, 2].map(() => tmp('wave'))
+  t.edit((s) => {
+    s.stage = 'Build'
+    s.sweep.waves = [1, 2].map((n) => ({
+      n, fixes: 2, status: 'running', branch: `lcw/tidy-wave-${n}`, pr: null, merged: false, dropped: 0, stage: n === 1 ? 'Review' : 'Build',
+      stageSince: 0, step: null, round: n === 1 ? 1 : 0, waiting: false, tasks: [], requirements: [], plan: { tasks: 0, atOnce: 0, models: {} },
+      milestone: null, worktree: wts[n - 1], after: n === 1 ? 'lcw/tidy' : 'lcw/tidy-wave-1', base: null, checked: null,
+    }))
+  })
+  const wave = (n) => t.state().sweep.waves[n - 1]
+  return { ...t, wts, wave, at: (where, ...a) => lcw(a, { ...t.o, cwd: where }) }
+}
+
+test('with two waves open a wave command needs --wave, except inside a wave\'s worktree, where that wave is meant', () => {
+  const t = twoOpen()
+  const r = t.cli('task', 'add', 'T1', 'one')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /1 and 2.*--wave/)
+  assert.equal(t.cli('task', 'add', 'T1', 'one', '--wave', '1').code, 0)
+  assert.equal(t.at(t.wts[1], 'task', 'add', 'T1', 'two').code, 0)
+  assert.equal(t.at(t.wts[1], 'task', 'T1', 'done').code, 0)
+  assert.equal(t.at(t.wts[1], 'set', 'plan.tasks=3', 'milestone=1 of 2').code, 0)
+  assert.equal(t.cli('req', 'add', 'F1', 'fix', '--wave', '2').code, 0)
+  assert.deepEqual([t.wave(1).tasks.map((x) => x.status), t.wave(2).tasks.map((x) => x.status)], [['todo'], ['done']])
+  assert.deepEqual([t.wave(2).plan.tasks, t.wave(2).milestone, t.wave(2).requirements.length, t.wave(1).plan.tasks], [3, '1 of 2', 1, 0])
+  assert.deepEqual([t.state().tasks, t.state().requirements], [[], []])
+  assert.equal(t.cli('stage', 'Ship').code, 1)
+  assert.equal(t.cli('task', 'add', 'T2', 'x', '--wave', '3').code, 1, 'no wave 3')
+})
+
+test('a ledger line about one wave goes to its own ledger too, and one with several waves open to the run\'s only', () => {
+  const t = twoOpen()
+  const read = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '')
+  t.cli('ledger', 'both waves')
+  t.cli('ledger', 'about wave 2', '--wave', '2')
+  t.at(t.wts[0], 'ledger', 'from wave 1')
+  assert.match(read(`${t.dir}/ledger.md`), /both waves[\s\S]*about wave 2[\s\S]*from wave 1/)
+  assert.ok(!read(`${t.dir}/waves/1/ledger.md`).includes('both waves') && !read(`${t.dir}/waves/2/ledger.md`).includes('both waves'))
+  assert.match(read(`${t.dir}/waves/2/ledger.md`), /about wave 2/)
+  assert.match(read(`${t.dir}/waves/1/ledger.md`), /from wave 1/)
+  assert.ok(!read(`${t.dir}/waves/1/ledger.md`).includes('about wave 2'))
+})
+
+test('ask --wave marks that wave waiting until its last ask is answered', () => {
+  const t = twoOpen()
+  t.cli('ask', 'push needs your token', '--wave', '1')
+  t.cli('ask', 'and the tag?', '--wave', '1')
+  t.cli('ask', 'about the run')
+  assert.deepEqual([t.wave(1).waiting, t.wave(2).waiting], [true, false])
+  t.cli('answer', '1', 'here')
+  assert.equal(t.wave(1).waiting, true, 'ask 2 still names it')
+  t.cli('answer', '2', 'v1')
+  assert.equal(t.wave(1).waiting, false)
+  assert.equal(t.state().asks.length, 1)
+})
+
+test('a sweep from before waves kept their own records has its running wave\'s stage, lists and worktree moved onto it by the next change', () => {
+  const t = hunting()
+  const wt = tmp('old')
+  t.edit((s) => {
+    s.sweep.waves = [{ n: 1, fixes: 2, status: 'shipped', branch: 'lcw/tidy-wave-1', pr: 4, merged: false, dropped: 0, fixed: 2 }, { n: 2, fixes: 2, status: 'running', branch: 'lcw/tidy-wave-2', pr: null, merged: false, dropped: 0 }]
+    Object.assign(s, { stage: 'Review', stageSince: 1234, worktree: wt, base: 'abc', milestone: '1 of 1', plan: { tasks: 2, atOnce: 2, models: {} } })
+    s.tasks = [{ id: 'T1', title: 'one', status: 'done' }]
+    s.requirements = [{ id: 'F1', name: 'fix', status: 'todo' }]
+  })
+  assert.match(t.cli('status').out, /waves\/2\/plan.md/, 'status shows the wave as it will be')
+  assert.equal(t.state().sweep.waves[1].stage, undefined, 'status changes nothing')
+  assert.equal(t.cli('req', 'F1', 'pass').code, 0)
+  const s = t.state()
+  const w = s.sweep.waves[1]
+  assert.deepEqual([w.stage, w.stageSince, w.round, w.worktree, w.base, w.after, w.milestone, w.plan.tasks], ['Review', 1234, 1, wt, 'abc', 'lcw/tidy', '1 of 1', 2])
+  assert.deepEqual([w.tasks.map((x) => x.id), w.requirements.map((x) => x.status)], [['T1'], ['pass']])
+  assert.deepEqual([s.tasks, s.requirements, s.worktree, s.stage], [[], [], null, 'Review'])
+  assert.equal(s.sweep.waves[0].stage, undefined, 'a shipped wave is left as it was')
 })
