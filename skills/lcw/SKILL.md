@@ -91,7 +91,7 @@ Keep `health` current with a few plain words of what is happening, such as `lcw 
 
 ## Compaction
 
-`lcw checkpoint "<next step>"` asks for a compaction when your turn ends; then you are prompted to carry on. Write the next step so that a fresh you, with only `lcw status` and this skill, could act on it. Checkpoint at the end of every stage after the brainstorm or the charter (when the spec is approved, the plan is written, the build is done and the review has passed) and after each build milestone, then end your turn. The stage files say when.
+`lcw checkpoint "<next step>"` asks for a compaction when your turn ends; then you are prompted to carry on. LCW compacts only a context of 250K tokens or more (or 60% of a smaller window); a smaller one is kept, and the prompt says so. Write the next step so that a fresh you, with only `lcw status` and this skill, could act on it. Checkpoint at the end of every stage after the brainstorm or the charter (when the spec is approved, the plan is written, the build is done and the review has passed) and after each build milestone, then end your turn. The stage files say when.
 
 ## Agents
 

@@ -279,6 +279,21 @@ export function resumePrompt(root, step) {
   return `LCW checkpoint: the context was compacted. Run \`${cli(root)} status\`, then carry on with the next step: ${step}`
 }
 
+export const COMPACT_AT = 250_000
+
+/** Whether a checkpoint compacts a context of this size: one too small to be worth a fresh start is kept. */
+export function checkpointCompacts(context) {
+  const tokens = Number(context?.tokens)
+  if (!(tokens > 0)) return true
+  const window = Number(context?.window)
+  // A smaller window would fill and compact on its own mid-milestone before it ever reached COMPACT_AT.
+  return tokens >= (window > 0 ? Math.min(COMPACT_AT, window * 0.6) : COMPACT_AT)
+}
+
+export function keptPrompt(step) {
+  return `LCW checkpoint: the context is small enough to keep, so it was not compacted. Carry on with the next step: ${step}`
+}
+
 export function wakePrompt(root) {
   return `LCW: the weekly usage limit has reset. Run \`${cli(root)} resume\`, then \`${cli(root)} status\`, and carry on from the ledger.`
 }
