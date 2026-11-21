@@ -24,7 +24,7 @@ List the round's parts in findings.md, then launch the probes in batches of up t
 lcw hunt --areas 36 --hunted 14 --running 6 --findings 23
 ```
 
-Write each report into findings.md under its part as it arrives, so after a compaction you can see which parts have reported. A report with no recipe is not a finding: ask the probe for what is missing, and if it cannot say, leave it out. A finding already parked or dropped in an earlier round is not sorted again; one written in during a wave (what a partly fixed fix left) is sorted with this round's.
+Write each report into findings.md under its part as it arrives, so after a compaction you can see which parts have reported. A report with no recipe is not a finding: ask the probe for what is missing, and if it cannot say, leave it out. A finding already parked or dropped in an earlier round is not sorted again; one written in during a wave (what a partly fixed fix left) is sorted with this round's, and so is each question answered and not yet used (`lcw question`), as plan.md's step 3 says.
 
 ## Sorting
 
@@ -81,7 +81,7 @@ lcw stage Plan
 lcw checkpoint "Plan: read stages/plan.md and start wave <n>"
 ```
 
-and end your turn.
+and do as it says (SKILL.md, Compaction).
 
 ## Ending the sweep
 
@@ -111,4 +111,4 @@ In stacked or merged as it goes, a wave whose push still waits on the human's an
 
 Then clean up as stages/ship.md says under "Afterwards: clean up", for the sweep's worktree and its local branches.
 
-Tell the human, short, from what `lcw status` printed and findings.md: what was fixed, area by area, not only how many; what was parked and what was dropped; at an earlier end with waves still queued, the fixes queued and not built; which pull requests exist and in what state (open as drafts, merged, or left open, and why); and where parked.md is.
+Tell the human, short, from what `lcw status` printed and findings.md (with any question still open in LCW's box, which now stays in parked.md): what was fixed, area by area, not only how many; what was parked and what was dropped; at an earlier end with waves still queued, the fixes queued and not built; which pull requests exist and in what state (open as drafts, merged, or left open, and why); and where parked.md is.

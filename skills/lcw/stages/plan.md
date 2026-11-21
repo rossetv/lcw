@@ -57,7 +57,7 @@ lcw stage Build
 lcw checkpoint "Build: read stages/build.md and launch milestone 1, all its tasks together: T1, T2, ..."
 ```
 
-and end your turn.
+and do as it says (SKILL.md, Compaction).
 
 ## In a sweep
 
@@ -65,7 +65,7 @@ A wave has no brainstorm, spec or map.md: its Fix items in findings.md stand in 
 
 1. Get into the sweep's worktree. If `lcw status` shows none (the first wave), `lcw worktree` and EnterWorktree with the path it prints; if it shows one you are not in, EnterWorktree with its path. A sweep keeps one worktree for all its waves.
 2. `lcw wave start`. It cuts the wave's branch `lcw/<name>-wave-<n>` from the sweep's branch, so the wave holds every earlier one, and prints the path of the wave's plan, waves/<n>/plan.md. It refuses a worktree that is not clean; if it says a wave is already running, carry on with that one (`lcw status` prints its plan's path).
-3. Read the answers to the sweep's questions (`lcw question`). One that makes an item fixable is a finding sorted to Fix, in findings.md, and joins this wave like the others; one that keeps things as they are closes the item as decided, with their answer, in this wave's shared files task; "leave it parked" leaves it in parked.md. When the human typed their own answer instead ("Other…", which reaches you as their prompt "Your call on Q82: ..."), record it first with `lcw question Q82 answer "<their words>"`. Then `lcw question <id> used` for each one acted on.
+3. Read the answers to the sweep's questions (`lcw question`). One that makes an item fixable is a finding sorted to Fix, in findings.md, and joins this wave like the others; one that keeps things as they are closes the item as decided, with their answer, in this wave's shared files task; "leave it parked" leaves it in parked.md. When the human typed their own answer instead ("Other…", which reaches you as their prompt "Your call on Q82: ..."), record it first with `lcw question Q82 answer "<their words>"`. One still "typing" (they pressed Other… and sent nothing) goes back in the box: `lcw question <id> reopen`. Then `lcw question <id> used` for each one acted on.
 4. `lcw set health="planning wave <n>: <its areas>"`. While such an ask is open, leave the line `wave <n> waits on your answer; wave <n+1> is being planned` as it is until the plan is written. Make each of the wave's fixes a requirement under the id findings.md gave it, which is new across the whole sweep, so a wave's ids do not start at F1: `lcw req add F<id> "<recipe in a line>"`. Launch probes only for what the recipes leave open.
 5. Write the wave's plan as "Write plan.md" says, with the F id beside each finding, and, beside a fix findings.md marks "no proof in the repository", the order to commit no test or other proof of the hole and to keep it outside the repository. One task for each area, the areas touching different files, all in the first milestone; files every area shares (a backlog file, generated files) are changed by one task in a milestone after the fixes. A charter's lines settle what a brainstorm would have; the first wave's plan sets the commit convention and later waves keep it. There are no approved examples.
 6. Record the tasks as above, then:
@@ -75,4 +75,4 @@ lcw stage Build
 lcw checkpoint "Build: read stages/build.md and launch wave <n>'s milestone 1, all its tasks together: T1, T2, ..."
 ```
 
-and end your turn. In the stages that follow, plan.md means the wave's plan.
+and do as it says (SKILL.md, Compaction). In the stages that follow, plan.md means the wave's plan.

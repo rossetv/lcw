@@ -410,7 +410,7 @@ const commands = {
       if (flags.compact || step) fail(usage)
       if (compactChoice(ctx) === 'compact') fail(`${size}${ctx ? ", too near the window's end to keep" : ', so it cannot be kept'}: run lcw checkpoint --compact. Nothing was changed.`)
       appendLedger(run.paths, `${size} kept: ${flags.keep}`)
-      return out(`${size} kept; carry on with the next step now, in this turn`)
+      return out(`${size} kept; carry on with the next step now, and end your turn only to wait for agents' reports`)
     }
     const next = step || (flags.compact ? nextStepOf(run) : null)
     if (!next) fail(usage)
@@ -418,10 +418,10 @@ const commands = {
     if (flags.compact) return compact(next)
     const choice = compactChoice(ctx)
     if (choice === 'compact') return compact(next)
-    if (choice === 'keep') return out(`${size}, under ${tokensText(KEEP_UNDER)}: nothing compacts. Carry on with the next step now, in this turn; do not end it.`)
+    if (choice === 'keep') return out(`${size}, under ${tokensText(KEEP_UNDER)}: nothing compacts. Carry on with the next step now, and end your turn only to wait for agents' reports.`)
     out(`${size}: yours to decide.`,
       '  lcw checkpoint --compact          compacts when this turn ends, then you are prompted with the next step',
-      '  lcw checkpoint --keep "<why>"     carries on with this context, in this turn',
+      '  lcw checkpoint --keep "<why>"     carries on with this context; end your turn only to wait for agents',
       `Every turn re-reads the whole context, so keeping it costs more on each one; a compaction keeps only what the records hold. Choose what serves the next step.`)
   },
 
@@ -458,12 +458,17 @@ const commands = {
       change(run, `question ${q.id} answered: ${text}`, () => { Object.assign(q, { status: 'answered', pick: q.pick ?? 'other', words: text, answeredAt: now() }) })
       return out(`${q.id}: answered`)
     }
+    if (verb === 'reopen') {
+      if (q.status !== 'typing') fail(`${q.id} is ${q.status}; only one waiting for typed words is reopened. Nothing was changed.`)
+      change(run, `question ${q.id} reopened`, () => { Object.assign(q, { status: 'open', pick: null }) })
+      return out(`${q.id}: back in LCW's box`)
+    }
     if (verb === 'used') {
       if (q.status !== 'answered') fail(`${q.id} is ${q.status}; only an answered question is used. Nothing was changed.`)
       change(run, `question ${q.id} used`, () => { q.status = 'used' })
       return out(`${q.id}: used`)
     }
-    fail(`Usage: lcw question [add ... | <id> pick <option> | <id> answer "<words>" | <id> used]`)
+    fail(`Usage: lcw question [add ... | <id> pick <option> | <id> answer "<words>" | <id> reopen | <id> used]`)
   },
 
   // The mark belongs to the session it is said in, run or no run; a run uses the mark of the session that drives it.

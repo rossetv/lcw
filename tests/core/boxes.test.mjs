@@ -299,3 +299,9 @@ test('no box asks once every question is answered, or the run is finished', () =
   assert.equal(bannerFor({ now: NOW, advisorFlag: true, run: runFact(asking([Q('Q1', 'answered'), Q('Q2', 'used')])) }), null)
   assert.equal(bannerFor({ now: NOW, advisorFlag: true, run: runFact({ ...asking([Q('Q1')]), status: 'finished' }) }), null)
 })
+
+test('a run paused at the mark shows the mark box before its questions', () => {
+  const run = { ...asking([Q('Q1')]), status: 'paused', pausedReason: 'mark', pausedAt: '2026-11-20T03:00:00Z' }
+  const facts = { now: NOW, advisorFlag: true, run: runFact(run), usage: { usedPercent: 76, markPercent: 75, resetsAt: '2026-11-22T14:00:00Z' } }
+  assert.equal(bannerFor(facts).kind, 'mark')
+})

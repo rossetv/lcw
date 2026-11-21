@@ -35,7 +35,7 @@ lcw stage Ship
 lcw checkpoint "Ship: read stages/ship.md and write the draft pull request from brainstorm.md, spec.md and the ledger"
 ```
 
-and end your turn. Ship starts on a fresh context.
+and do as it says (SKILL.md, Compaction).
 
 ## In a sweep
 

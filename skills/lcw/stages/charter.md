@@ -98,4 +98,4 @@ lcw stage Hunt
 lcw checkpoint "Hunt: read stages/hunt.md and launch round 1's probes"
 ```
 
-and end your turn.
+and do as it says (SKILL.md, Compaction).

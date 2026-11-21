@@ -14,11 +14,11 @@ function at(tokens, { window = 1_000_000, age = 0 } = {}) {
   return { ...t, ledger, file }
 }
 
-test('under 200K a checkpoint records the step and compacts nothing, so no turn has to end', () => {
+test('under 200K a checkpoint records the step and compacts nothing, and the orchestrator carries on', () => {
   const t = at(150_000)
   const r = t.cli('checkpoint', 'launch milestone 2')
   assert.equal(r.code, 0)
-  assert.match(r.out, /context 150K, under 200K: nothing compacts.*do not end it/)
+  assert.match(r.out, /context 150K, under 200K: nothing compacts.*end your turn only to wait for agents/)
   assert.equal(t.file(), '')
   assert.match(t.ledger(), /checkpoint: launch milestone 2/)
   assert.match(t.cli('status').out, /next step: launch milestone 2/)

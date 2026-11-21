@@ -51,7 +51,7 @@ The check is the milestone-reviewer agent, the blind correctness review of the m
 
 It has not seen the run's decisions, so it may challenge one. Make the call on each problem, as stages/review.md says under Judging: accept it as it is, with the reason in the ledger, or make it a task for a worker (`lcw task add F1 "<fix>" --model sonnet --effort medium`). The next milestone is building by then, so place each fix. One in a file that a running task owns goes to that task's worker (SendMessage to its id) and is checked with that worker's milestone, or waits until the task is done. The rest launch together, at once. If a fix changes something the next milestone builds on, tell the workers it affects. Once those fixes are done a fresh milestone-reviewer, on the same model, checks the fixes only: give it the fix commits by their ids, the files each fix task owns, their own test commands and the milestone's check command, cut down to the packages the fixes changed. It runs those tests and checks those changes, not the rest of the milestone again. Write the fix commits in the ledger, `lcw ledger "milestone <n> fixes: <their ids>"`, so the next milestone's check can be told to leave them out.
 
-When a check comes back clean: `lcw ledger "milestone <n>: <what works now>"`, then, unless it was the last milestone (see Done), `lcw checkpoint "<the milestone now building, its tasks and its agents' ids, and any check still out>"` and end your turn. The agents still running report to the fresh context.
+When a check comes back clean: `lcw ledger "milestone <n>: <what works now>"`, then, unless it was the last milestone (see Done), `lcw checkpoint "<the milestone now building, its tasks and its agents' ids, and any check still out>"`, and do as it says; then end your turn to wait for the agents still running, whose reports reach you, compacted or not.
 
 ## At the usage mark
 
@@ -66,7 +66,7 @@ lcw stage Review
 lcw checkpoint "Review: read stages/review.md and launch the round's reviewers, one for each group of at most four requirements"
 ```
 
-and end your turn. The review starts on a fresh context.
+and do as it says (SKILL.md, Compaction).
 
 ## In a sweep
 

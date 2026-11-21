@@ -52,4 +52,4 @@ lcw stage Plan
 lcw checkpoint "Plan: read stages/plan.md and split spec.md into tasks"
 ```
 
-and end your turn.
+and do as it says (SKILL.md, Compaction).
