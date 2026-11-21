@@ -1181,7 +1181,7 @@ test('ask and ledger with no --wave, run from the main checkout while one wave i
   assert.equal(fs.existsSync(wl) && /which way|a note for the run/.test(fs.readFileSync(wl, 'utf8')), false)
 })
 
-/** Waves 1 to 3 queued, wave 1 started with a commit and in Review; ok runs a command that must pass. */
+/** Waves 1 to 3 queued, wave 1 started with a commit and in Review; ok runs a command that must pass, wt is the newest started wave's worktree. */
 function three() {
   const t = hunting()
   t.cli('wave', 'add', '1', '1', '1')
@@ -1190,7 +1190,7 @@ function three() {
   commit(wt1, 'b.txt', 'one\n')
   t.cli('stage', 'Review')
   const ok = (...a) => { const r = t.cli(...a); assert.equal(r.code, 0, `${a.join(' ')}\n${r.out}`); return r }
-  return { ...t, wt1, ok, w: (n) => t.state().sweep.waves[n - 1] }
+  return { ...t, wt1, ok, w: (n) => t.state().sweep.waves[n - 1], get wt() { return t.wt } }
 }
 
 test('a wave sent back from Ship waits while two other waves are being built or reviewed', () => {
@@ -1240,8 +1240,33 @@ test('a wave takes in a fix an earlier wave got after the wave it was cut from, 
   const r = t.cli('stage', 'Review', '--wave', '3')
   assert.equal(r.code, 1)
   assert.match(r.out, /lcw\/tidy-wave-1/)
+  t.ok('wave', 'take', '--wave', '2')
   t.ok('wave', 'take', '--wave', '3')
   assert.equal(git(t.wt, 'rev-parse', 'HEAD'), fix, 'a wave with no commits of its own fast-forwards')
+  t.ok('stage', 'Review', '--wave', '3')
+})
+
+test('a wave takes in only the wave before it, once that wave holds every earlier one, so its review range and files are its own', () => {
+  const t = three()
+  t.start()
+  t.ok('stage', 'Ship', '--wave', '1')
+  commit(t.wt, 'e.txt', 'wave 2 fix\n')
+  t.ok('stage', 'Review', '--wave', '2')
+  t.ok('stage', 'Ship', '--wave', '2')
+  t.start()
+  const had = commit(t.wt, 'g.txt', 'wave 3 fix\n')
+  t.ok('stage', 'Build', '--wave', '3')
+  t.ok('stage', 'Build', '--wave', '1')
+  commit(t.wt1, 'f.txt', 'checks fix\n')
+  const r = t.cli('wave', 'take', '--wave', '3')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /lcw wave take --wave 2\b/)
+  assert.equal(git(t.wt, 'rev-parse', 'HEAD'), had)
+  t.ok('wave', 'take', '--wave', '2')
+  t.ok('wave', 'take', '--wave', '3')
+  const range = /^wave 3: .*\n {2}review range: git diff (\S+)$/m.exec(t.cli('status').out)[1]
+  assert.equal(git(t.repo, 'diff', '--name-only', range), 'g.txt')
+  assert.deepEqual(t.cli('wave', 'files').out.trim().split('\n').slice(1), ['  b.txt (wave 1)', '  e.txt (wave 2)', '  f.txt (wave 1)', '  g.txt (wave 3)'])
   t.ok('stage', 'Review', '--wave', '3')
 })
 
@@ -1272,7 +1297,9 @@ test('a wave with nothing of its own beyond what it took in merges with no final
   t.at(1, 'stage', 'Ship')
   t.at(2, 'stage', 'Review')
   t.at(2, 'stage', 'Ship')
-  assert.equal(t.at(2, 'wave', 'step', 'merging').code, 1, 'wave 1\'s have not passed')
+  const early = t.at(2, 'wave', 'step', 'merging')
+  assert.equal(early.code, 1)
+  assert.match(early.out, /Wave 1's final checks have not passed/)
   t.at(1, 'wave', 'step', 'final checks')
   t.at(1, 'wave', 'step', 'merging')
   const r = t.at(2, 'wave', 'step', 'merging')
@@ -1301,8 +1328,32 @@ test('a hunt beside open waves reads a fresh worktree of every wave\'s latest wo
   assert.match(t.cli('status').out, new RegExp(`^latest work: ${latest}$`, 'm'))
   assert.ok(fs.existsSync(`${latest}/d.txt`) && fs.existsSync(`${latest}/e.txt`), 'both waves\' work')
   assert.equal(git(t.repo, 'rev-parse', 'lcw/tidy-wave-2'), git(t.wt2, 'rev-parse', 'HEAD'), 'no wave\'s branch moves')
+  assert.equal(git(t.repo, 'rev-parse', `refs/lcw/tidy/hunt-${t.state().sweep.round}`), git(latest, 'rev-parse', 'HEAD'), 'the round\'s commit stays reachable')
   assert.equal(t.cli('finish').code, 0)
   assert.ok(!fs.existsSync(latest))
+  assert.equal(git(t.repo, 'for-each-ref', 'refs/lcw/'), '')
+})
+
+test('stop removes the hunt\'s worktree and the refs that kept its rounds\' commits', () => {
+  const t = holdingWithClosure()
+  assert.equal(t.cli('stage', 'Hunt').code, 0)
+  const latest = `${t.repo}/.claude/worktrees/tidy-latest`
+  assert.notEqual(git(t.repo, 'for-each-ref', 'refs/lcw/'), '')
+  assert.equal(t.cli('stop').code, 0)
+  assert.ok(!fs.existsSync(latest))
+  assert.equal(git(t.repo, 'for-each-ref', 'refs/lcw/'), '')
+})
+
+test('a hunt whose merge of the waves fails for a reason other than a conflict is refused with git\'s message and leaves no worktree', () => {
+  const t = holdingWithClosure()
+  git(t.repo, 'config', 'commit.gpgSign', 'true')
+  git(t.repo, 'config', 'gpg.program', 'false')
+  const r = t.cli('stage', 'Hunt')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /gpg/)
+  assert.doesNotMatch(r.out, /conflict/)
+  assert.ok(!fs.existsSync(`${t.repo}/.claude/worktrees/tidy-latest`))
+  assert.equal(t.state().stage, 'Ship')
 })
 
 test('a hunt whose merge of the waves conflicts reads the newest wave\'s tip and says so', () => {

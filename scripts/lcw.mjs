@@ -391,7 +391,7 @@ const commands = {
       const charter = `${run.dir}/charter.md`
       if (!fs.existsSync(charter) || !fs.readFileSync(charter, 'utf8').trim()) fail('charter.md is empty: write the agreed charter there first. Nothing was changed.')
     }
-    const latest = stage === 'Hunt' ? freshLatest(run.state) : null
+    const latest = stage === 'Hunt' ? freshLatest(run.state, run.state.sweep.round + 1) : null
     change(run, `stage: ${stage}${latest ? `; ${latest.note}` : ''}`, (s) => {
       if (stage === 'Hunt') {
         s.sweep.latest = latest?.dir ?? null
@@ -693,11 +693,13 @@ const commands = {
   stop() {
     const run = need()
     if (flags.pr && !isSweep(run.state)) fail('stop --pr is for a sweep that opened its pull request; a build records it with lcw finish --pr. Nothing was changed.')
-    change(run, `stopped${flags.pr ? `, pull request ${flags.pr}` : ''}`, (s) => {
+    const dropped = isSweep(run.state) ? endHunts(run.state) : null
+    change(run, `stopped${flags.pr ? `, pull request ${flags.pr}` : ''}${dropped ? `; ${dropped}` : ''}`, (s) => {
       s.status = 'stopped'
+      if (s.sweep) s.sweep.latest = null
       if (flags.pr) s.pr = prOf(flags.pr, s.repoRoot)
     })
-    out('stopped')
+    out('stopped', ...(dropped ? [dropped] : []))
   },
 
   finish() {
@@ -705,7 +707,7 @@ const commands = {
     const written = readJson(`${run.dir}/totals.json`)
     const share = weekShare(run.state, readUsage()?.sevenDay)
     const spent = readMoney({ sessionId: run.state.driver ?? sessionId, now: now(), state: run.state })?.runUsd
-    const dropped = isSweep(run.state) ? dropLatest(run.state) : null
+    const dropped = isSweep(run.state) ? endHunts(run.state) : null
     change(run, `finished${dropped ? `; ${dropped}` : ''}`, (s) => {
       if (s.sweep) s.sweep.latest = null
       if (written) s.totals = { ...s.totals, agents: written.agents, tokens: written.tokens }
@@ -792,7 +794,7 @@ const commands = {
     change(run, 'abandoned', (st) => { st.status = 'stopped' })
     const wts = worktreesOf(s)
     const lines = [`abandoned ${s.id}: stopped for good`]
-    const latest = isSweep(s) ? dropLatest(s) : null
+    const latest = isSweep(s) ? endHunts(s) : null
     if (!wts.length && !latest) lines.push('no worktree to remove')
     for (const wt of wts) {
       lines.push(dropWorktree(s, wt))
@@ -926,10 +928,10 @@ const commands = {
         if (wave.step === 'final checks' && wave.checked) {
           if (tip !== wave.checked) fail(`${wave.branch} moved from ${wave.checked} to ${tip} while its final checks ran, so they do not count; run them again on the settled head. Nothing was changed.`)
         } else {
+          inOrder('its merge')
           // a wave with nothing of its own beyond what it took in sits on the head the wave before it was checked on
           const under = earlier.at(-1)?.checked ?? git(s.repoRoot, 'rev-parse', `refs/heads/${s.branch}`)
           if (tip !== under) fail(`Wave ${wave.n} has no final checks running; they pass before it merges. Nothing was changed.`)
-          inOrder('its merge')
         }
         checked = tip
       }
@@ -942,28 +944,31 @@ const commands = {
     if (sub === 'take') {
       const wave = mustRun(waveOf(s) || fail('No wave is open. Nothing was changed.'))
       const wt = wave.worktree && fs.existsSync(wave.worktree) ? wave.worktree : fail(`Wave ${wave.n} has no worktree to merge in. Nothing was changed.`)
+      // only the wave just before, once it holds everything beneath it, so each review range's merge base stays that wave's tip
+      const earlier = openWaves(s).filter((x) => x.n < wave.n && x.status === 'running')
+      const prev = earlier.at(-1)
+      if (prev && !hasTakenIn(s, prev)) {
+        const first = earlier.find((x) => !hasTakenIn(s, x))
+        fail(`Wave ${prev.n}, the wave before wave ${wave.n}, has not taken in the latest of ${missingFrom(s, prev).join(', ')}, and a wave takes in only the wave before it, oldest first. Run lcw wave take --wave ${first.n} first${first === prev ? '' : ', then each later wave in turn'}, then lcw wave take --wave ${wave.n} again. Nothing was changed.`)
+      }
+      const from = prev?.branch ?? s.branch
       const had = tipOf(s, wave)
-      const taken = []
-      // oldest first; one an earlier merge brought in is skipped
-      for (const from of takeIns(s, wave)) {
-        if (contains(s, from, wave.branch)) continue
+      if (!contains(s, from, wave.branch)) {
         // a wave with no commits of its own fast-forwards, so it still ships empty
         let own = true
         try { git(wt, 'merge-base', '--is-ancestor', 'HEAD', from); own = false } catch {}
         try { git(wt, 'merge', own ? '--no-ff' : '--ff-only', '--no-edit', '-q', from) } catch (e) {
-          const so = taken.length ? `It took in ${taken.join(', ')} first; ${wave.branch} is at ${tipOf(s, wave)}.` : 'Nothing was changed.'
           let conflicted = ''
-          try { git(wt, 'rev-parse', '-q', '--verify', 'MERGE_HEAD'); conflicted = git(wt, 'diff', '--name-only', '--diff-filter=U').split('\n').join(', ') } catch {}
-          if (!conflicted) fail(`git could not merge ${from} into ${wave.branch}: ${firstLine(e)}. ${so}`)
-          git(wt, 'merge', '--abort')
+          try { git(wt, 'rev-parse', '-q', '--verify', 'MERGE_HEAD'); conflicted = git(wt, 'diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean).join(', ') } catch {}
+          try { git(wt, 'merge', '--abort') } catch {}
+          if (!conflicted) fail(`git could not merge ${from} into ${wave.branch}: ${firstLine(e)}. Nothing was changed.`)
           // the resolution is new work no round's range shows, so the ledger keeps that it waits for review
-          appendLedger(run.paths, `wave ${wave.n}: taking ${from} conflicts in ${conflicted}${taken.length ? ` (took in ${taken.join(', ')} first)` : ''}; a worker resolves it, and its resolution waits for review`, wave)
-          fail(`Taking ${from} into ${wave.branch} conflicts in ${conflicted}, so the merge was undone. A worker runs git merge --no-ff ${from} in ${wt}, on ${wave.branch}, resolves it and commits; then lcw wave take --wave ${wave.n} again. ${so}`)
+          appendLedger(run.paths, `wave ${wave.n}: taking ${from} conflicts in ${conflicted}; a worker resolves it, and its resolution waits for review`, wave)
+          fail(`Taking ${from} into ${wave.branch} conflicts in ${conflicted}, so the merge was undone. A worker runs git merge --no-ff ${from} in ${wt}, on ${wave.branch}, resolves it and commits; then lcw wave take --wave ${wave.n} again. Nothing was changed.`)
         }
-        taken.push(from)
       }
       const tip = tipOf(s, wave)
-      const note = tip === had ? `wave ${wave.n} had all of ${takeIns(s, wave).join(', ')} already` : `wave ${wave.n} took in ${taken.join(', ')}: ${wave.branch} now at ${tip}`
+      const note = tip === had ? `wave ${wave.n} had ${from} already` : `wave ${wave.n} took in ${from}: ${wave.branch} now at ${tip}`
       change(run, note, () => {}, wave)
       return out(note)
     }
@@ -1160,7 +1165,7 @@ function waveStage(run, wave, stage) {
   out(`wave ${wave.n} stage ${stage}`)
 }
 
-/** The branches a wave takes in, oldest first: the sweep's own, which holds the shipped waves, and every earlier open wave's. */
+/** The branches a wave must hold, directly or through the wave before it: the sweep's own, which holds the shipped waves, and every earlier open wave's. */
 const takeIns = (s, w) => [s.branch, ...openWaves(s).filter((x) => x.n < w.n && x.status === 'running').map((x) => x.branch)]
 const contains = (s, from, branch) => { try { git(s.repoRoot, 'merge-base', '--is-ancestor', `refs/heads/${from}`, `refs/heads/${branch}`); return true } catch { return false } }
 const missingFrom = (s, w) => takeIns(s, w).filter((b) => !contains(s, b, w.branch))
@@ -1212,12 +1217,22 @@ function dropLatest(s) {
   return `worktree removed: ${dir}`
 }
 
+const huntRefs = (s) => git(s.repoRoot, 'for-each-ref', '--format=%(refname)', `refs/lcw/${s.name}/hunt-*`).split('\n').filter(Boolean)
+
+/** Ends the sweep's hunts: removes the hunt's worktree and the refs that kept each round's commit; says what became of the worktree. */
+function endHunts(s) {
+  const said = dropLatest(s)
+  for (const ref of huntRefs(s)) git(s.repoRoot, 'update-ref', '-d', ref)
+  return said
+}
+
 /**
- * A fresh detached worktree for a hunt round while waves are open: the newest open wave's tip with each earlier open
+ * A fresh detached worktree for hunt round `round` while waves are open: the newest open wave's tip with each earlier open
  * wave's merged in, committed only there, so probes read every wave's latest fixes and closures. On a conflict it
- * holds the newest wave's tip alone. Returns { dir, note }, or null when no wave is open.
+ * holds the newest wave's tip alone. Its head is kept under refs/lcw/<name>/hunt-<round>, since the next round diffs
+ * against it after this worktree is gone. Returns { dir, note }, or null when no wave is open.
  */
-function freshLatest(s) {
+function freshLatest(s, round) {
   const was = dropLatest(s)
   if (was?.startsWith('worktree kept')) fail(`The hunt's worktree from the last round could not be refreshed: ${was}. Nothing was changed.`)
   const open = openWaves(s)
@@ -1227,15 +1242,23 @@ function freshLatest(s) {
   try { git(s.repoRoot, 'worktree', 'add', '-q', '--detach', dir, `refs/heads/${newest.branch}`) } catch (e) { fail(`git could not make the worktree ${dir}: ${firstLine(e)}. Nothing was changed.`) }
   const real = fs.realpathSync(dir)
   const tip = git(real, 'rev-parse', 'HEAD')
+  const kept = () => { const head = git(real, 'rev-parse', 'HEAD'); git(s.repoRoot, 'update-ref', `refs/lcw/${s.name}/hunt-${round}`, head); return head }
   for (const x of open.slice(0, -1)) {
     try { git(real, 'merge-base', '--is-ancestor', `refs/heads/${x.branch}`, 'HEAD'); continue } catch {}
-    try { git(real, '-c', 'user.name=LCW', '-c', 'user.email=lcw@localhost', 'merge', '--no-ff', '--no-edit', '--no-verify', '-q', `refs/heads/${x.branch}`) } catch {
+    try { git(real, '-c', 'user.name=LCW', '-c', 'user.email=lcw@localhost', 'merge', '--no-ff', '--no-edit', '--no-verify', '-q', `refs/heads/${x.branch}`) } catch (e) {
+      let conflicted = ''
+      try { conflicted = git(real, 'diff', '--name-only', '--diff-filter=U') } catch {}
       try { git(real, 'merge', '--abort') } catch {}
+      if (!conflicted) {
+        const gone = dropLatest(s) ?? `worktree ${real} was already gone`
+        fail(`git could not merge ${x.branch} into the hunt's worktree: ${firstLine(e)}. The stage was not changed; ${gone}.`)
+      }
       git(real, 'reset', '-q', '--hard', tip)
+      kept()
       return { dir: real, note: `latest work: ${real}, with only wave ${newest.n}'s tip ${tip}, because merging wave ${x.n} into it conflicts; it lacks wave ${x.n}'s later work` }
     }
   }
-  return { dir: real, note: `latest work: ${real}, at ${git(real, 'rev-parse', 'HEAD')}, holding every open wave's work` }
+  return { dir: real, note: `latest work: ${real}, at ${kept()}, holding every open wave's work` }
 }
 
 /** A run's worktrees: a build's own, and in a sweep each wave's that is still there to remove. */
