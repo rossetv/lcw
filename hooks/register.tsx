@@ -423,12 +423,13 @@ async function carryOn($: EngineInterface) {
   if (now < c.dueAt) return
   const typed = (await draft($)) !== ''
   if (S.carry !== c) return
-  const paused = S.run?.state?.status === 'paused' && S.run.state.pausedReason === 'human'
+  const paused = S.run?.state?.status === 'paused'
   const step = carryDue(c, now, typed || paused || S.turnRunning)
   S.carry = step.carry ?? null
   if (!step.send) return
   const sent = S.carry
-  if (!(await $.prompt.submit({ text: carryPrompt(c.kind, step.send) }).then(() => true).catch(() => false)) && S.carry === sent) {
+  // A result carrying drop is a prompt a hook or the engine refused.
+  if (!(await $.prompt.submit({ text: carryPrompt(c.kind, step.send) }).then((r) => !(r as any)?.drop).catch(() => false)) && S.carry === sent) {
     S.carry = carryFailed(sent, c.kind, await $.clock.now())
   }
 }
@@ -655,11 +656,11 @@ export const register: Register = (on) => {
     return result
   })
 
-  // A prompt the person sent (not a slash command, nor one the engine or a plugin sent for them) is their reply to the approval box, if it shows.
+  // A prompt or slash command the person sent (not one the engine or a plugin sent for them) is their reply to the approval box, if it shows.
   on('prompt.submit', async ($, e, next) => {
     const result = await next(e)
     const kind = (e as any).origin?.kind
-    if (!e.isMeta && !e.command && (!kind || PERSON.includes(kind)) && !(result as any)?.drop) {
+    if (!e.isMeta && (!kind || PERSON.includes(kind)) && !(result as any)?.drop) {
       S.repliedAt = await $.clock.now().catch(() => S.repliedAt)
       // What the person sends takes over from any carry-on.
       S.carry = null

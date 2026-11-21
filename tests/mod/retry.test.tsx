@@ -8,12 +8,12 @@ const RUN = '/lcw/repos/r/runs/x'
 
 // The world beneath the mod: files in memory, the prompt box, the prompts it submits, and a clock that jumps.
 // Each timer fires once per jump, so a wait of many minutes costs one step.
-function engine(on: any, opts: { run?: string } = {}) {
+function engine(on: any, opts: { run?: string; reason?: string | null; drop?: boolean } = {}) {
   const files: Record<string, string> = {}
   if (opts.run) {
     files['/lcw/sessions/s1.json'] = JSON.stringify({ runDir: RUN })
     files[RUN + '/state.json'] = JSON.stringify({
-      id: '20261121-x', name: 'x', status: opts.run, pausedReason: opts.run === 'paused' ? 'human' : null, stage: 'Build', stageSince: NOW, createdAt: NOW,
+      id: '20261121-x', name: 'x', status: opts.run, pausedReason: opts.run === 'paused' ? (opts.reason === undefined ? 'human' : opts.reason) : null, stage: 'Build', stageSince: NOW, createdAt: NOW,
     })
     files[RUN + '/mod-alive'] = String(NOW)
   }
@@ -36,7 +36,7 @@ function engine(on: any, opts: { run?: string } = {}) {
   on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
   on('fs.list', () => ({ value: [] }))
   on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '' } }))
-  on('prompt.submit', (_: any, e: any) => { prompts.push(String(e.text)); return { text: e.text } })
+  on('prompt.submit', (_: any, e: any) => { prompts.push(String(e.text)); return opts.drop ? { drop: 'refused' } : { text: e.text } })
   on('prompt.read', () => ({ value: { text: box.draft, cursor: 0 } }))
   on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', (_: any, e: any) => ({ text: e.answer ?? '' }))
@@ -173,4 +173,45 @@ test('no try is sent more than 3 hours after the first error', async ($, on) => 
   await fail($)
   await w.pass(185)
   expect(w.prompts.length).toBe(1)
+})
+
+test('nothing is carried on while a run is paused at its usage mark', async ($, on) => {
+  const w = engine(on, { run: 'paused', reason: 'mark' })
+  await start($)
+  await fail($)
+  await w.pass(60)
+  expect(w.prompts.length).toBe(0)
+})
+
+test('a slash command from the person takes over: no try follows it', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  await fail($)
+  await $.prompt.submit({ text: '/model', command: { name: 'model' } } as any)
+  await w.pass(60)
+  expect(w.prompts).toEqual(['/model'])
+})
+
+test('a try the engine drops is not counted as sent: the next follows 5 minutes later', async ($, on) => {
+  const w = engine(on, { drop: 'refused' })
+  await start($)
+  await fail($)
+  await w.pass(1.1)
+  expect(w.prompts).toHaveLength(1)
+  await w.pass(4.8)
+  expect(w.prompts).toHaveLength(1)
+  await w.pass(0.4)
+  expect(w.prompts).toHaveLength(2)
+  expect(w.prompts[1]).toMatch(/try 2\b/)
+})
+
+test('the engine order of events, turn start, then the error, then the turn ending in error, still sends the first try after a minute', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  await $.turn.start({ text: '', turnId: 't' } as any)
+  await fail($)
+  await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, reason: 'error', turnId: 't' } as any)
+  await w.pass(1.1)
+  expect(w.prompts).toHaveLength(1)
+  expect(w.prompts[0]).toMatch(/try 1\b/)
 })
