@@ -3323,6 +3323,455 @@
         "weekUsedPercent": 41,
         "weekElapsedPercent": 61
       }
+    },
+    "24-lanes-one-wave-open": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "1h 12m",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "wave 2 building",
+      "sweep": {
+        "prs": "merged",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 12,
+        "parked": 2,
+        "dropped": 0,
+        "waves": [
+          {
+            "n": 1,
+            "status": "shipped",
+            "pr": 41,
+            "merged": true
+          },
+          {
+            "n": 2,
+            "status": "running",
+            "stage": "Build",
+            "stageSince": "22m",
+            "tasks": {
+              "done": 7,
+              "running": 3,
+              "left": 2
+            }
+          },
+          {
+            "n": 3,
+            "status": "queued"
+          }
+        ]
+      }
+    },
+    "25-lanes-review-and-build": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "1h 31m",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "wave 1 in review, wave 2 building",
+      "sweep": {
+        "prs": "merged",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 0,
+        "parked": 2,
+        "dropped": 0,
+        "waves": [
+          {
+            "n": 1,
+            "status": "running",
+            "stage": "Review",
+            "stageSince": "34m",
+            "round": 2,
+            "requirements": {
+              "pass": 18,
+              "failing": 1,
+              "toGo": 4,
+              "failingName": "F19 the add-time order’s line is marked carried out"
+            }
+          },
+          {
+            "n": 2,
+            "status": "running",
+            "stage": "Build",
+            "stageSince": "22m",
+            "tasks": {
+              "done": 7,
+              "running": 3,
+              "left": 2
+            }
+          },
+          {
+            "n": 3,
+            "status": "queued"
+          }
+        ]
+      }
+    },
+    "26-lanes-three-open": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "2h 48m",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "wave 1 in its final checks, wave 2 in review, wave 3 building",
+      "sweep": {
+        "prs": "merged",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 0,
+        "parked": 2,
+        "dropped": 0,
+        "waves": [
+          {
+            "n": 1,
+            "status": "running",
+            "stage": "Ship",
+            "stageSince": "14m",
+            "step": "final checks",
+            "requirements": {
+              "pass": 23,
+              "failing": 0,
+              "toGo": 0
+            }
+          },
+          {
+            "n": 2,
+            "status": "running",
+            "stage": "Review",
+            "stageSince": "19m",
+            "round": 1,
+            "requirements": {
+              "pass": 7,
+              "failing": 0,
+              "toGo": 5
+            }
+          },
+          {
+            "n": 3,
+            "status": "running",
+            "stage": "Build",
+            "stageSince": "12m",
+            "tasks": {
+              "done": 3,
+              "running": 4,
+              "left": 2
+            }
+          }
+        ]
+      }
+    },
+    "27-lanes-one-waits-on-you": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "3h 20m",
+      "state": "running",
+      "sharePercent": 12,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 38,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 41,
+        "weekElapsedPercent": 61
+      },
+      "health": "wave 1 waits on your answer; wave 2 carries on",
+      "sweep": {
+        "prs": "merged",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 1,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 0,
+        "parked": 2,
+        "dropped": 0,
+        "waves": [
+          {
+            "n": 1,
+            "status": "running",
+            "stage": "Ship",
+            "stageSince": "12m",
+            "waiting": true,
+            "requirements": {
+              "pass": 23,
+              "failing": 0,
+              "toGo": 0
+            }
+          },
+          {
+            "n": 2,
+            "status": "running",
+            "stage": "Build",
+            "stageSince": "31m",
+            "tasks": {
+              "done": 7,
+              "running": 3,
+              "left": 2
+            }
+          },
+          {
+            "n": 3,
+            "status": "queued"
+          }
+        ]
+      },
+      "asks": [
+        {
+          "age": "12m",
+          "text": "Wave 1 cannot be pushed: GitHub refuses the branch, because this token has no write access to the repository. Give it access and say “carry on”, or name another remote."
+        }
+      ]
+    },
+    "28-lanes-a-long-sweep": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Build",
+      "titleRight": "1d 2h 40m",
+      "state": "running",
+      "sharePercent": 23,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 54,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 52,
+        "weekElapsedPercent": 78
+      },
+      "health": "wave 6 in its final checks, wave 7 building",
+      "sweep": {
+        "prs": "merged",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 3,
+        "hunt": {
+          "areas": 0,
+          "hunted": 0,
+          "running": 0,
+          "findings": 0,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 47,
+        "parked": 170,
+        "dropped": 53,
+        "waves": [
+          {
+            "n": 1,
+            "status": "shipped",
+            "pr": 41,
+            "merged": true
+          },
+          {
+            "n": 2,
+            "status": "shipped",
+            "pr": 42,
+            "merged": true
+          },
+          {
+            "n": 3,
+            "status": "shipped",
+            "pr": 43,
+            "merged": true
+          },
+          {
+            "n": 4,
+            "status": "shipped",
+            "pr": 44,
+            "merged": true
+          },
+          {
+            "n": 5,
+            "status": "shipped",
+            "pr": 45,
+            "merged": true
+          },
+          {
+            "n": 6,
+            "status": "running",
+            "stage": "Ship",
+            "stageSince": "18m",
+            "step": "final checks",
+            "requirements": {
+              "pass": 14,
+              "failing": 0,
+              "toGo": 0
+            }
+          },
+          {
+            "n": 7,
+            "status": "running",
+            "stage": "Build",
+            "stageSince": "9m",
+            "tasks": {
+              "done": 4,
+              "running": 4,
+              "left": 3
+            }
+          },
+          {
+            "n": 8,
+            "status": "queued"
+          },
+          {
+            "n": 9,
+            "status": "queued"
+          }
+        ]
+      }
+    },
+    "29-lanes-hunt-and-final-checks": {
+      "run": "backlog-sweep",
+      "shape": "sweep",
+      "stage": "Hunt",
+      "titleRight": "4h 35m",
+      "stageAge": "5m",
+      "state": "running",
+      "sharePercent": 18,
+      "status": {
+        "model": "Opus 5.5",
+        "effort": "high",
+        "contextWindow": "1M",
+        "repo": "acme-api",
+        "markPercent": 75,
+        "contextPercent": 46,
+        "branch": "lcw/backlog-sweep",
+        "weekUsedPercent": 47,
+        "weekElapsedPercent": 70
+      },
+      "health": "hunting again, round 2; wave 3 in its final checks",
+      "sweep": {
+        "prs": "merged",
+        "charter": 10,
+        "open": 0,
+        "approvedAt": 1795000000000,
+        "round": 2,
+        "hunt": {
+          "areas": 36,
+          "hunted": 9,
+          "running": 5,
+          "findings": 4,
+          "fix": 0,
+          "park": 0,
+          "drop": 0
+        },
+        "fixed": 35,
+        "parked": 2,
+        "dropped": 3,
+        "waves": [
+          {
+            "n": 1,
+            "status": "shipped",
+            "pr": 41,
+            "merged": true
+          },
+          {
+            "n": 2,
+            "status": "shipped",
+            "pr": 42,
+            "merged": true
+          },
+          {
+            "n": 3,
+            "status": "running",
+            "stage": "Ship",
+            "stageSince": "11m",
+            "step": "final checks",
+            "requirements": {
+              "pass": 8,
+              "failing": 0,
+              "toGo": 0
+            }
+          }
+        ]
+      }
     }
   },
   "money": {

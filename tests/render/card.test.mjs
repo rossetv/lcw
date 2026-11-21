@@ -31,102 +31,91 @@ const SWEEP = {
     "findings  151 to fix · 14 parked · 21 dropped                                                          6 waves queued",
   ],
   "05-plan-for-wave-1": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 3m in Plan ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 3m ─╮",
     "● running · planning wave 1: Billing, Panel, Sign-in                                               ≈ 12% of your week",
-    "waves ▰▱▱▱▱▱  1 running · 5 queued                                                   round 1 · 14 parked · 21 dropped",
-    "✓ Charter  ✓ Hunt  › Plan  ○ Build  ○ Review  ○ Ship",
-    "28 tasks · up to 12 at once",
-    "models Haiku 5.5 9 · Sonnet 5.5 16 · Opus 5.5 3",
+    "waves   › Plan  ○ Build  ○ Review  ○ Ship    1 open · 5 queued                       round 1 · 14 parked · 21 dropped",
+    "wave 1  ▰▰▰▰▰▰  ▱▱▱▱▱▱▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    28 tasks · up to 12 at once                                           3m",
   ],
   "06-build-wave-2-fixes-in-parallel": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ────────────────────────────────────────────────────────────────────────── 22m in Build ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 22m ─╮",
     "● running · wave 2: Billing and Panel fixes building side by side                                  ≈ 12% of your week",
-    "waves ▰▰▱▱▱▱  1 shipped · 1 running · 4 queued                            round 1 · 27 fixed · 14 parked · 22 dropped",
-    "✓ Charter  ✓ Hunt  ✓ Plan  › Build  ○ Review  ○ Ship",
-    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱  9 done · 7 running · 11 left · 1 dropped",
+    "waves   ✓ Plan  › Build  ○ Review  ○ Ship    1 merged · 4 queued          round 1 · 27 fixed · 14 parked · 22 dropped",
+    "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▱▱▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    9 of 28 tasks done · 7 running                                       22m",
   ],
   "07-build-a-worker-has-stalled": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ────────────────────────────────────────────────────────────────────────── 22m in Build ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 22m ─╮",
     "● running · one worker stalled; asked what it needs                                                ≈ 12% of your week",
-    "waves ▰▰▱▱▱▱  1 shipped · 1 running · 4 queued                            round 1 · 27 fixed · 14 parked · 22 dropped",
-    "✓ Charter  ✓ Hunt  ✓ Plan  › Build  ○ Review  ○ Ship",
-    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱  9 done · 7 running · 11 left · 1 dropped",
+    "waves   ✓ Plan  › Build  ○ Review  ○ Ship    1 merged · 4 queued          round 1 · 27 fixed · 14 parked · 22 dropped",
+    "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▱▱▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    9 of 28 tasks done · 7 running                                       22m",
   ],
   "08-build-a-very-large-wave": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ────────────────────────────────────────────────────────────────────────── 22m in Build ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 22m ─╮",
     "● running · wave 2: two areas, each under its own orchestrator                                     ≈ 12% of your week",
-    "waves ▰▰▱▱▱▱  1 shipped · 1 running · 4 queued                            round 1 · 27 fixed · 14 parked · 22 dropped",
-    "✓ Charter  ✓ Hunt  ✓ Plan  › Build  ○ Review  ○ Ship",
-    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱  9 done · 7 running · 11 left · 1 dropped",
+    "waves   ✓ Plan  › Build  ○ Review  ○ Ship    1 merged · 4 queued          round 1 · 27 fixed · 14 parked · 22 dropped",
+    "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▱▱▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    9 of 28 tasks done · 7 running                                       22m",
   ],
   "09-review-once-for-the-whole-wave": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ───────────────────────────────────────────────────────────────────────── 11m in Review ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 11m ─╮",
     "● running · reviewing wave 2’s 27 fixes                                                            ≈ 12% of your week",
-    "waves ▰▰▱▱▱▱  1 shipped · 1 running · 4 queued                            round 1 · 27 fixed · 14 parked · 22 dropped",
-    "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  › Review  ○ Ship",
-    "fixes ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱  20 pass · 1 failing · 6 to go  failing: F21 the add-time order’s line is marked carried …",
+    "waves   ✓ Plan  ✓ Build  › Review  ○ Ship     1 merged · 4 queued         round 1 · 27 fixed · 14 parked · 22 dropped",
+    "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▱  ▱▱▱▱▱▱    20 of 27 fixes pass · 1 failing                                      11m",
   ],
   "10-ship-wave-2": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 2m in Ship ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 2m ─╮",
     "● running · writing wave 2’s pull request                                                          ≈ 12% of your week",
-    "waves ▰▰▱▱▱▱  1 shipped · 1 running · 4 queued                            round 1 · 54 fixed · 14 parked · 22 dropped",
-    "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  › Ship",
-    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱  27 done · 1 dropped",
+    "waves   ✓ Plan  ✓ Build  ✓ Review  › Ship    1 merged · 4 queued          round 1 · 54 fixed · 14 parked · 22 dropped",
+    "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▰  ▰▰▰▰▰▰    final checks next                                                     2m",
   ],
   "11-ship-when-your-charter-lets-claude-merge": [
     "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 6m in Ship ─╮",
     "● running · wave 2’s PR #42 merged: it met your charter’s rule                                     ≈ 12% of your week",
-    "waves ▰▰▱▱▱▱  2 shipped · 4 queued                                        round 1 · 54 fixed · 14 parked · 22 dropped",
+    "waves ▰▰▱▱▱▱  2 merged · 4 queued                                         round 1 · 54 fixed · 14 parked · 22 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  › Ship",
     "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱  27 done · 1 dropped",
   ],
   "12-hunt-round-2-the-queue-ran-dry": [
     "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 5m in Hunt ─╮",
     "● running · hunting again, round 2                                                                 ≈ 29% of your week",
-    "waves ▰▰▰▰▰▰  6 shipped                                                  round 2 · 148 fixed · 14 parked · 22 dropped",
+    "waves ▰▰▰▰▰▰  6 merged                                                   round 2 · 148 fixed · 14 parked · 22 dropped",
     "✓ Charter  › Hunt  ○ Plan  ○ Build  ○ Review  ○ Ship",
     "areas ▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  9 hunted · 5 running · 22 left                                      4 findings so far",
   ],
   "13-needs-you-one-question": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 4m in Ship ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 4m ─╮",
     "⚑ needs you · 12m",
     "Wave 3 cannot be pushed: GitHub refuses the branch, because this token",
     "has no write access to the repository. Give it access and say “carry",
     "on”, or name another remote.",
     "answer in plain words below",
     "● running · wave 3 waits on your answer; wave 4 is being planned                                   ≈ 12% of your week",
-    "waves ▰▰▰▱▱▱  2 shipped · 1 running · 3 queued                            round 1 · 81 fixed · 14 parked · 22 dropped",
-    "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  › Ship",
-    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰  26 done",
+    "waves   ✓ Plan  ✓ Build  ✓ Review  › Ship    2 merged · 3 queued          round 1 · 81 fixed · 14 parked · 22 dropped",
+    "wave 3  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▰  ▰▰▰▰▰▰    final checks next                                                     4m",
   ],
   "14-needs-you-two-questions": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ────────────────────────────────────────────────────────────────────────── 38m in Build ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 38m ─╮",
     "⚑ needs you · 2",
     "1  The Fleet tests need Docker, and no Docker daemon is running here. Start it, or shall I park Fleet’s 10 fix…   41m",
     "2  The Billing fixes need a Stripe test key, and none is set. Add one, or shall I park them?                       9m",
     "answer in plain words below, e.g. “1 yes, 2 UTC”",
     "● running · 2 areas wait on your answers; Panel carries on                                         ≈ 12% of your week",
-    "waves ▰▰▰▱▱▱  2 shipped · 1 running · 3 queued                            round 1 · 54 fixed · 14 parked · 22 dropped",
-    "✓ Charter  ✓ Hunt  ✓ Plan  › Build  ○ Review  ○ Ship",
-    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱  11 done · 4 running · 12 left",
+    "waves   ✓ Plan  › Build  ○ Review  ○ Ship     2 merged · 3 queued         round 1 · 54 fixed · 14 parked · 22 dropped",
+    "wave 3  ▰▰▰▰▰▰  ▰▰▰▰▱▱▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    11 of 27 tasks done · 4 running                                      38m",
   ],
   "15-paused-at-your-usage-mark": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ────────────────────────────────────────────────────────────────────────── 52m in Build ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 52m ─╮",
     "▮▮ paused at your 75% mark                                                                              resumes in 2d",
     "nothing new starts · the 3 running tasks finish and merge first",
     "say “run up to 85%” to carry on now",
-    "waves ▰▰▰▰▱▱  3 shipped · 1 running · 2 queued                            round 1 · 97 fixed · 14 parked · 22 dropped",
-    "✓ Charter  ✓ Hunt  ✓ Plan  › Build  ○ Review  ○ Ship",
-    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱  14 done · 3 running · 9 left",
+    "waves   ✓ Plan  › Build  ○ Review  ○ Ship     3 merged · 2 queued         round 1 · 97 fixed · 14 parked · 22 dropped",
+    "wave 4  ▰▰▰▰▰▰  ▰▰▰▰▰▱▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    14 of 26 tasks done · 3 running                                      52m",
   ],
   "16-paused-by-you": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ────────────────────────────────────────────────────────────────────────── 52m in Build ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 52m ─╮",
     "▮▮ paused by you",
     "nothing new starts · no task is running",
     "say “carry on” to resume",
-    "waves ▰▰▰▰▱▱  3 shipped · 1 running · 2 queued                            round 1 · 97 fixed · 14 parked · 22 dropped",
-    "✓ Charter  ✓ Hunt  ✓ Plan  › Build  ○ Review  ○ Ship",
-    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱  14 done · 12 left",
+    "waves   ✓ Plan  › Build  ○ Review  ○ Ship     3 merged · 2 queued         round 1 · 97 fixed · 14 parked · 22 dropped",
+    "wave 4  ▰▰▰▰▰▰  ▰▰▰▰▱▱▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    14 of 26 tasks done                                                  52m",
   ],
   "17-finished-with-stacked-pull-requests": [
     "╭─ ◆ LCW Sweep · backlog-sweep ───────────────────────────────────────────────────────────────────────────────── 1d 7h ─╮",
@@ -159,15 +148,14 @@ const SWEEP = {
   "21-stopped": [
     "╭─ ◆ LCW Sweep · backlog-sweep ────────────────────────────────────────────────────────────────────────── 12m in Build ─╮",
     "■ stopped",
-    "waves ▰▰▰▱▱▱  3 shipped · 3 queued                                        round 1 · 81 fixed · 14 parked · 22 dropped",
+    "waves ▰▰▰▱▱▱  3 merged · 3 queued                                         round 1 · 81 fixed · 14 parked · 22 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  › Build  ○ Review  ○ Ship",
     "tasks ▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  6 done · 20 left",
   ],
   "22-in-a-narrow-window": [
-    "◆ backlog-sweep › Build",
+    "◆ backlog-sweep             waves ▰▰▱▱▱▱",
     "● running · wave 2 building",
-    "▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱",
-    "9 done · 7 running · 11 left",
+    "wave 2  ▰▰▰ ▰▰▱ ▱▱▱ ▱▱▱  Build",
   ],
   "23-a-build-for-comparison": [
     "╭─ ◆ LCW Build · shared-lists ─────────────────────────────────────────────────────────────────────────── 18m in Build ─╮",
@@ -176,6 +164,107 @@ const SWEEP = {
     "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱  7 done · 4 running · 6 left",
   ],
 
+};
+
+// The six approved states of a sweep with waves open, as plain text: the card alone, 115 columns wide and 35.
+const LANES = {
+  "24-lanes-one-wave-open": {
+    wide: [
+      "◆ LCW Sweep · backlog-sweep                                                                                  1h 12m",
+      "● running · wave 2 building                                                                      ≈ 12% of your week",
+      "waves   ✓ Plan  › Build  ○ Review  ○ Ship    1 merged · 1 open · 1 queued             round 1 · 12 fixed · 2 parked",
+      "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    7 of 12 tasks done · 3 running                                     22m",
+    ],
+    narrow: [
+      "◆ backlog-sweep           waves ▰▰▱",
+      "● running · wave 2 building",
+      "wave 2  ▰▰▰ ▰▰▰ ▱▱▱ ▱▱▱  Build",
+    ],
+  },
+  "25-lanes-review-and-build": {
+    wide: [
+      "◆ LCW Sweep · backlog-sweep                                                                                  1h 31m",
+      "● running · wave 1 in review, wave 2 building                                                    ≈ 12% of your week",
+      "waves   ✓ Plan  › Build  › Review  ○ Ship     2 open · 1 queued                                  round 1 · 2 parked",
+      "wave 1  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▱  ▱▱▱▱▱▱    18 of 23 fixes pass · 1 failing · round 2                          34m",
+      "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱     7 of 12 tasks done · 3 running                                    22m",
+    ],
+    narrow: [
+      "◆ backlog-sweep           waves ▰▰▱",
+      "● running · wave 1 in review, wave…",
+      "wave 1  ▰▰▰ ▰▰▰ ▰▰▰ ▱▱▱  Review",
+      "wave 2  ▰▰▰ ▰▰▰ ▱▱▱ ▱▱▱  Build",
+    ],
+  },
+  "26-lanes-three-open": {
+    wide: [
+      "◆ LCW Sweep · backlog-sweep                                                                                  2h 48m",
+      "● running · wave 1 in its final checks, wave 2 in review, wave 3 building                        ≈ 12% of your week",
+      "waves   ✓ Plan  › Build  › Review  › Ship    3 open                                   round 1 · 23 fixed · 2 parked",
+      "wave 1  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▰  ▰▰▰▰▰▰    final checks                                                       14m",
+      "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▱▱▱  ▱▱▱▱▱▱    7 of 12 fixes pass                                                 19m",
+      "wave 3  ▰▰▰▰▰▰  ▰▰▰▰▰▱▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    3 of  9 tasks done · 4 running                                     12m",
+    ],
+    narrow: [
+      "◆ backlog-sweep           waves ▰▰▰",
+      "● running · wave 1 in its final ch…",
+      "wave 1  ▰▰▰ ▰▰▰ ▰▰▰ ▰▰▰  checks",
+      "wave 2  ▰▰▰ ▰▰▰ ▰▰▱ ▱▱▱  Review",
+      "wave 3  ▰▰▰ ▰▰▱ ▱▱▱ ▱▱▱  Build",
+    ],
+  },
+  "27-lanes-one-waits-on-you": {
+    wide: [
+      "◆ LCW Sweep · backlog-sweep                                                                                  3h 20m",
+      "⚑ needs you · 12m",
+      "Wave 1 cannot be pushed: GitHub refuses the branch, because this token",
+      "has no write access to the repository. Give it access and say “carry",
+      "on”, or name another remote.",
+      "answer in plain words below",
+      "● running · wave 1 waits on your answer; wave 2 carries on                                       ≈ 12% of your week",
+      "waves   ✓ Plan  › Build  ○ Review  › Ship    2 open · 1 queued                        round 1 · 23 fixed · 2 parked",
+      "wave 1  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▰  ▰▰▰▰▰▰    ⚑ waits on your answer                                             12m",
+      "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    7 of 12 tasks done · 3 running                                     31m",
+    ],
+    narrow: [
+      "◆ backlog-sweep           waves ▰▰▱",
+      "⚑ needs you · 12m",
+      "Wave 1 cannot be pushed: GitHub re…",
+      "● running · wave 1 waits on your a…",
+      "wave 1  ▰▰▰ ▰▰▰ ▰▰▰ ▰▰▰  ⚑ waiting",
+      "wave 2  ▰▰▰ ▰▰▰ ▱▱▱ ▱▱▱  Build",
+    ],
+  },
+  "28-lanes-a-long-sweep": {
+    wide: [
+      "◆ LCW Sweep · backlog-sweep                                                                                   1d 2h",
+      "● running · wave 6 in its final checks, wave 7 building                                          ≈ 23% of your week",
+      "waves   ✓ Plan  › Build  ○ Review  › Ship    5 merged · 2 queued       round 3 · 61 fixed · 170 parked · 53 dropped",
+      "wave 6  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▰  ▰▰▰▰▰▰    final checks                                                       18m",
+      "wave 7  ▰▰▰▰▰▰  ▰▰▰▰▰▰▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    4 of 11 tasks done · 4 running                                      9m",
+    ],
+    narrow: [
+      "◆ backlog-sweep     waves ▰▰▰▰▰▰▰▱▱",
+      "● running · wave 6 in its final ch…",
+      "wave 6  ▰▰▰ ▰▰▰ ▰▰▰ ▰▰▰  checks",
+      "wave 7  ▰▰▰ ▰▰▱ ▱▱▱ ▱▱▱  Build",
+    ],
+  },
+  "29-lanes-hunt-and-final-checks": {
+    wide: [
+      "◆ LCW Sweep · backlog-sweep                                                                                  4h 35m",
+      "● running · hunting again, round 2; wave 3 in its final checks                                   ≈ 18% of your week",
+      "waves    ✓ Plan  ✓ Build  ✓ Review  › Ship    2 merged · 1 open           round 2 · 43 fixed · 2 parked · 3 dropped",
+      "wave 3   ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▰  ▰▰▰▰▰▰    final checks                                                      11m",
+      "round 2  › Hunt  ▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱    9 of 36 areas hunted · 5 running · 4 findings so far               5m",
+    ],
+    narrow: [
+      "◆ backlog-sweep           waves ▰▰▰",
+      "● running · hunting again, round 2…",
+      "wave 3   ▰▰▰ ▰▰▰ ▰▰▰ ▰▰▰  checks",
+      "round 2  ▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱  Hunt",
+    ],
+  },
 };
 
 const strip = s => s.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, '');
@@ -465,7 +554,7 @@ test('one more worker is singular', () => {
 });
 
 test('every board fits the frame at 126, 100 and 80 columns', () => {
-  for (const board of ['Brainstorm', 'Spec', 'Plan', 'Review'].map(s => 'Stage' + s).concat(['RunningA', 'NeedsYou', 'SeveralAsks', 'Paused', 'Done', 'ManyAgents', 'AgentsOpen', 'Stalled', 'NoMod'], Object.keys(SWEEP))) {
+  for (const board of ['Brainstorm', 'Spec', 'Plan', 'Review'].map(s => 'Stage' + s).concat(['RunningA', 'NeedsYou', 'SeveralAsks', 'Paused', 'Done', 'ManyAgents', 'AgentsOpen', 'Stalled', 'NoMod'], Object.keys(SWEEP), Object.keys(LANES))) {
     for (const width of [126, 100, 80]) {
       const lines = strip(toAnsi(card(board, { width, frame: true }), 'dark', width)).split('\n');
       lines.forEach((l, i) => assert.equal(cols(l), width, board + ' at ' + width + ', line ' + i + ': ' + l));
@@ -646,18 +735,86 @@ test("each sweep state, and a build's, is drawn row for row as approved", () => 
   }
 });
 
+const laneRows = (i, width = 115) => strip(toAnsi(renderCard(buildView(i), { width }), 'dark', width)).split('\n').map(l => l.trimEnd());
+const laneOf = (rows, n) => rows.find(l => l.startsWith('wave ' + n + ' '));
+// The review-and-build board with wave 1's record changed.
+const withWave1 = (patch, sweep) => {
+  const i = inputsOf('25-lanes-review-and-build');
+  i.state.sweep = { ...i.state.sweep, ...sweep, waves: [{ ...i.state.sweep.waves[0], ...patch }, ...i.state.sweep.waves.slice(1)] };
+  return i;
+};
+
+test('the six approved lane states are drawn row for row, wide and narrow', () => {
+  for (const [board, { wide, narrow }] of Object.entries(LANES)) {
+    assert.deepEqual(laneRows(inputsOf(board), 115), wide, board);
+    assert.deepEqual(laneRows(inputsOf(board), 35), narrow, board);
+  }
+});
+
+test('a wave closing its review says closures, with its track still in Review', () => {
+  const lane = laneOf(laneRows(withWave1({ step: 'closures' })), 1);
+  assert.match(lane, / {2}▰{8} {2}▱{6} {4}closures +34m$/);
+});
+
+test('a wave at Ship says merging once its checks passed, and that its final checks are next before they start', () => {
+  assert.match(laneOf(laneRows(withWave1({ stage: 'Ship', step: 'merging' })), 1), /▰{6} {4}merging +34m$/);
+  assert.match(laneOf(laneRows(withWave1({ stage: 'Ship', step: null })), 1), /▰{6} {4}final checks next +34m$/);
+});
+
+test('a wave shipped and waiting on its merge keeps its lane at Ship while the charter merges as it goes', () => {
+  const held = { status: 'shipped', merged: false, pr: 41, stage: 'Review', step: null };
+  const rows = laneRows(withWave1(held, { prs: 'merged' }));
+  assert.match(laneOf(rows, 1), /▰{6} {4}merging/);
+  assert.match(rows.find(l => l.startsWith('waves ')), /2 open · 1 queued/);
+  // With stacked pull requests it has merged, and no lane stands for it.
+  const stacked = laneRows(withWave1(held, { prs: 'stacked' }));
+  assert.equal(laneOf(stacked, 1), undefined);
+  assert.match(stacked.find(l => l.startsWith('waves ')), /1 merged · 1 open · 1 queued/);
+  // A run that is over holds no wave open.
+  const over = withWave1(held, { prs: 'merged' });
+  over.state.status = 'finished';
+  assert.ok(!laneRows(over).some(l => l.startsWith('wave 1 ')));
+});
+
+test('the paused row counts the running tasks of every open wave', () => {
+  assert.equal(buildView(inputsOf('26-lanes-three-open')).running, 4);
+});
+
+test('at 100 columns nothing is lost, at 80 the longer words go first, and below 60 the lanes are the narrow ones', () => {
+  const at = (w) => laneRows(inputsOf('25-lanes-review-and-build'), w);
+  const full = at(100);
+  assert.match(laneOf(full, 1), /18 of 23 fixes pass · 1 failing · round 2 +34m$/);
+  assert.match(full.find(l => l.startsWith('waves ')), /2 open · 1 queued +round 1 · 2 parked$/);
+  const eighty = at(80);
+  assert.match(laneOf(eighty, 1), /18 of 23 pass +34m$/);
+  assert.match(laneOf(eighty, 2), /7 of 12 done +22m$/);
+  const fifty = at(50);
+  assert.match(fifty.find(l => l.startsWith('waves ')), /^waves {3}▰▰▱ {2}2 open · 1 queued/);
+  assert.equal(laneOf(fifty, 1), 'wave 1  ▰▰▰ ▰▰▰ ▰▰▰ ▱▱▱  Review');
+  // The sweep's totals give way in turn where the heading is short: the dropped, then the round.
+  const long = (w) => laneRows(inputsOf('28-lanes-a-long-sweep'), w).find(l => l.startsWith('waves '));
+  assert.match(long(115), /round 3 · 61 fixed · 170 parked · 53 dropped$/);
+  assert.match(long(80), /round 3 · 61 fixed · 170 parked$/);
+  assert.match(long(70), /[^d] 61 fixed · 170 parked$/);
+  for (const board of Object.keys(LANES)) for (const w of [140, 100, 80, 70, 60, 50, 44, 43, 36, 30]) {
+    laneRows(inputsOf(board), w).forEach(l => assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l));
+  }
+});
+
 test("a sweep's waves row keeps to 24 cells however many waves are queued", () => {
   const i = inputsOf('06-build-wave-2-fixes-in-parallel');
-  const waves = Array.from({ length: 40 }, (_, k) => ({ n: k + 1, status: k < 10 ? 'shipped' : k === 10 ? 'running' : 'queued' }));
+  const waves = Array.from({ length: 40 }, (_, k) => ({ n: k + 1, status: k < 10 ? 'shipped' : 'queued' }));
   const v = buildView({ ...i, state: { ...i.state, sweep: { ...i.state.sweep, waves } } });
   const row = strip(toAnsi(renderCard(v, { width: 121, frame: true }), 'dark', 121)).split('\n').find(l => l.includes('waves'));
   assert.equal(row.match(/[▰▱]/g).length, 24);
-  assert.match(row, /waves ▰{7}▱{17}  10 shipped · 1 running · 29 queued/);
+  assert.match(row, /waves ▰{6}▱{18}  10 merged · 30 queued/);
 });
 
 test('a sweep with sparse or odd state prints no undefined, null or NaN', () => {
   const sweeps = [undefined, {}, { charter: 'x', open: null, hunt: { areas: 3, hunted: 'many' }, waves: [{ status: 'running', pr: 'x' }, {}] },
-    { charter: 12, round: 2, hunt: { fix: 1 }, waves: [{ status: 'shipped', pr: 7, merged: true }, { status: 'shipped', pr: 8 }] }];
+    { charter: 12, round: 2, hunt: { fix: 1 }, waves: [{ status: 'shipped', pr: 7, merged: true }, { status: 'shipped', pr: 8 }] },
+    { prs: 'merged', round: 1, waves: [{ n: 1, status: 'running', stage: 'Review', step: 7, round: 'x', stageSince: 'soon', tasks: null, requirements: 'x' },
+      { n: 2, status: 'running', stage: 'Plan', plan: { tasks: null }, waiting: 1 }, { n: 3, status: 'shipped', merged: false }] }];
   for (const stage of ['', 'Charter', 'Hunt', 'Plan', 'Build', 'Review', 'Ship']) for (const status of ['with-you', 'running', 'paused', 'finished', 'stopped']) {
     for (const sweep of sweeps) for (const width of [121, 40]) {
       const state = { name: 'x', shape: 'sweep', stage, status, sweep, tasks: [{ id: 'T1', status: 'dropped' }], requirements: [{ id: 'F1', status: 'pass' }] };
@@ -677,11 +834,11 @@ test("a sweep's Ship guide line does not say it writes a pull request, and a bui
   assert.match(buildView(b).guide, /writing the draft pull request/);
 });
 
-test("a parked fix is neither to go nor dropped on the fixes row, and the wave's totals count only what passed", () => {
+test("a parked fix is neither to go nor dropped on the wave's fixes lane, and the wave's totals count only what passed", () => {
   const i = inputsOf('09-review-once-for-the-whole-wave');
   i.state.requirements = [{ id: 'F1', name: 'a', status: 'pass' }, { id: 'F2', name: 'b', status: 'parked' }, { id: 'F3', name: 'c', status: 'todo' }];
-  const row = strip(toAnsi(renderCard(buildView(i), { width: 121, frame: true }), 'dark', 121)).split('\n').find(l => l.startsWith('│ fixes '));
-  assert.match(row, /fixes ▰{10}▱{10}  1 pass · 1 to go/);
+  const row = strip(toAnsi(renderCard(buildView(i), { width: 121, frame: true }), 'dark', 121)).split('\n').find(l => l.startsWith('│ wave 2 '));
+  assert.match(row, /^│ wave 2 .*  1 of 2 fixes pass +\d+m │$/);
   const j = inputsOf('10-ship-wave-2');
   j.state.requirements = i.state.requirements;
   const s = buildView(j).sweep;

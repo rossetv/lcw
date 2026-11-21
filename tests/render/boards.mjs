@@ -13,6 +13,15 @@ const ms = (text = '') => [...text.matchAll(/(\d+)([dhms])/g)].reduce((n, m) => 
 const count = text => { const m = /^([\d.]+)([kM]?)$/.exec(text); return m ? m[1] * (m[2] === 'k' ? 1e3 : m[2] === 'M' ? 1e6 : 1) : null; };
 const list = (n, status, mk) => Array.from({ length: n }, (_, i) => ({ id: 'T' + i, status, ...mk?.(i) }));
 
+const tasksOf = t => [...list(t.done, 'done'), ...list(t.running, 'running'), ...list(t.left, 'todo'), ...list(t.dropped ?? 0, 'dropped')];
+function reqsOf(r) {
+  const [id, ...name] = (r.failingName ?? '').split(' ');
+  return [...list(r.pass, 'pass', i => ({ id: 'R' + i, name: 'x' })), ...(id ? [{ id, name: name.join(' '), status: 'failing' }] : []), ...list(r.toGo ?? 0, 'todo')];
+}
+// An open wave carries its own stage and lists: a fixture gives them as counts, and how long ago the stage began.
+const waveOf = w => ({ ...w, ...(w.stageSince ? { stageSince: NOW - ms(w.stageSince) } : {}),
+  ...(w.tasks ? { tasks: tasksOf(w.tasks) } : {}), ...(w.requirements ? { requirements: reqsOf(w.requirements) } : {}) });
+
 function agentsOf(f, board) {
   const out = [];
   const add = (a, extra) => out.push({
@@ -40,21 +49,18 @@ export function inputsOf(board) {
   const byHuman = f.state === 'paused by you';
   const state = {
     id: f.run, name: f.run, stage: finished ? 'Ship' : f.stage,
-    stageSince: NOW - ms(f.titleRight), createdAt: NOW - ms(f.titleRight), finishedAt: finished ? NOW : null,
+    stageSince: NOW - ms(f.stageAge ?? f.titleRight), createdAt: NOW - ms(f.titleRight), finishedAt: finished ? NOW : null,
     status: finished ? 'finished' : paused ? 'paused' : f.state === 'with you' ? 'with-you' : f.state === 'stopped' ? 'stopped' : 'running',
-    pausedReason: byHuman ? 'human' : paused ? 'mark' : null, guide: f.guide, shape: f.shape, sweep: f.sweep, health: f.health ?? '', markPercent: s.markPercent,
+    pausedReason: byHuman ? 'human' : paused ? 'mark' : null, guide: f.guide, shape: f.shape, sweep: f.sweep && { ...f.sweep, waves: f.sweep.waves?.map(waveOf) }, health: f.health ?? '', markPercent: s.markPercent,
     weekAtStart: s.weekUsedPercent - (f.sharePercent ?? 0),
     intent: f.intent, blindReview: f.blindReview, spec: f.spec,
     plan: f.plan && { tasks: f.plan.tasks, atOnce: f.plan.atOnce, models: f.plan.models },
-    tasks: f.tasks ? [...list(f.tasks.done, 'done'), ...list(f.tasks.running, 'running'), ...list(f.tasks.left, 'todo'), ...list(f.tasks.dropped ?? 0, 'dropped')] : [],
+    tasks: f.tasks ? tasksOf(f.tasks) : [],
     asks: (f.asks ?? []).map((a, i) => ({ n: i + 1, text: a.text, at: NOW - ms(a.age) })),
     pr: f.pr, closing: f.closing && { decisionsToCheck: f.closing.decisionsToCheck, parked: f.closing.parked },
     totals: f.totals && { agents: f.totals.agents, tokens: count(f.totals.tokens), sharePercent: f.totals.sharePercent },
   };
-  if (f.requirements) {
-    const r = f.requirements, [id, ...name] = (r.failingName ?? '').split(' ');
-    state.requirements = [...list(r.pass, 'pass', i => ({ id: 'R' + i, name: 'x' })), ...(id ? [{ id, name: name.join(' '), status: 'failing' }] : []), ...list(r.toGo ?? 0, 'todo')];
-  }
+  if (f.requirements) state.requirements = reqsOf(f.requirements);
   if (f.closing) state.requirements = list(Number(f.closing.requirementsPass.split(' ')[0]), 'pass', i => ({ id: 'R' + i, name: 'x' }));
   const hours = (100 - s.weekElapsedPercent) / 100 * 168;
   const usage = { sevenDay: { percentUsed: s.weekUsedPercent, resetsAt: new Date(NOW + hours * MS.h).toISOString() } };

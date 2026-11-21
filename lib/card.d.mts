@@ -15,16 +15,37 @@ export interface AgentNode {
   id: string; desc: string; model: string; effort: string; tokens: number | null; spark: number[] | null; elapsed: string;
   chip: 'quiet' | 'stalled' | null; expanded: boolean; kids: AgentNode[];
 }
+/** One open wave as its lane draws it: running, or shipped and waiting on its merge while the charter merges as it goes (then at Ship, step 'merging'). */
+export interface OpenWave {
+  n: number; stage: string;
+  /** What the wave does past its stages: 'closures' (in Review), 'final checks' or 'merging' (in Ship), else ''. */
+  step: string;
+  /** True while the wave waits on the person's answer. */
+  waiting: boolean; round: number;
+  /** Its figure while at work: tasks in Build, fixes in Review, the plan in Plan; null otherwise. */
+  d: { k: 'tasks' | 'reqs' | 'plan'; [key: string]: unknown } | null;
+  /** How long it has stood at its stage. */
+  since: string;
+  /** Running tasks, passing fixes counted once at Ship (0 for a wave shipped already), and dropped fixes (0 likewise). */
+  running: number; passing: number; dropped: number;
+}
 export interface SweepView {
-  round: number; shipped: number; running: number; queued: number;   // waves by status
-  /** Totals so far: fixed counts the wave in hand's passing fixes once in Ship, dropped its dropped fixes at once. */
+  /** Waves that have merged, and waves still queued. */
+  round: number; shipped: number; queued: number;
+  /** The open waves, in wave order: each has a lane while there is one. */
+  open: OpenWave[];
+  /** How long the sweep's hunt has stood at Hunt, else ''. */
+  huntAge: string;
+  /** Totals so far: fixed counts each open wave's passing fixes once it is in Ship, dropped its dropped fixes at once. */
   fixed: number; parked: number; dropped: number;
   /** The waves' pull requests, oldest first, or the run's one pull request when no wave has its own. */
   prs: { number: number; merged: boolean }[];
 }
 export interface View {
   /** 'sweep' only when state.shape says so; a run with no shape is a build. */
-  name: string; shape: 'build' | 'sweep'; stage: string; titleRight: string;
+  name: string; shape: 'build' | 'sweep'; stage: string;
+  /** How long the run has been at its stage; while a sweep has a wave open, how long the sweep has run, and once finished, how long it took. */
+  titleRight: string;
   mode: 'running' | 'with-you' | 'paused' | 'finished' | 'stopped';
   /** The colour of the frame: 'needsYou' with open asks, 'caution' paused, 'ok' finished, else 'hairline'. */
   frame: 'needsYou' | 'caution' | 'ok' | 'hairline';
@@ -39,6 +60,7 @@ export interface View {
   /** A sweep's waves and totals; null for a build. */
   sweep: SweepView | null;
   closing: { pass: number; total: number; decisions: number; parked: number; pr: { number?: number; url?: string; branch?: string } | null; agents: number; tokens: number } | null;
+  /** Running tasks: the open waves' added up in a sweep. */
   running: number;
   agents: AgentNode[]; agentCount: number; inFlight: number; moreOpen: boolean;
 }
@@ -63,6 +85,8 @@ export function weekShare(state: Record<string, any>, week?: { percentUsed?: num
  * The card as rows. opts.frame draws the box (not below 44 columns); opts.maxRows drops agent rows first
  * and says "N more agents"; opts.tick (ten a second, 0 on the card's first draw, which is when the bars fill)
  * moves the colours; without it everything holds still. A row wider than the card loses the end of its left group.
+ * A sweep with an open wave draws the waves row as the stage heading and one lane for each open wave (a hunt round
+ * running beside them has its own); below about 60 columns the lanes are compact, and below 44 columns the narrow layout's.
  * Action ids on spans: toggle:<agentId> (the caret), view:<agentId> (the glyph and the description), more.
  */
 export function renderCard(view: View, opts?: RenderOpts): Row[];
