@@ -14,7 +14,7 @@ Probes read the code where the sweep stands: the main checkout in round 1, befor
 
 ## The baseline
 
-In round 1, where the charter's PRs line names checks run on this machine, launch one more probe (Sonnet, medium) with the round's probes, to run those checks once on the commit the hunt reads, before any fix. It runs them as the repository says, in a throwaway worktree at that commit, made ready as the repository needs; a check that runs only from the main checkout runs there, changing no tracked file. A long check runs in the background. It reports, for each check, whether it passed, how long it took, and for each failing test whether the fault looks like the code's or this machine's (a stopped container, a missing tool). Write the report under "Baseline" in charter.md.
+In round 1, where the charter's PRs line names checks run on this machine, launch one more probe (Sonnet, medium) with the round's probes, to run those checks once on the commit the hunt reads, before any fix. It runs them as the repository says, in a throwaway worktree at that commit, made ready as the repository needs; a check that runs only from the main checkout runs there, changing no tracked file. A check that needs a shared service, such as a dev stack, uses it as it stands: the probe never starts, stops or rebuilds it, and if the check cannot run that way, it reports why instead. A long check runs in the background. It reports, for each check, whether it passed, how long it took, and for each failing test whether the fault looks like the code's or this machine's (a stopped container, a missing tool). Write the report under "Baseline" in charter.md.
 
 If a check fails, act on what the charter says a check already failing means. Where that is to wait for the human, `lcw ask` them now, while the charter is fresh in their mind: only the merges wait on the answer, and the hunt and the waves carry on.
 
@@ -30,7 +30,7 @@ List the round's parts in findings.md, then launch the probes in batches of up t
 lcw hunt --areas 36 --hunted 14 --running 6 --findings 23
 ```
 
-Write each report into findings.md under its part as it arrives, so after a compaction you can see which parts have reported. A report with no recipe is not a finding: ask the probe for what is missing, and if it cannot say, leave it out. A finding already parked or dropped in an earlier round is not sorted again.
+Write each report into findings.md under its part as it arrives, so after a compaction you can see which parts have reported. A report with no recipe is not a finding: ask the probe for what is missing, and if it cannot say, leave it out. A finding already parked or dropped in an earlier round is not sorted again; one written in during a wave (what a partly fixed fix left, a replacement found early) is sorted with this round's.
 
 ## Sorting
 
