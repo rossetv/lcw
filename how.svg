@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="830" height="596" viewBox="0 0 830 596">
+<title>How overlapping waves move</title>
+<style>
+:root{--page:#ffffff;--ink:#1f2328;--muted:#59636e;--line:#8c959f;--box:#ffffff;--edge:#c9ced4;--new:#2f6fd0;--newtint:#eef4fd;--bad:#c4452f}
+@media (prefers-color-scheme: dark){:root{--page:#0d1117;--ink:#e6edf3;--muted:#9198a1;--line:#6e7681;--box:#151b23;--edge:#3d444d;--new:#6aa8ff;--newtint:#13233b;--bad:#f07a63}}
+text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;fill:var(--ink)}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.page{fill:var(--page)}
+.cap{font-size:15px;font-weight:600} .sub{font-size:13px;fill:var(--muted)}
+.col{font-size:13px;font-weight:600;fill:var(--muted)}
+.box{fill:var(--box);stroke:var(--edge);stroke-width:1.25}
+.box.new{fill:var(--newtint);stroke:var(--new)}
+.box.some{stroke-dasharray:4 3}
+.t{font-size:14px;font-weight:600} .d{font-size:12px;fill:var(--muted)}
+.ln{fill:none;stroke:var(--line);stroke-width:1.25}
+.ln.new{stroke:var(--new)} .ln.bad{stroke:var(--bad);stroke-dasharray:4 3}
+.l{font-size:12px;fill:var(--muted)} .l.new{fill:var(--new)} .l.bad{fill:var(--bad)}
+.tag{fill:var(--page)} .tagt{font-size:12px;font-weight:600;fill:var(--new)}
+.node{fill:var(--page);stroke:var(--new);stroke-width:1.5}
+.mk{fill:none;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}
+.mk.g{stroke:var(--line)} .mk.n{stroke:var(--new)} .mk.b{stroke:var(--bad)}
+.icon{fill:none;stroke:var(--muted);stroke-width:1.25}
+</style>
+<defs>
+<marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path class="mk g" d="M2 1.5L9 5L2 8.5"/></marker>
+<marker id="an" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path class="mk n" d="M2 1.5L9 5L2 8.5"/></marker>
+<marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path class="mk b" d="M2 1.5L9 5L2 8.5"/></marker>
+</defs>
+<rect class="page" width="830" height="596"/>
+
+<text class="cap" x="16" y="30">How overlapping waves move</text>
+<text class="sub" x="16" y="50">Wave 2 starts while wave 1 is in review, takes in its later changes, and merges after it.</text>
+
+<text class="col" x="266" y="84" text-anchor="middle">wave 1</text>
+<text class="col" x="610" y="84" text-anchor="middle">wave 2</text>
+
+<!-- wave 1 -->
+<rect class="box" x="176" y="96" width="180" height="54" rx="8"/>
+<text class="t" x="266" y="119" text-anchor="middle">Build</text>
+<text class="d" x="266" y="138" text-anchor="middle">workers commit to wave 1</text>
+
+<rect class="box" x="176" y="186" width="180" height="54" rx="8"/>
+<text class="t" x="266" y="209" text-anchor="middle">Review · closures</text>
+<text class="d" x="266" y="228" text-anchor="middle">fixes land on wave 1’s branch</text>
+
+<rect class="box" x="176" y="300" width="180" height="54" rx="8"/>
+<text class="t" x="266" y="323" text-anchor="middle">Final checks</text>
+<text class="d" x="266" y="342" text-anchor="middle">the full suites on its head</text>
+
+<rect class="box some" x="16" y="300" width="120" height="54" rx="8"/>
+<text class="t" x="76" y="323" text-anchor="middle">Fix</text>
+<text class="d" x="76" y="342" text-anchor="middle">on wave 1</text>
+
+<!-- wave 1 arrows -->
+<path class="ln" d="M266 150V185" marker-end="url(#ag)"/>
+<text class="l" x="258" y="172" text-anchor="end">built fixes</text>
+<path class="ln" d="M266 240V299" marker-end="url(#ag)"/>
+<text class="l" x="258" y="258" text-anchor="end">reviewed branch</text>
+<path class="ln bad" d="M176 316H137" marker-end="url(#ab)"/>
+<text class="l bad" x="156" y="310" text-anchor="middle">fail</text>
+<path class="ln" d="M137 338H175" marker-end="url(#ag)"/>
+<text class="l" x="156" y="352" text-anchor="middle">fixed</text>
+<path class="ln" d="M266 354V515" marker-end="url(#ag)"/>
+<text class="l" x="258" y="505" text-anchor="end">merge, first</text>
+
+<!-- wave 2 -->
+<rect class="box new" x="520" y="186" width="180" height="54" rx="8"/>
+<rect class="tag" x="560" y="179" width="80" height="14"/>
+<text class="tagt" x="600" y="190" text-anchor="middle">starts early</text>
+<text class="t" x="610" y="209" text-anchor="middle">Plan · Build</text>
+<text class="d" x="610" y="228" text-anchor="middle">on top of wave 1’s branch</text>
+
+<rect class="box" x="520" y="300" width="180" height="54" rx="8"/>
+<text class="t" x="610" y="323" text-anchor="middle">Review</text>
+<text class="d" x="610" y="342" text-anchor="middle">reads only wave 2’s changes</text>
+
+<rect class="box new" x="520" y="414" width="180" height="72" rx="8"/>
+<rect class="tag" x="532" y="407" width="56" height="14"/>
+<text class="tagt" x="560" y="418" text-anchor="middle">in order</text>
+<text class="t" x="610" y="438" text-anchor="middle">Final checks</text>
+<text class="d" x="610" y="457" text-anchor="middle">one wave at a time,</text>
+<text class="d" x="610" y="474" text-anchor="middle">on a settled head</text>
+
+<!-- wave 2 arrows -->
+<path class="ln" d="M610 240V266"/>
+<path class="ln" d="M610 274V299" marker-end="url(#ag)"/>
+<text class="l" x="618" y="256">built fixes</text>
+<path class="ln" d="M610 354V380"/>
+<path class="ln" d="M610 388V413" marker-end="url(#ag)"/>
+<text class="l" x="618" y="370">reviewed fixes</text>
+<path class="ln" d="M610 486V515" marker-end="url(#ag)"/>
+<text class="l" x="618" y="505">merge, after wave 1</text>
+
+<!-- overlap and take-ins -->
+<path class="ln new" d="M356 213H519" marker-end="url(#an)"/>
+<text class="l new" x="438" y="205" text-anchor="middle">enters Review:</text>
+<text class="l new" x="438" y="229" text-anchor="middle">next wave starts</text>
+
+<circle class="node" cx="266" cy="270" r="2.5" fill="var(--new)" style="fill:var(--new)"/>
+<path class="ln new" d="M269 270H605" marker-end="url(#an)"/>
+<circle class="node" cx="610" cy="270" r="4"/>
+<text class="l new" x="438" y="262" text-anchor="middle">take in: review fixes, closures</text>
+<text class="l new" x="438" y="286" text-anchor="middle">as a merge commit</text>
+
+<circle class="node" cx="266" cy="384" r="2.5" style="fill:var(--new)"/>
+<path class="ln new" d="M269 384H605" marker-end="url(#an)"/>
+<circle class="node" cx="610" cy="384" r="4"/>
+<text class="l new" x="438" y="376" text-anchor="middle">take in again: late fixes</text>
+<text class="l new" x="438" y="400" text-anchor="middle">as a merge commit</text>
+
+<!-- refused: wave 1 moved -->
+<path class="ln bad" d="M700 327H726a6 6 0 0 0 6-6V276a6 6 0 0 0-6-6H615" marker-end="url(#ab)"/>
+<text class="l bad" x="740" y="294">refused if</text>
+<text class="l bad" x="740" y="309">wave 1 moved:</text>
+<text class="l bad" x="740" y="324">take in first</text>
+<path class="ln bad" d="M700 450H726a6 6 0 0 0 6-6V390a6 6 0 0 0-6-6H615" marker-end="url(#ab)"/>
+<text class="l bad" x="740" y="414">refused if</text>
+<text class="l bad" x="740" y="429">wave 1 moved:</text>
+<text class="l bad" x="740" y="444">take in first</text>
+
+<!-- the sweep's branch -->
+<rect class="box" x="176" y="516" width="524" height="48" rx="8"/>
+<g transform="translate(330 531)">
+<circle class="icon" cx="4" cy="3" r="2.5"/><circle class="icon" cx="4" cy="15" r="2.5"/><circle class="icon" cx="13" cy="6" r="2.5"/>
+<path class="icon" d="M4 5.5V12.5M13 8.5c0 3-9 2-9 4"/>
+</g>
+<text class="mono" x="352" y="545" font-size="14" textLength="80" lengthAdjust="spacingAndGlyphs">lcw/&lt;name&gt;</text>
+<text class="t" x="442" y="545" style="font-weight:400">the sweep’s branch</text>
+</svg>
