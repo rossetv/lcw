@@ -900,6 +900,7 @@ const commands = {
     if (sub === 'round') {
       const wave = mustRun(waveOf(s) || fail('No wave is open. Nothing was changed.'))
       if (wave.stage !== 'Review') fail(`Wave ${wave.n} is in ${wave.stage}; a review round is raised in Review. Nothing was changed.`)
+      mustHoldRange(s, wave, 'another review round')
       change(run, `wave ${wave.n}: review round ${(wave.round ?? 0) + 1}`, () => { wave.round = (wave.round ?? 0) + 1 }, wave)
       return out(`wave ${wave.n}: round ${wave.round}`)
     }
@@ -1148,9 +1149,8 @@ function enterStage(s, stage) {
 
 /** lcw stage for one of a sweep's open waves: its own stage, and the run's stage follows the newest open wave. */
 function waveStage(run, wave, stage) {
-  if (stage === 'Review' && !hasTakenIn(run.state, wave)) fail(notTakenIn(run.state, wave, 'its review'))
-  const behind = stage === 'Review' && lagging(run.state, wave)
-  if (behind) fail(`${behind.why}, so wave ${wave.n}'s review range would show work that is not its own. ${behind.how}, then lcw wave take --wave ${wave.n}. Nothing was changed.`)
+  if (stage === 'Review') mustHoldRange(run.state, wave, 'its review')
+  if (stage === 'Ship' && wave.stage === 'Review') mustHoldRange(run.state, wave, 'leaving Review')
   if (wave.stage === 'Ship' && BUSY.includes(stage)) {
     const busy = openWaves(run.state).filter((x) => x !== wave && x.status === 'running' && BUSY.includes(x.stage))
     if (busy.length >= 2) fail(`Waves ${busy.map((x) => `${x.n} (${x.stage})`).join(' and ')} are being built or reviewed, and at most two are at once; wave ${wave.n} goes back to ${stage} once one of them holds in Ship. Nothing was changed.`)
@@ -1181,6 +1181,12 @@ function lagging(s, w) {
   if (!prev || hasTakenIn(s, prev)) return null
   const first = earlier.find((x) => !hasTakenIn(s, x))
   return { why: `Wave ${prev.n}, the wave before wave ${w.n}, has not taken in the latest of ${missingFrom(s, prev).join(', ')}`, how: `Run lcw wave take --wave ${first.n} first${first === prev ? '' : ', then each later wave in turn'}` }
+}
+/** Fails unless w holds every branch it takes in and the wave before it is not lagging, so its review range shows only its own work. */
+function mustHoldRange(s, w, what) {
+  if (!hasTakenIn(s, w)) fail(notTakenIn(s, w, what))
+  const behind = lagging(s, w)
+  if (behind) fail(`${behind.why}, so wave ${w.n}'s review range would show work that is not its own. ${behind.how}, then lcw wave take --wave ${w.n}. Nothing was changed.`)
 }
 const notTakenIn = (s, w, what) => `Wave ${w.n} has not taken in the latest of ${missingFrom(s, w).join(', ')}; take it in with lcw wave take --wave ${w.n} before ${what}. Nothing was changed.`
 
@@ -1243,7 +1249,7 @@ function endHunts(s) {
  * A fresh detached worktree for hunt round `round` while waves are open: the newest open wave's tip with each earlier open
  * wave's merged in, committed only there, so probes read every wave's latest fixes and closures. On a conflict it
  * holds the newest wave's tip alone. Its head is kept under refs/lcw/<name>/hunt-<round>, since the next round diffs
- * against it after this worktree is gone. Returns { dir, note }, or null when no wave is open.
+ * against it after this worktree is gone; the round before's ref stays too, for this round's own diff. Returns { dir, note }, or null when no wave is open.
  */
 function freshLatest(s, round) {
   const was = dropLatest(s)
@@ -1255,12 +1261,12 @@ function freshLatest(s, round) {
   try { git(s.repoRoot, 'worktree', 'add', '-q', '--detach', dir, `refs/heads/${newest.branch}`) } catch (e) { fail(`git could not make the worktree ${dir}: ${firstLine(e)}. Nothing was changed.`) }
   const real = fs.realpathSync(dir)
   const tip = git(real, 'rev-parse', 'HEAD')
-  // the next round diffs only against this round's commit, so the older rounds' refs go
+  // this round diffs against the last round's commit, which may exist only there, so the two newest refs stay
   const kept = () => {
     const head = git(real, 'rev-parse', 'HEAD')
     const ref = `refs/lcw/${s.name}/hunt-${round}`
     git(s.repoRoot, 'update-ref', ref, head)
-    for (const old of huntRefs(s)) if (old !== ref) git(s.repoRoot, 'update-ref', '-d', old)
+    for (const old of huntRefs(s)) if (old !== ref && old !== `refs/lcw/${s.name}/hunt-${round - 1}`) git(s.repoRoot, 'update-ref', '-d', old)
     return head
   }
   for (const x of open.slice(0, -1)) {

@@ -295,6 +295,29 @@ test('a take-in that conflicts is undone, and names the worktree and the branch 
   assert.match(fs.readFileSync(`${t.dir}/waves/2/ledger.md`, 'utf8'), /conflicts in b\.txt/, 'the wave\'s ledger keeps that a resolution waits')
 })
 
+test('an older wave merged straight into a wave in Review is refused at a round and on leaving Review, until the waves between take it in', () => {
+  const t = three()
+  t.start()
+  t.ok('stage', 'Ship', '--wave', '1')
+  t.ok('stage', 'Review', '--wave', '2')
+  t.ok('stage', 'Ship', '--wave', '2')
+  t.start()
+  t.ok('stage', 'Build', '--wave', '3')
+  t.ok('stage', 'Review', '--wave', '3')
+  commit(t.wt1, 'f.txt', 'checks fix\n')
+  git(t.wt, 'merge', '--no-edit', '-q', 'lcw/tidy-wave-1') // a worker's direct merge past wave 2, not lcw wave take
+  for (const a of [['wave', 'round'], ['stage', 'Ship']]) {
+    const r = t.cli(...a, '--wave', '3')
+    assert.equal(r.code, 1, a.join(' '))
+    assert.match(r.out, /wave take --wave 2/)
+  }
+  assert.deepEqual([t.w(3).stage, t.w(3).round], ['Review', 1])
+  t.ok('wave', 'take', '--wave', '2')
+  t.ok('wave', 'take', '--wave', '3')
+  t.ok('wave', 'round', '--wave', '3')
+  t.ok('stage', 'Ship', '--wave', '3')
+})
+
 /** overlapping(), with both waves in Ship and wave 1's final checks passed: it is merging. */
 function bothShipping() {
   const t = overlapping()
@@ -1404,15 +1427,17 @@ test('stop and finish still mark a sweep whose repository folder is gone', () =>
   }
 })
 
-test('only the last hunt round\'s commit stays kept', () => {
+test('only the last two hunt rounds\' commits stay kept, so a round can diff against the one before', () => {
   const t = holdingWithClosure()
   assert.equal(t.cli('stage', 'Hunt').code, 0)
   const first = t.state().sweep.round
-  t.edit((st) => { st.stage = 'Ship' }) // the round is over; the open waves still hold in Ship
-  assert.equal(t.cli('stage', 'Hunt').code, 0)
+  for (let i = 0; i < 2; i++) {
+    t.edit((st) => { st.stage = 'Ship' }) // the round is over; the open waves still hold in Ship
+    assert.equal(t.cli('stage', 'Hunt').code, 0)
+  }
   const round = t.state().sweep.round
-  assert.equal(round, first + 1)
-  assert.equal(git(t.repo, 'for-each-ref', '--format=%(refname)', 'refs/lcw/'), `refs/lcw/tidy/hunt-${round}`)
+  assert.equal(round, first + 2)
+  assert.equal(git(t.repo, 'for-each-ref', '--format=%(refname)', 'refs/lcw/'), `refs/lcw/tidy/hunt-${round - 1}\nrefs/lcw/tidy/hunt-${round}`)
 })
 
 test('a hunt whose merge of the waves fails for a reason other than a conflict is refused with git\'s message and leaves no worktree', () => {
