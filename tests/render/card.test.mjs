@@ -815,6 +815,22 @@ test('framed at 100 columns the heading keeps the totals: its counts move closer
   assert.match(heading('28-lanes-a-long-sweep'), / {2}5 merged · 2 queued +round 3 · 61 fixed · 170 parked │$/);
 });
 
+test('a narrow waves row drops whole counts and never cuts a word or leaves a dangling dot', () => {
+  let seen = 0;
+  for (let w = 36; w <= 60; w++) {
+    const rows = strip(toAnsi(card('28-lanes-a-long-sweep', { width: w, frame: true }), 'dark', w)).split('\n').filter(l => l.startsWith('│ waves '));
+    for (const row of rows) {
+      seen++;
+      const after = row.slice(2, -2).trim().replace(/^waves\s+/, '').replace(/[▰▱]+|[✓›○] (Plan|Build|Review|Ship)/gu, '').trim();
+      if (!after) continue;
+      for (const part of after.split(/ {2,}/).join(' · ').split(' · ')) {
+        assert.match(part, /^(\d+ (merged|open|queued|fixed|parked|dropped)|round \d+)$/, w + ': ' + row);
+      }
+    }
+  }
+  assert.ok(seen > 0);
+});
+
 test('a lane with nothing to count keeps its shape and draws its stage empty, with no figure', () => {
   const parked = [{ id: 'F1', name: 'a', status: 'parked' }, { id: 'F2', name: 'b', status: 'dropped' }];
   assert.match(laneOf(laneRows(withWave1({ requirements: parked })), 1), /^wave 1  ▰{6}  ▰{7}  ▱{8}  ▱{6} +34m$/);
