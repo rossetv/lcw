@@ -290,6 +290,8 @@ test('a take-in that conflicts is undone, and names the worktree and the branch 
   assert.ok(r.out.includes(t.wt2) && r.out.includes('lcw/tidy-wave-2') && r.out.includes('b.txt'), r.out)
   assert.equal(git(t.wt2, 'rev-parse', 'HEAD'), had)
   assert.equal(git(t.wt2, 'status', '--porcelain'), '')
+  assert.match(r.out, /merge was undone/)
+  assert.doesNotMatch(r.out, /Nothing was changed/, 'the wave\'s ledger did get the conflict line')
   assert.match(fs.readFileSync(`${t.dir}/waves/2/ledger.md`, 'utf8'), /conflicts in b\.txt/, 'the wave\'s ledger keeps that a resolution waits')
 })
 
@@ -1342,6 +1344,75 @@ test('stop removes the hunt\'s worktree and the refs that kept its rounds\' comm
   assert.equal(t.cli('stop').code, 0)
   assert.ok(!fs.existsSync(latest))
   assert.equal(git(t.repo, 'for-each-ref', 'refs/lcw/'), '')
+})
+
+test('a take-in is refused while a task of the wave is running, and nothing moves', () => {
+  const t = overlapping()
+  commit(t.wt1, 'c.txt', 'review fix\n')
+  t.at(2, 'task', 'add', 'T1', 'fix it')
+  t.at(2, 'task', 'T1', 'running')
+  const had = git(t.wt2, 'rev-parse', 'HEAD')
+  const r = t.at(2, 'wave', 'take')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /T1.*still running.*wait/s)
+  assert.equal(git(t.wt2, 'rev-parse', 'HEAD'), had)
+  t.at(2, 'task', 'T1', 'done')
+  assert.equal(t.at(2, 'wave', 'take').code, 0)
+})
+
+/** three(), with waves 1 and 2 in Ship and wave 3 started: wave 3 has merged wave 2's tip and wave 1's later fix, but wave 2 lacks that fix. */
+function mergedPastTheWaveBefore() {
+  const t = three()
+  t.start()
+  const wt2 = t.wt
+  commit(wt2, 'e.txt', 'wave 2 fix\n')
+  t.ok('stage', 'Ship', '--wave', '1')
+  t.ok('stage', 'Review', '--wave', '2')
+  t.ok('stage', 'Ship', '--wave', '2')
+  t.start()
+  const wt3 = t.wt
+  commit(wt3, 'g.txt', 'wave 3 fix\n')
+  t.ok('stage', 'Build', '--wave', '1')
+  const fix = commit(t.wt1, 'f.txt', 'checks fix\n')
+  git(wt3, 'merge', '--no-ff', '--no-edit', '-q', 'lcw/tidy-wave-2')
+  git(wt3, 'merge', '--no-ff', '--no-edit', '-q', 'lcw/tidy-wave-1')
+  t.ok('stage', 'Build', '--wave', '3')
+  return { ...t, wt2, wt3, fix }
+}
+
+test('a wave that merged an older wave straight in cannot enter Review until the wave before it has taken that wave in', () => {
+  const t = mergedPastTheWaveBefore()
+  const r = t.cli('stage', 'Review', '--wave', '3')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /Wave 2, the wave before wave 3/)
+  assert.match(r.out, /lcw wave take --wave 2\b/)
+  assert.equal(t.w(3).stage, 'Build')
+  t.ok('wave', 'take', '--wave', '2')
+  assert.equal(git(t.wt2, 'rev-parse', 'HEAD^2'), t.fix)
+  t.ok('wave', 'take', '--wave', '3')
+  t.ok('stage', 'Review', '--wave', '3')
+})
+
+test('stop and finish still mark a sweep whose repository folder is gone', () => {
+  for (const end of ['stop', 'finish']) {
+    const t = holdingWithClosure()
+    assert.equal(t.cli('stage', 'Hunt').code, 0)
+    fs.renameSync(t.repo, `${t.repo}-gone`)
+    const r = lcw([end], { ...t.o, cwd: tmp('elsewhere') })
+    assert.equal(r.code, 0, r.out + r.err)
+    assert.equal(t.state().status, end === 'stop' ? 'stopped' : 'finished')
+  }
+})
+
+test('only the last hunt round\'s commit stays kept', () => {
+  const t = holdingWithClosure()
+  assert.equal(t.cli('stage', 'Hunt').code, 0)
+  const first = t.state().sweep.round
+  t.edit((st) => { st.stage = 'Ship' }) // the round is over; the open waves still hold in Ship
+  assert.equal(t.cli('stage', 'Hunt').code, 0)
+  const round = t.state().sweep.round
+  assert.equal(round, first + 1)
+  assert.equal(git(t.repo, 'for-each-ref', '--format=%(refname)', 'refs/lcw/'), `refs/lcw/tidy/hunt-${round}`)
 })
 
 test('a hunt whose merge of the waves fails for a reason other than a conflict is refused with git\'s message and leaves no worktree', () => {
