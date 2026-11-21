@@ -727,12 +727,7 @@ test('a question is added with its choices, picked once, answered in words or us
   assert.equal(t.cli('question', 'Q1', 'used').code, 0)
 
   add('Q2', '--text', 'Which cutoff?', '--a', '30 days: x', '--b', '90 days: y')
-  t.cli('question', 'Q2', 'pick', 'other')
-  assert.equal(t.state().questions[1].status, 'typing')
-  assert.equal(t.cli('question', 'Q1', 'reopen').code, 1, 'only a question waiting for typed words')
-  assert.equal(t.cli('question', 'Q2', 'reopen').code, 0)
-  assert.equal(t.state().questions[1].status, 'open')
-  t.cli('question', 'Q2', 'pick', 'other')
+  assert.equal(t.cli('question', 'Q2', 'pick', 'other').code, 1, 'their own words come through answer')
   t.cli('question', 'Q2', 'answer', '60 days')
   assert.deepEqual([t.state().questions[1].status, t.state().questions[1].words], ['answered', '60 days'])
 })

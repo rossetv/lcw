@@ -264,9 +264,9 @@ export function pressPlan(banner, option, facts, ctx) {
     case 'question': {
       const q = run?.questions?.open?.[0]
       if (!q || q.id !== banner.questionId) return null
-      const pick = { ...lcw('question', q.id, 'pick', option) }
-      if (option === 'other') return { steps: [pick], fillText: `Your call on ${q.id}: `, dismiss: true }
-      return { steps: [pick], toast: 'Saved for the next wave.', dismiss: true }
+      // Other only fills the prompt: the box stays until the words they send are recorded, so nothing is lost if they never send.
+      if (option === 'other') return { fillText: `Your call on ${q.id}: ` }
+      return { steps: [lcw('question', q.id, 'pick', option)], toast: 'Saved for the next wave.', dismiss: true }
     }
     case 'mark': {
       const usage = facts?.usage ?? {}

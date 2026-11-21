@@ -289,10 +289,16 @@ test('a sweep\'s open questions show one at a time, counted among all it asked, 
   assert.equal(plan.fillText, undefined)
 })
 
-test('Other saves the press and puts the question in the prompt for the person\'s own words', () => {
+test('Other only puts the question in the prompt, and the box stays until the words sent are recorded', () => {
   const plan = press({ now: NOW, advisorFlag: true, run: runFact(asking([Q('Q2')])) }, 'other')
-  assert.deepEqual(argvs(plan), ['question Q2 pick other --session s1'])
+  assert.deepEqual(argvs(plan), [])
   assert.equal(plan.fillText, 'Your call on Q2: ')
+  assert.ok(!plan.dismiss)
+})
+
+test('the keep-awake box comes before a sweep\'s questions', () => {
+  const facts = { now: NOW, advisorFlag: true, sleep: { canHold: true }, run: runFact({ ...asking([Q('Q1')]), runningSince: '2026-11-20T11:00:00Z' }) }
+  assert.equal(bannerFor(facts).kind, 'awake')
 })
 
 test('no box asks once every question is answered, or the run is finished', () => {

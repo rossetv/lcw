@@ -42,7 +42,7 @@ const HUNT_COUNTS = ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'd
 const flags = {}
 const args = []
 const argv = process.argv.slice(2)
-const USAGE = `lcw commands: ${'start status stage set task req ask answer approval ledger checkpoint mark cap spend-command usage pause resume stop finish worktree pictures runs where take abandon awake hunt wave merge'}
+const USAGE = `lcw commands: ${'start status stage set task req ask answer question approval ledger checkpoint mark cap spend-command usage pause resume stop finish worktree pictures runs where take abandon awake hunt wave merge'}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
 In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked and charter.md written.
 hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number; wave start runs the front queued wave on lcw/<name>-wave-<n>, cut from lcw/<name> in the worktree, and prints its plan; wave shipped [--pr <number>], in Ship only, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request); wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
@@ -52,7 +52,7 @@ take <runId> makes this session take over a run of this repository that no sessi
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
 flags: --session <id> (any command); start --title --shape; task --model --effort; ask --waiting; approval --meaning; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
-question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] puts a short question to the person in LCW's box, in a sweep; question <id> pick <a|b|c|park|other> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
+question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] puts a short question to the person in LCW's box, in a sweep; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
 checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
 const refuse = (msg) => { console.log(msg); process.exit(1) }
@@ -136,7 +136,7 @@ const QUESTION_KEYS = ['a', 'b', 'c']
 /** "  Q82 [answered: a, Answer 422] Trade the friendly 409 for a generic 422?" */
 function questionLine(q) {
   const picked = q.options.find((o) => o.key === q.pick)
-  const said = q.status === 'open' ? '' : q.words ? `: ${q.words}` : q.pick === 'park' ? ': leave it parked' : q.pick === 'other' ? ': their own words, in the prompt' : picked ? `: ${q.pick}, ${picked.label}` : ''
+  const said = q.status === 'open' ? '' : q.words ? `: ${q.words}` : q.pick === 'park' ? ': leave it parked' : picked ? `: ${q.pick}, ${picked.label}` : ''
   return `  ${q.id} [${q.status}${said}] ${q.text}`
 }
 
@@ -447,28 +447,23 @@ const commands = {
     const [verb, ...words] = more
     if (verb === 'pick') {
       const pick = words[0]
-      if (![...q.options.map((o) => o.key), 'park', 'other'].includes(pick)) fail(`Usage: lcw question ${q.id} pick <${[...q.options.map((o) => o.key), 'park', 'other'].join('|')}>`)
+      if (![...q.options.map((o) => o.key), 'park'].includes(pick)) fail(`Usage: lcw question ${q.id} pick <${[...q.options.map((o) => o.key), 'park'].join('|')}>`)
       if (q.status !== 'open') return out(`${q.id} is ${q.status} already`)
-      change(run, `question ${q.id} picked: ${pick}`, () => { Object.assign(q, { status: pick === 'other' ? 'typing' : 'answered', pick, answeredAt: now() }) })
+      change(run, `question ${q.id} picked: ${pick}`, () => { Object.assign(q, { status: 'answered', pick, answeredAt: now() }) })
       return out(`${q.id}: saved`)
     }
     if (verb === 'answer') {
       const text = words.join(' ')
       if (!text) fail(`Usage: lcw question ${q.id} answer "<their words>"`)
-      change(run, `question ${q.id} answered: ${text}`, () => { Object.assign(q, { status: 'answered', pick: q.pick ?? 'other', words: text, answeredAt: now() }) })
+      change(run, `question ${q.id} answered: ${text}`, () => { Object.assign(q, { status: 'answered', pick: 'other', words: text, answeredAt: now() }) })
       return out(`${q.id}: answered`)
-    }
-    if (verb === 'reopen') {
-      if (q.status !== 'typing') fail(`${q.id} is ${q.status}; only one waiting for typed words is reopened. Nothing was changed.`)
-      change(run, `question ${q.id} reopened`, () => { Object.assign(q, { status: 'open', pick: null }) })
-      return out(`${q.id}: back in LCW's box`)
     }
     if (verb === 'used') {
       if (q.status !== 'answered') fail(`${q.id} is ${q.status}; only an answered question is used. Nothing was changed.`)
       change(run, `question ${q.id} used`, () => { q.status = 'used' })
       return out(`${q.id}: used`)
     }
-    fail(`Usage: lcw question [add ... | <id> pick <option> | <id> answer "<words>" | <id> reopen | <id> used]`)
+    fail(`Usage: lcw question [add ... | <id> pick <option> | <id> answer "<words>" | <id> used]`)
   },
 
   // The mark belongs to the session it is said in, run or no run; a run uses the mark of the session that drives it.
