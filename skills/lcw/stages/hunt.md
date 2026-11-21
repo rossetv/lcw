@@ -12,6 +12,12 @@ In a later round, only an area that had a finding sorted to Fix in the round bef
 
 Probes read the code where the sweep stands: the main checkout in round 1, before the sweep has a worktree; `lcw/<name>` in its worktree after that. Start the round's heading in findings.md with the commit they read (`git rev-parse HEAD` there).
 
+## The baseline
+
+In round 1, where the charter's PRs line names checks run on this machine, launch one more probe (Sonnet, medium) with the round's probes, to run those checks once on the commit the hunt reads, before any fix. It runs them as the repository says, in a throwaway worktree at that commit, made ready as the repository needs; a check that runs only from the main checkout runs there, changing no tracked file. A long check runs in the background. It reports, for each check, whether it passed, how long it took, and for each failing test whether the fault looks like the code's or this machine's (a stopped container, a missing tool). Write the report under "Baseline" in charter.md.
+
+If a check fails, act on what the charter says a check already failing means. Where that is to wait for the human, `lcw ask` them now, while the charter is fresh in their mind: only the merges wait on the answer, and the hunt and the waves carry on.
+
 ## Sending the probes
 
 Split the round into parts: for a list such as a backlog, about eight items to a part; for an open hunt, one part for each area and angle (an area of the backend, hunted for wrong totals, say). One probe hunts each part. Pick its model by what a miss would cost: Haiku, low, to check a list's items; Sonnet, medium, for an open hunt; Opus, high, where a miss is costly or hard to see, such as security, money or data that could be lost.

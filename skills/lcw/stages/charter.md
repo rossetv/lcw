@@ -39,7 +39,7 @@ Take the lines in this order, one at a time. While you ask a line, `lcw set heal
 | park | what is left for the human instead of being done; a decision only they can make is always parked |
 | stop | when the sweep ends; by default when a round's hunt finds nothing to fix; it may also name an earlier end, such as a number of waves or a share of the week |
 | waves | about how many fixes go in one wave; propose it from the count |
-| PRs | how the sweep's work reaches the default branch, and whether Claude may merge |
+| PRs | how the sweep's work reaches the default branch, whether Claude may merge, and what a check already failing on the default branch means |
 
 For the PRs line, always ask: may Claude ever merge a pull request on its own, and if so, on what criteria? Then settle one of three:
 
@@ -47,7 +47,7 @@ For the PRs line, always ask: may Claude ever merge a pull request on its own, a
 - **merged as it goes**: one pull request for each wave, merged by the sweep when the wave meets the human's criteria; a wave that does not stays open, with every wave after it, until it meets them;
 - **one at the end**: nothing is opened until the sweep is over, then one draft pull request for everything.
 
-Write their criteria in their own words. The sweep reads GitHub's checks only if the criteria name them. If they do, tell the human that the sweep's pull requests stay drafts until it merges them, so in a repository that skips its checks on draft pull requests such criteria are never met.
+Write their criteria in their own words. Where the criteria name checks run on this machine (a lint, a test suite), also ask what happens when one already fails on the default branch, before any fix: the sweep fixes it in its own commit in a wave, merges anyway and says so in the pull request, or waits for them. A baseline run right after their approval shows whether one does, so this is the moment to settle it, while they are here. The sweep reads GitHub's checks only if the criteria name them. If they do, tell the human that the sweep's pull requests stay drafts until it merges them, so in a repository that skips its checks on draft pull requests such criteria are never met.
 
 Stacked and merged as it goes need merge commits. For either, check the repository allows them: `gh repo view <owner>/<name> --json mergeCommitAllowed --jq .mergeCommitAllowed`. If it prints anything but `true`, tell the human. `false` means stacked pull requests could not be merged in order, and the sweep could not merge at all; anything else, such as an error, means you could not tell, and that is what you say. They can turn merge commits on in the repository's settings or pick one at the end.
 
