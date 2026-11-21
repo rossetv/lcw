@@ -10,10 +10,11 @@ import { buildView, renderCard } from '../lib/card.mjs'
 import { hex } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import {
-  addTotals, addUsage, buttons, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep, nudgeable, quietCounts, reopenDue,
-  reopenPrompt, resumePrompt, retryGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt, wakeable, wakeDue, wakePrompt,
+  addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep,
+  nudgeable, quietCounts, reopenDue, reopenPrompt, resumePrompt, retryGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
+  wakeable, wakeDue, wakePrompt,
 } from './lcw-mod.mjs'
-import type { CardAgent, Nudged, Row, Seen, Span, Totals } from './lcw-mod.mjs'
+import type { CardAgent, Carry, Nudged, Row, Seen, Span, Totals } from './lcw-mod.mjs'
 import {
   AWAKE_EVERY_MS, RUNS_EVERY_MS, awakeApplies, awakeCheckWanted, claudeCommand, dismissKeys, markSpell, pressPlan, runFact, said, sameBox, spendFailingFact,
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue, weeklyIdle,
@@ -93,6 +94,8 @@ const S = {
   unfocusUntil: 0,
   // When the person last sent a prompt: one sent after the Brainstorm's playback asked for approval ends that box.
   repliedAt: 0,
+  // The main session's turn ended on an API error that clears on its own: the tries to carry it on (carryFailed).
+  carry: null as Carry | null,
 }
 
 const totalsFile = (runDir: string) => `${runDir}/totals.json`
@@ -410,6 +413,26 @@ async function checkSleep($: EngineInterface) {
 // What the person has typed and not sent; anything unreadable counts as typed, so nothing is submitted over it.
 const draft = ($: EngineInterface) => $.prompt.read().then((b) => String(b?.text ?? '')).catch(() => '?')
 
+// A try to carry the session on after an API error, once it falls due. Notifications start turns by themselves, and
+// the person may have stepped in, so all is checked again right before it is sent: a try never lands in a working
+// session or over a draft. A turn that ends well, or a prompt the person sends, has already ended the carry-on.
+async function carryOn($: EngineInterface) {
+  const c = S.carry
+  if (!c || c.dueAt == null) return
+  const now = await $.clock.now()
+  if (now < c.dueAt) return
+  const typed = (await draft($)) !== ''
+  if (S.carry !== c) return
+  const paused = S.run?.state?.status === 'paused' && S.run.state.pausedReason === 'human'
+  const step = carryDue(c, now, typed || paused || S.turnRunning)
+  S.carry = step.carry ?? null
+  if (!step.send) return
+  const sent = S.carry
+  if (!(await $.prompt.submit({ text: carryPrompt(c.kind, step.send) }).then(() => true).catch(() => false)) && S.carry === sent) {
+    S.carry = carryFailed(sent, c.kind, await $.clock.now())
+  }
+}
+
 // The checks' prompts. Once at the start of every watched session, without waiting for it to be idle, weekly.mjs update
 // compares the installed LCW with its marketplace in code; it gives a prompt only when a newer version needs the banner's
 // bullets written. A session driving a run looks once it no longer does: the banner shows no update during a run.
@@ -574,6 +597,7 @@ async function start($: EngineInterface) {
   $.clock.every(5000, quietly(() => heartbeat($)))
   $.clock.every(2000, quietly(() => readBanner($)))
   $.clock.every(2000, quietly(() => slowFacts($)))
+  $.clock.every(1000, quietly(() => carryOn($)))
   // The one place that redraws: ten times a second while the card moves, else when something changed.
   $.clock.every(100, () => {
     if (!S.dirty && !(S.run && !S.collapsed && isAnimating(S.run.state))) return
@@ -594,6 +618,8 @@ async function start($: EngineInterface) {
 export const register: Register = (on) => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
+    // A cleared or another session has no reply to carry on.
+    S.carry = null
     S.atPrompt = e.isInteractive === true
     S.interactive = S.atPrompt || e.surface != null || (await $.session.surfaces().catch(() => [])).length > 0
     await start($).catch(() => {})
@@ -622,6 +648,8 @@ export const register: Register = (on) => {
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     if (!e.agentId) { S.turnRunning = false; S.turnEndedAt = await $.clock.now().catch(() => S.turnEndedAt) }
+    // A main turn that did not end in error has carried the session on; one that did was judged by classic.StopFailure.
+    if (!e.agentId && e.reason !== 'error') S.carry = null
     await countTurn($, e).catch(() => {})
     if (!e.agentId && !e.isAborted) await checkpoint($).catch(() => {})
     return result
@@ -633,8 +661,18 @@ export const register: Register = (on) => {
     const kind = (e as any).origin?.kind
     if (!e.isMeta && !e.command && (!kind || PERSON.includes(kind)) && !(result as any)?.drop) {
       S.repliedAt = await $.clock.now().catch(() => S.repliedAt)
+      // What the person sends takes over from any carry-on.
+      S.carry = null
       void readBanner($).catch(() => {})
     }
+    return result
+  })
+
+  // The main session's turn ended on an API error: carried on later if its kind clears on its own. A subagent's
+  // error is its orchestrator's to deal with.
+  on('classic.StopFailure', async ($, e, next) => {
+    const result = await next(e)
+    try { if (!e.agent_id) S.carry = carryFailed(S.carry, e.error, await $.clock.now()) } catch {}
     return result
   })
 

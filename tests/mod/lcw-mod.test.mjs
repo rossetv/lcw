@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import {
   addTotals, addUsage, agentTokens, buttons, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
   quietCounts, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt,
-  measureStep, retryGate, usdWakePrompt,
+  measureStep, retryGate, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
 import { inputsOf } from '../render/boards.mjs'
@@ -398,4 +398,55 @@ test('at 08:00 a run still at its dollar mark tries again the following morning;
 test('the dollar wake names the mark in dollars and the commands to carry on; a subscription hears no dollars', () => {
   assert.match(usdWakePrompt('/p', 3000), /under your \$3,000 mark.*node "\/p\/scripts\/lcw\.mjs" resume.*status/)
   assert.doesNotMatch(usdWakePrompt('/p', null), /\$/)
+})
+
+// Each try sent at once and failing at once, as from 11:29: when the tries go out, in minutes after the first error.
+function carrySends(kind = 'server_error') {
+  const sent = []
+  let carry = carryFailed(null, kind, NOW)
+  for (let guard = 0; carry && guard < 50; guard++) {
+    const step = carryDue(carry, carry.dueAt, false)
+    sent.push((carry.dueAt - NOW) / MIN)
+    carry = carryFailed(step.carry, kind, carry.dueAt)
+  }
+  return sent
+}
+
+test('a lost connection is tried again 1, 5 and 15 minutes after each failed try, then every 30, for 3 hours', () => {
+  assert.deepEqual(carrySends(), [1, 6, 21, 51, 81, 111, 141, 171])
+  assert.deepEqual(carrySends('overloaded'), [1, 6, 21, 51, 81, 111, 141, 171])
+})
+
+test('a try is due at its time, numbered, and not before', () => {
+  const carry = carryFailed(null, 'server_error', NOW)
+  assert.equal(carryDue(carry, NOW + MIN - 1, false).send, 0)
+  const step = carryDue(carry, NOW + MIN, false)
+  assert.equal(step.send, 1)
+  assert.equal(carryDue(step.carry, NOW + 9 * MIN, false).send, 0)
+})
+
+test('a try that falls due while blocked counts, and the next one is 5 minutes later', () => {
+  const step = carryDue(carryFailed(null, 'server_error', NOW), NOW + MIN, true)
+  assert.equal(step.send, 0)
+  assert.equal(step.carry.tries, 1)
+  assert.equal(step.carry.dueAt, NOW + 6 * MIN)
+})
+
+test('a try that falls due more than 3 hours after the first error, after a sleep, is never sent', () => {
+  const carry = { ...carryFailed(null, 'server_error', NOW), tries: 4 }
+  assert.deepEqual(carryDue(carry, NOW + 181 * MIN, false), { carry: null, send: 0 })
+})
+
+test('an error that does not clear on its own, or of a kind not known, is never carried on, and ends a carry-on under way', () => {
+  const under = carryFailed(null, 'server_error', NOW)
+  for (const kind of ['authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error', 'rate_limit',
+    'invalid_request', 'model_not_found', 'max_output_tokens', 'cloud_credential_error', 'unknown', 'teapot', undefined]) {
+    assert.equal(carryFailed(null, kind, NOW), null, String(kind))
+    assert.equal(carryFailed(under, kind, NOW), null, String(kind))
+  }
+})
+
+test('the carry-on prompt says what went wrong, that the reply may have stopped part-way, to carry on, and which try it is', () => {
+  assert.match(carryPrompt('server_error', 3), /connection was lost.*part-way.*Carry on from where it stopped.*try 3\b/)
+  assert.match(carryPrompt('overloaded', 1), /overloaded.*try 1\b/)
 })
