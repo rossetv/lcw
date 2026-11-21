@@ -101,7 +101,7 @@ function change(run, note, fn, wave) {
   if (s.status === 'running' && was !== 'running') s.runningSince = new Date(now()).toISOString()
   if (s.status !== 'running') releaseHold(run.dir)
   saveState(run.paths, s)
-  appendLedger(run.paths, note, wave === undefined ? soleOpen(s) : wave)
+  appendLedger(run.paths, note, wave === undefined ? ledgerWave(s) : wave)
 }
 
 const find = (list, key, value) => list.find((x) => x[key] === value) || fail(`No such item: ${value}`)
@@ -122,8 +122,19 @@ const freshPlan = () => ({ tasks: 0, atOnce: 0, models: {} })
  */
 const isOpen = (s, w) => w.status === 'running' || (w.status === 'shipped' && !w.merged && !w.empty && s.sweep?.prs === 'merged')
 const openWaves = (s) => (s.sweep?.waves ?? []).filter((w) => isOpen(s, w))
-const soleOpen = (s) => { const open = openWaves(s); return open.length === 1 ? open[0] : null }
 const inside = (p, dir) => p === dir || p.startsWith(`${dir}/`)
+/** The open wave whose worktree this is run in, else the only running wave, else null; with several running, a list of them. */
+function waveHere(s) {
+  const open = openWaves(s)
+  let here = cwd
+  try { here = fs.realpathSync(cwd) } catch {}
+  const mine = open.find((w) => w.worktree && inside(here, w.worktree))
+  if (mine) return mine
+  const running = open.filter((w) => w.status === 'running')
+  return running.length < 2 ? running[0] ?? null : running
+}
+/** The wave a ledger line with no --wave is about, or null: a held wave or one of several is never assumed. */
+const ledgerWave = (s) => { const w = waveHere(s); return Array.isArray(w) ? null : w }
 
 /**
  * The wave a command acts on: the one --wave names, else the open wave whose worktree this is run in, else the only
@@ -140,14 +151,9 @@ function waveOf(s, { several = 'refuse', shipped = false } = {}) {
     if (!shipped && !isOpen(s, w)) fail(`Wave ${n} has shipped. Nothing was changed.`)
     return w
   }
-  const open = openWaves(s)
-  let here = cwd
-  try { here = fs.realpathSync(cwd) } catch {}
-  const mine = open.find((w) => w.worktree && inside(here, w.worktree))
-  if (mine) return mine
-  const running = open.filter((w) => w.status === 'running')
-  if (running.length < 2 || several === 'run') return running.length === 1 ? running[0] : null
-  fail(`Waves ${running.map((w) => w.n).join(' and ')} are open: pass --wave <n>. Nothing was changed.`)
+  const w = waveHere(s)
+  if (!Array.isArray(w) || several === 'run') return Array.isArray(w) ? null : w
+  fail(`Waves ${w.map((x) => x.n).join(' and ')} are open: pass --wave <n>. Nothing was changed.`)
 }
 
 // an open wave in these stages is being built or reviewed; one in Ship holds
@@ -491,12 +497,12 @@ const commands = {
     if (flags.keep !== undefined) {
       if (flags.compact || step) fail(usage)
       if (compactChoice(ctx) === 'compact') fail(`${size}${ctx ? ", too near the window's end to keep" : ', so it cannot be kept'}: run lcw checkpoint --compact. Nothing was changed.`)
-      appendLedger(run.paths, `${size} kept: ${flags.keep}`, soleOpen(run.state))
+      appendLedger(run.paths, `${size} kept: ${flags.keep}`, ledgerWave(run.state))
       return out(`${size} kept; carry on with the next step now, and end your turn only to wait for agents' reports`)
     }
     const next = step || (flags.compact ? nextStepOf(run) : null)
     if (!next) fail(usage)
-    if (step) appendLedger(run.paths, `checkpoint: ${step}`, soleOpen(run.state))
+    if (step) appendLedger(run.paths, `checkpoint: ${step}`, ledgerWave(run.state))
     if (flags.compact) return compact(next)
     const choice = compactChoice(ctx)
     if (choice === 'compact') return compact(next)
@@ -744,7 +750,7 @@ const commands = {
     const tree = execFileSync('git', ['mktree'], { cwd: root, input: entries, encoding: 'utf8' }).trim()
     const commit = git(root, 'commit-tree', tree, '-m', `docs: pictures for the pull request of ${run.state.name}`)
     git(root, 'push', '-q', '--force', 'origin', `${commit}:refs/lcw/pictures/${run.state.name}`)
-    appendLedger(run.paths, `pictures pushed for the pull request: ${names.join(', ')}`, soleOpen(run.state))
+    appendLedger(run.paths, `pictures pushed for the pull request: ${names.join(', ')}`, ledgerWave(run.state))
     out(...names.map((n) => `https://github.com/${repo}/raw/${commit}/${encodeURIComponent(n)}`))
   },
 
@@ -785,7 +791,7 @@ const commands = {
       fs.rmSync(placeFile(home(), wt), { force: true })
     }
     if (s.branch) lines.push(`${branchesOf(s).length > 1 ? 'branches' : 'branch'} kept: ${branchesOf(s).join(', ')}`)
-    appendLedger(run.paths, lines.slice(1).join('; '), soleOpen(run.state))
+    appendLedger(run.paths, lines.slice(1).join('; '), ledgerWave(run.state))
     out(...lines)
   },
 
@@ -805,7 +811,7 @@ const commands = {
       const pid = Number(sessionId ? readJson(sessionFile(home(), sessionId))?.claudePid : NaN)
       if (!alive(pid)) fail('This session has no Claude Code process on record (claudePid in its session file), so a hold could not end with it. Nothing was kept awake.')
       if (!startHold(run.dir, pid, `LCW run ${s.name}`, now())) fail('The hold did not start. Nothing was kept awake.')
-      appendLedger(run.paths, 'kept awake until the run pauses, finishes or stops, or Claude Code exits', soleOpen(run.state))
+      appendLedger(run.paths, 'kept awake until the run pauses, finishes or stops, or Claude Code exits', ledgerWave(run.state))
       out('kept awake')
     })
   },
@@ -915,7 +921,10 @@ const commands = {
       const wt = wave.worktree && fs.existsSync(wave.worktree) ? wave.worktree : fail(`Wave ${wave.n} has no worktree to merge in. Nothing was changed.`)
       const from = takesFrom(s, wave.after)
       const had = tipOf(s, wave)
-      try { git(wt, 'merge', '--no-ff', '--no-edit', '-q', from) } catch (e) {
+      // a wave with no commits of its own fast-forwards, so it still ships empty
+      let own = true
+      try { git(wt, 'merge-base', '--is-ancestor', 'HEAD', from); own = false } catch {}
+      try { git(wt, 'merge', own ? '--no-ff' : '--ff-only', '--no-edit', '-q', from) } catch (e) {
         let conflicted = ''
         try { git(wt, 'rev-parse', '-q', '--verify', 'MERGE_HEAD'); conflicted = git(wt, 'diff', '--name-only', '--diff-filter=U').split('\n').join(', ') } catch {}
         if (!conflicted) fail(`git could not merge ${from} into ${wave.branch}: ${firstLine(e)}. Nothing was changed.`)
@@ -1104,7 +1113,7 @@ function enterStage(s, stage) {
 function waveStage(run, wave, stage) {
   if (stage === 'Review' && !hasTakenIn(run.state, wave)) fail(notTakenIn(run.state, wave, 'its review'))
   change(run, `wave ${wave.n} stage: ${stage}`, (s) => {
-    if (stage === 'Review' && wave.stage !== 'Review') wave.round = 1
+    if (stage === 'Review' && !wave.round) wave.round = 1 // a later round is raised by lcw wave round
     // its final checks no longer count, and nor do those of the waves after it, which ran on top of it
     if (wave.step === 'final checks' || wave.step === 'merging') clearLater(s, wave)
     Object.assign(wave, { stage, stageSince: now(), step: null, milestone: null, checked: null })
@@ -1309,7 +1318,7 @@ function adopt(run) {
   if (known && mark !== s.markPercent) {
     s.markPercent = mark
     const money = readMoney({ sessionId, now: now() })
-    appendLedger(run.paths, `another session took over the run: its own usage mark applies, ${money ? moneyMark(money) : `${mark}%`}`, soleOpen(s))
+    appendLedger(run.paths, `another session took over the run: its own usage mark applies, ${money ? moneyMark(money) : `${mark}%`}`, ledgerWave(s))
   }
   saveState(run.paths, s)
 }
