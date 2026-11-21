@@ -8,7 +8,7 @@ const RUN = '/lcw/repos/r/runs/x'
 
 // The world beneath the mod: files in memory, the prompt box, the prompts it submits, and a clock that jumps.
 // Each timer fires once per jump, so a wait of many minutes costs one step.
-function engine(on: any, opts: { run?: string; reason?: string | null; drop?: boolean } = {}) {
+function engine(on: any, opts: { run?: string; reason?: string | null; drop?: string } = {}) {
   const files: Record<string, string> = {}
   if (opts.run) {
     files['/lcw/sessions/s1.json'] = JSON.stringify({ runDir: RUN })
@@ -36,7 +36,7 @@ function engine(on: any, opts: { run?: string; reason?: string | null; drop?: bo
   on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
   on('fs.list', () => ({ value: [] }))
   on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '' } }))
-  on('prompt.submit', (_: any, e: any) => { prompts.push(String(e.text)); return opts.drop ? { drop: 'refused' } : { text: e.text } })
+  on('prompt.submit', (_: any, e: any) => { prompts.push(String(e.text)); return opts.drop ? { drop: opts.drop } : { text: e.text } })
   on('prompt.read', () => ({ value: { text: box.draft, cursor: 0 } }))
   on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', (_: any, e: any) => ({ text: e.answer ?? '' }))
@@ -121,7 +121,7 @@ test("a prompt the person sends takes over: no try follows it", async ($, on) =>
   const w = engine(on)
   await start($)
   await fail($)
-  await $.prompt.submit({ text: 'retry' })
+  await $.prompt.submit({ text: 'retry' } as any)
   await w.pass(60)
   expect(w.prompts).toEqual(['retry'])
 })

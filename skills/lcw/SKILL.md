@@ -122,6 +122,8 @@ LCW tells you when an agent has run for fifteen minutes without moving, and the 
 
 Where an extra orchestrator launched the stalled agent, send that orchestrator the same news first; step in yourself if it does not act.
 
+Where an extra orchestrator reports a rate-limited agent, wait for the limit to clear the same way, then SendMessage the orchestrator, not the worker, to carry that agent on: it still learns the task finished and launches its milestone check.
+
 An agent whose work ended on an error that clears on its own (its report or notification ends on a lost connection, an overloaded API or a server error) has not failed. Tell it to carry on, SendMessage to its id: its work was cut off, and it carries on from where it stopped. Do not start the work again with a fresh agent. A rate limit clears on its own too: start a background wait that notifies when done (a Bash `sleep 300` with run_in_background; a foreground sleep is refused), then carry the agent on the same way with SendMessage when it ends, or at the next agent report if that comes first. A usage limit is the session's, so launch nothing and do what stages/build.md says at the mark (`lcw pause mark`) rather than starting the work again. Only an authentication error, a prompt that is too long or two failed carry-ons call for the steps above. Use TaskStop only for an agent still running; one whose turn has ended needs no stop.
 
 ## Asking the human
