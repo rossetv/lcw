@@ -661,12 +661,19 @@ export const register: Register = (on) => {
     const result = await next(e)
     const kind = (e as any).origin?.kind
     if (!e.isMeta && (!kind || PERSON.includes(kind)) && !(result as any)?.drop) {
-      S.repliedAt = await $.clock.now().catch(() => S.repliedAt)
+      // A slash command is no answer to the approval box; only a prompt is.
+      if (!e.command) S.repliedAt = await $.clock.now().catch(() => S.repliedAt)
       // What the person sends takes over from any carry-on.
       S.carry = null
       void readBanner($).catch(() => {})
     }
     return result
+  })
+
+  // A built-in command that runs locally may raise no prompt.submit; the person's run of one still takes over from a carry-on.
+  on('command.run', async ($, e, next) => {
+    if (PERSON.includes((e as any).origin?.kind)) S.carry = null
+    return next(e)
   })
 
   // The main session's turn ended on an API error: carried on later if its kind clears on its own. A subagent's

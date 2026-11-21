@@ -192,6 +192,26 @@ test('a slash command from the person takes over: no try follows it', async ($, 
   expect(w.prompts).toEqual(['/model'])
 })
 
+test('a built-in command the person runs, raising only command.run, takes over: no try follows it', async ($, on) => {
+  const w = engine(on)
+  on('command.run', () => ({ text: '' }))
+  await start($)
+  await fail($)
+  await $.command.run({ command: 'model', args: '', origin: { kind: 'composer' } } as any)
+  await w.pass(60)
+  expect(w.prompts).toEqual([])
+})
+
+test('a command a plugin runs does not take over from the carry-on', async ($, on) => {
+  const w = engine(on)
+  on('command.run', () => ({ text: '' }))
+  await start($)
+  await fail($)
+  await $.command.run({ command: 'model' } as any)
+  await w.pass(1.1)
+  expect(w.prompts).toHaveLength(1)
+})
+
 test('a try the engine drops is not counted as sent: the next follows 5 minutes later', async ($, on) => {
   const w = engine(on, { drop: 'refused' })
   await start($)
