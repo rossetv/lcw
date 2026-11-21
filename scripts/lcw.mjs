@@ -759,6 +759,9 @@ const commands = {
       change(run, note, (st) => {
         const x = st.sweep.waves.find((y) => y.n === wave.n)
         Object.assign(x, { status: 'shipped', pr, fixed, ...(partial ? { partial } : {}), ...(empty ? { empty: true } : {}) })
+        // The next wave starts its lists afresh, so the wave keeps its own.
+        x.tasks = st.tasks.map(({ id, title, status, model }) => ({ id, title, status, model }))
+        x.requirements = st.requirements.map(({ id, name, status }) => ({ id, name, status }))
         st.sweep.fixed += fixed
         st.sweep.partial = (st.sweep.partial ?? 0) + partial
         st.sweep.dropped += x.dropped

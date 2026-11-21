@@ -246,12 +246,16 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
   assert.equal(git(t.repo, 'rev-parse', 'lcw/tidy'), tip)
   const s = t.state().sweep
   assert.deepEqual([s.fixed, s.dropped], [2, 1])
-  assert.deepEqual(s.waves[0], { n: 1, fixes: 3, status: 'shipped', branch: 'lcw/tidy-wave-1', pr: 12, merged: false, dropped: 1, fixed: 2 })
+  const { tasks, requirements, ...wave } = s.waves[0]
+  assert.deepEqual(wave, { n: 1, fixes: 3, status: 'shipped', branch: 'lcw/tidy-wave-1', pr: 12, merged: false, dropped: 1, fixed: 2 })
+  assert.deepEqual([tasks, requirements.map((r) => r.id + ' ' + r.status)], [[], ['F1 pass', 'F2 pass']])
   assert.match(fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8'), /wave 1 shipped/)
   assert.equal(t.cli('wave', 'shipped').code, 1, 'no wave running')
   assert.equal(t.state().sweep.fixed, 2)
 
   assert.equal(t.cli('wave', 'start').code, 0)
+  assert.deepEqual(t.state().requirements, [], 'wave 2 starts its own list')
+  assert.equal(t.state().sweep.waves[0].requirements.length, 2, 'wave 1 keeps its own')
   assert.equal(git(t.wt, 'rev-parse', 'HEAD'), tip, 'wave 2 starts from the sweep\'s branch as wave 1 left it')
   assert.equal(git(t.wt, 'rev-parse', '--abbrev-ref', 'HEAD'), 'lcw/tidy-wave-2')
   assert.equal(t.state().base, tip)
