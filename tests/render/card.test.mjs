@@ -776,6 +776,12 @@ test('a wave shipped and waiting on its merge keeps its lane at Ship while the c
   assert.ok(!laneRows(over).some(l => l.startsWith('wave 1 ')));
 });
 
+test('a shipped wave that was left empty has no pull request to merge, so it holds no lane', () => {
+  const held = { status: 'shipped', merged: false, pr: 41, stage: 'Review', step: null };
+  assert.ok(laneRows(withWave1(held, { prs: 'merged' })).some(l => l.startsWith('wave 1 ')));
+  assert.ok(!laneRows(withWave1({ ...held, pr: undefined, empty: true }, { prs: 'merged' })).some(l => l.startsWith('wave 1 ')));
+});
+
 test('the paused row counts the running tasks of every open wave', () => {
   assert.equal(buildView(inputsOf('26-lanes-three-open')).running, 4);
 });
