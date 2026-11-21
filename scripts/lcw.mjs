@@ -911,7 +911,7 @@ const commands = {
       const earlier = openWaves(s).filter((x) => x.n < wave.n && x.status === 'running')
       const inOrder = (what) => {
         const before = earlier.find((x) => x.step !== 'merging' || tipOf(s, x) !== x.checked)
-        if (before?.step === 'merging') fail(`Wave ${before.n}'s head moved from ${before.checked} to ${tipOf(s, before)} after its final checks passed, so they do not count until they run again on its settled head; ${what} waits for them. Nothing was changed.`)
+        if (before?.step === 'merging') fail(`Wave ${before.n}'s head moved from ${before.checked} to ${tipOf(s, before)} after its final checks passed, so they do not count until they run again on its settled head; ${what} must wait for them. Nothing was changed.`)
         if (before) fail(`Wave ${before.n}'s final checks have not passed yet (it is in ${before.stage}${before.step ? `, ${before.step}` : ''}); final checks run one wave at a time, in order. Nothing was changed.`)
         if (!hasTakenIn(s, wave)) fail(notTakenIn(s, wave, what))
       }

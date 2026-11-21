@@ -109,7 +109,7 @@ Launch agents with the Agent tool and never give one a name, and do not run the 
 
 In Code Mode a launch from a script returns at once, even when you await it: the result says `async_launched` and gives the agent's id, and the agent's report comes later, as a task notification in a turn of its own. So launch the agents that go together (a milestone's workers, a round's reviewers) in one script, keep each id, and end your turn; act on each report as its notification arrives, since the notification carries the report. Do not wait for them inside a script or read their output files.
 
-What the human says to any agent counts. Ask every agent to report anything the human told it. If that changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements (`lcw req add`, `lcw req <id> rename "<name>"`, `lcw req <id> drop`), and tell the agents it affects; otherwise it only steered that agent.
+What the human says to any agent counts. Ask every agent to report anything the human told it. If that changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements (`lcw req add`, `lcw req <id> rename "<name>"`, `lcw req <id> drop`, with `--wave <n>` for a fix of a shipped wave), and tell the agents it affects; otherwise it only steered that agent.
 
 ## When an agent stalls
 
@@ -122,7 +122,7 @@ LCW tells you when an agent has run for fifteen minutes without moving, and the 
 
 Where an extra orchestrator launched the stalled agent, send that orchestrator the same news first; step in yourself if it does not act.
 
-An agent whose work ended because its connection was lost (its report or notification ends on a connection or API error) has not failed. Tell it to carry on, SendMessage to its id: its connection was lost, and it carries on from where it stopped. Do not start the work again with a fresh agent.
+An agent whose work ended on an error that clears on its own (its report or notification ends on a lost connection, an overloaded API or a server error) has not failed. Tell it to carry on, SendMessage to its id: its work was cut off, and it carries on from where it stopped. Do not start the work again with a fresh agent. A usage or rate limit, an authentication error or a prompt that is too long is never such an error. For those, and for an agent whose two carry-ons have both failed, follow the steps above.
 
 ## Asking the human
 

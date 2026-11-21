@@ -2,7 +2,7 @@
 
 Each round of a sweep starts here: probes look for problems in the areas the charter names, and you sort what they find. Entering Hunt adds one to the round. A later round starts with `lcw stage Hunt` once no wave is queued and every open wave is holding in Ship; it does not wait for their final checks or merges, which go on alongside it (stages/ship.md). You do not read code: probes do, and they report.
 
-`lcw set health="hunting, area by area"` in round 1, `health="hunting again, round <n>"` in a later one. Read charter.md and, in a later round, findings.md, both in the run folder.
+`lcw set health="hunting, area by area"` in round 1, `health="hunting again, round <n>; <each open wave and what it does>"` in a later one, such as `health="hunting again, round 2; wave 3 in its final checks"` (SKILL.md). Read charter.md and, in a later round, findings.md, both in the run folder.
 
 ## Which areas
 
@@ -10,7 +10,7 @@ In round 1, every area the charter names.
 
 In a later round, only an area that had a finding sorted to Fix in the round before, or that a wave has changed since. An area that came up clean, or whose findings were all parked or dropped, and that no wave changed, is not hunted again. While a stop line that counts fixes is not met, a later round also hunts the charter's items or areas that no round has hunted yet. To see what the waves changed, take the commit the last round read (findings.md records it) and run `git -C <latest work> diff --name-only <that commit> HEAD`; an area whose files are in that list has changed.
 
-Probes read the code where the sweep stands: the `latest work` path `lcw status` prints, which is the main checkout in round 1 and, after that, the newest wave's worktree, holding the open waves' changes too. Start the round's heading in findings.md with the commit they read (`git -C <latest work> rev-parse HEAD`).
+Probes read the code where the sweep stands: the `latest work` path `lcw status` prints, which is the main checkout in round 1. With waves open, `lcw stage Hunt` makes it a worktree holding every open wave's work, and prints it as `latest work:`. If that line says it holds only the newest wave's tip, tell the probes which wave's later work it lacks. Start the round's heading in findings.md with the commit they read (`git -C <latest work> rev-parse HEAD`).
 
 ## Sending the probes
 
@@ -52,7 +52,7 @@ findings.md holds every finding with its recipe and its sort, round by round, an
 lcw hunt --fix 151 --park 14 --drop 21
 ```
 
-Then `lcw set health="sorted against the charter"`.
+Then `lcw set health="sorted against the charter; <each open wave and what it does>"`, naming the open waves as above.
 
 Then put to the human, in LCW's box, each parked item that a short answer would settle and that would be small to fix once answered: a yes or no, or a choice between two or three ways. Not every parked item: one that needs a long discussion, a schema or a no-go zone stays in parked.md only. For each:
 
