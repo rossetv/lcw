@@ -302,6 +302,18 @@ test("during a run with a worktree, the bar names the run's branch and counts th
 })
 
 
+test("during a sweep, the bar names the newest wave's branch and counts its worktree's changes", () => {
+  const { home, dir, input } = startRun(10)
+  const repo = JSON.parse(input).cwd
+  const plain = () => line(input, { home }).out.replace(/\x1b\[[0-9;]*m/g, '').split('\n')[0]
+  const tree = lcw(['worktree'], { home, cwd: repo, session: 's1' }).out.trim()
+  fs.writeFileSync(tree + '/new.txt', 'a\nb\n')
+  const state = readJson(dir + '/state.json')
+  const waves = [{ n: 1, status: 'shipped', worktree: '/gone/wave-1', branch: 'lcw/demo-wave-1' }, { n: 2, status: 'running', worktree: tree, branch: 'lcw/demo-wave-2' }]
+  fs.writeFileSync(dir + '/state.json', JSON.stringify({ ...state, shape: 'sweep', worktree: null, sweep: { prs: 'stacked', waves } }))
+  assert.match(plain(), /· lcw\/demo-wave-2\s+│\s+\+2$/)
+})
+
 test('two runs in one repository: each session counts and names only its own run', () => {
   const repo = makeRepo()
   const home = tmp('home')

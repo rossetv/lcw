@@ -160,8 +160,11 @@ export async function main({ margin = 5 } = {}) {
     }
     // While the session's run has its worktree, that is where the work is: the bar names the run's branch and
     // counts the run's changes. Without one, it counts the checkout the session is in.
-    const runTree = run?.state.worktree && fs.existsSync(run.state.worktree) ? run.state.worktree : null
-    if (runTree && run.state.branch) mapped.input.branch = run.state.branch
+    // A sweep has no worktree of its own: its latest work is the newest wave's worktree that still exists.
+    const latest = run && Array.isArray(run.state.sweep?.waves) ? [...run.state.sweep.waves].reverse().find((x) => x?.worktree && fs.existsSync(x.worktree)) : null
+    const runTree = latest ? latest.worktree : run?.state.worktree && fs.existsSync(run.state.worktree) ? run.state.worktree : null
+    const runBranch = latest ? latest.branch ?? run.state.branch : run?.state.branch
+    if (runTree && runBranch) mapped.input.branch = runBranch
     try { mapped.input.diff = diffOf(runTree ?? mapped.cwd, home(), now) } catch {}
     const week = usage?.sevenDay
     const live = typeof week?.percentUsed === 'number' && !(week.resetsAt && Date.parse(week.resetsAt) <= now)

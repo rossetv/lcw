@@ -226,6 +226,13 @@ test('the unfinished run box says it removes a worktree only for a run that has 
   assert.equal(abandon({}), 'Abandon stops it for good.')
 })
 
+test("the unfinished box counts a sweep's wave worktrees, as the sweep has none of its own", () => {
+  const abandon = (waves) => bannerFor({ now: NOW, advisorModel: 'fable', unfinished: unfinishedFact({ dir: '/runs/s2', shownAt: NOW - 3600000,
+    state: { id: 's2', name: 'old-sweep', shape: 'sweep', status: 'running', stage: 'Build', worktree: null, branch: 'lcw/old-sweep', sweep: { waves } } }, '') }).lines.at(-1)
+  assert.match(abandon([{ n: 1, status: 'shipped', worktree: null }, { n: 2, status: 'running', worktree: '/wt/old-sweep-wave-2' }]), /removes its worktrees?;/)
+  assert.doesNotMatch(abandon([{ n: 1, status: 'shipped', worktree: null }]), /worktree/)
+})
+
 test('the approval reaches the boxes only while the run is with the person in its Brainstorm, labels tidied, at most three', () => {
   const state = (over) => ({ id: 'r1', stage: 'Brainstorm', status: 'with-you', approval: { go: [' Go  (a) ', '', 'Go (b)', 'c', 'd'], meaning: '', at: 5 }, ...over })
   assert.deepEqual(runFact(state()).approval, { go: ['Go (a)', 'Go (b)', 'c'], meaning: 'build it as played back', at: 5 })

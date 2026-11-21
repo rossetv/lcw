@@ -157,7 +157,7 @@ export function unfinishedFact(run, ledger) {
   return {
     id: s.id, name: s.name || s.id, title: s.title || undefined, stage: s.stage, status: s.status, pausedReason: s.pausedReason ?? undefined,
     ...(milestone ? { milestone } : {}), ...waveOf(s), ...taskCounts(s), nextStep: nextStepOf(ledger) ?? undefined, stoppedAt: run.shownAt,
-    worktree: !!s.worktree, branch: !!s.branch,
+    worktree: !!s.worktree || (Array.isArray(s.sweep?.waves) && s.sweep.waves.some((x) => x?.worktree)), branch: !!s.branch,
   }
 }
 
