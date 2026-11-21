@@ -272,3 +272,30 @@ test('an unfinished sweep names the wave it was in: the running one, else the ne
   const build = unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000, state: { id: 'r2', name: 'x', status: 'running', stage: 'Build', sweep: { waves: [{ n: 1, status: 'running' }] } } }, '')
   assert.equal(build.wave, undefined, 'a build has no waves')
 })
+
+const asking = (questions) => ({ id: 'r1', name: 'tidy', status: 'running', stage: 'Build', shape: 'sweep', questions })
+const Q = (id, status = 'open') => ({ id, text: `Question ${id}?`, why: 'why', status, options: [{ key: 'a', label: 'Fix it', meaning: 'built next wave' }, { key: 'b', label: 'Keep it', meaning: 'closed as decided' }] })
+
+test('a sweep\'s open questions show one at a time, counted among all it asked, and a press saves it with no prompt', () => {
+  const facts = { now: NOW, advisorFlag: true, run: runFact(asking([Q('Q1', 'answered'), Q('Q2'), Q('Q3')])) }
+  const box = bannerFor(facts)
+  assert.equal(box.kind, 'question')
+  assert.equal(box.questionId, 'Q2')
+  assert.match(box.tag, /your call 2 of 3/)
+  assert.deepEqual(box.options.map((o) => o[0]), ['a', 'b', 'park', 'other'])
+  const plan = press(facts, 'a')
+  assert.deepEqual(argvs(plan), ['question Q2 pick a --session s1'])
+  assert.equal(plan.prompt, undefined)
+  assert.equal(plan.fillText, undefined)
+})
+
+test('Other saves the press and puts the question in the prompt for the person\'s own words', () => {
+  const plan = press({ now: NOW, advisorFlag: true, run: runFact(asking([Q('Q2')])) }, 'other')
+  assert.deepEqual(argvs(plan), ['question Q2 pick other --session s1'])
+  assert.equal(plan.fillText, 'Your call on Q2: ')
+})
+
+test('no box asks once every question is answered, or the run is finished', () => {
+  assert.equal(bannerFor({ now: NOW, advisorFlag: true, run: runFact(asking([Q('Q1', 'answered'), Q('Q2', 'used')])) }), null)
+  assert.equal(bannerFor({ now: NOW, advisorFlag: true, run: runFact({ ...asking([Q('Q1')]), status: 'finished' }) }), null)
+})

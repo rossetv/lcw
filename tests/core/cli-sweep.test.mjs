@@ -711,3 +711,33 @@ test('wave shipped --pr is refused when the charter chose one pull request at th
   assert.equal(t.state().sweep.waves[0].status, 'running')
   assert.equal(t.cli('wave', 'shipped').code, 0)
 })
+
+test('a question is added with its choices, picked once, answered in words or used, and shown in status', () => {
+  const t = hunting()
+  const add = (...a) => t.cli('question', 'add', ...a)
+  assert.equal(add('Q1', '--text', 'Allow a 422?', '--a', 'Answer 422').code, 1, 'two choices, each with what it means')
+  assert.equal(add('Q1', '--text', 'Allow a 422?', '--why', 'a 409 names the owner', '--a', 'Answer 422: fixed next wave', '--b', 'Keep the 409: closed as decided').code, 0)
+  assert.equal(add('Q1', '--text', 'again', '--a', 'x: y', '--b', 'z: w').code, 1)
+  assert.equal(t.cli('question', 'Q1', 'used').code, 1, 'only an answered question is used')
+  assert.equal(t.cli('question', 'Q1', 'pick', 'd').code, 1)
+  assert.equal(t.cli('question', 'Q1', 'pick', 'a').code, 0)
+  assert.match(t.cli('question', 'Q1', 'pick', 'b').out, /answered already/)
+  assert.deepEqual([t.state().questions[0].status, t.state().questions[0].pick], ['answered', 'a'])
+  assert.match(t.cli('status').out, /Q1 \[answered: a, Answer 422\] Allow a 422\?/)
+  assert.equal(t.cli('question', 'Q1', 'used').code, 0)
+
+  add('Q2', '--text', 'Which cutoff?', '--a', '30 days: x', '--b', '90 days: y')
+  t.cli('question', 'Q2', 'pick', 'other')
+  assert.equal(t.state().questions[1].status, 'typing')
+  t.cli('question', 'Q2', 'answer', '60 days')
+  assert.deepEqual([t.state().questions[1].status, t.state().questions[1].words], ['answered', '60 days'])
+})
+
+test('questions are a sweep\'s own', () => {
+  const home = tmp('home')
+  const o = { home, cwd: makeRepo(), session: 's1' }
+  lcw(['start', 'b', '--title', 'B'], o)
+  const r = lcw(['question', 'add', 'Q1', '--text', 't', '--a', 'x: y', '--b', 'z: w'], o)
+  assert.equal(r.code, 1)
+  assert.match(r.out, /is for a sweep/)
+})

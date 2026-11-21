@@ -54,6 +54,14 @@ lcw hunt --fix 151 --park 14 --drop 21
 
 Then `lcw set health="sorted against the charter"`.
 
+Then put to the human, in LCW's box, each parked item that a short answer would settle and that would be small to fix once answered: a yes or no, or a choice between two or three ways. Not every parked item: one that needs a long discussion, a schema or a no-go zone stays in parked.md only. For each:
+
+```
+lcw question add Q82 --text "Row 82: registering another account's passkey answers 409. Keep the friendly 409, or answer a generic 422?" --why "A 409 tells the caller the key is registered somewhere else." --a "Answer 422: a small fix in the next wave" --b "Keep the 409: the row is closed as decided"
+```
+
+Write the question as they would read it cold: the item, what goes wrong, the choice. Each option's text after the colon says what happens if they pick it. The box shows one at a time, adds "Leave it parked" and "Other…", and saves a press without waking you; nothing waits on the answers.
+
 Show the sorted list in the conversation, short: what goes to Fix, area by area; what is parked and why; what is dropped and why; and where parked.md is. Do not wait for an answer: parked items never hold up the rest.
 
 ## Waves

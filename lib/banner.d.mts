@@ -2,7 +2,7 @@ import type { Row } from '../hooks/lcw-mod.mjs'
 
 export type BannerKind =
   | 'answer' | 'approve' | 'mark' | 'spendfail' | 'unfinished' | 'awake' | 'restart' | 'update' | 'whatsnew' | 'guide' | 'cleanup' | 'statusline'
-  | 'advisor' | 'cap' | 'spend'
+  | 'advisor' | 'cap' | 'spend' | 'question'
 
 /** One box: its kind, the occurrence key (a dismissal is "kind:key"), the title, plain lines, bullets, and [id, label] options. */
 export interface Banner {
@@ -16,6 +16,8 @@ export interface Banner {
   tag?: string
   choices?: { ids: string[]; meaning: string }[]
   note?: string
+  /** The question box: the question it puts. */
+  questionId?: string
 }
 
 /** A time as milliseconds, or an ISO string. */
@@ -30,6 +32,8 @@ export interface BannerRun {
   shape?: 'build' | 'sweep'
   /** The Brainstorm's playback (a sweep's Charter) waits for approval: Go's labels (one, or one per variant), what Go builds, and when it asked. */
   approval?: { go: string[]; meaning: string; at: number }
+  /** A sweep's short questions still open, in the order asked, and how many it has asked and had answered. */
+  questions?: { open: { id: string; text: string; why: string; options: { key: string; label: string; meaning: string }[] }[]; asked: number; answered: number }
 }
 
 /** Every fact is optional; a missing one means the box it feeds does not apply. */

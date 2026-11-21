@@ -34,7 +34,18 @@ export function runFact(state, kept) {
     asks: asks.filter((a) => Number.isFinite(a?.n)).map((a) => ({ n: a.n, text: String(a.text ?? ''), waiting: a.waiting, at: a.at })).sort((a, b) => a.n - b.n),
     awake: !!kept, guide: state.guide === true, firstOnMachine: state.firstOnMachine === true, shape: shapeOf(state),
     approval: approvalOf(state),
+    questions: questionsOf(state),
   }
+}
+
+/** A sweep's short questions for the person: the open ones in the order asked, and how many were asked in all. */
+function questionsOf(state) {
+  const all = OPEN(state) && Array.isArray(state.questions) ? state.questions.filter((q) => q?.id && Array.isArray(q.options)) : []
+  const open = all.filter((q) => q.status === 'open').map((q) => ({
+    id: String(q.id), text: String(q.text ?? ''), why: String(q.why ?? ''),
+    options: q.options.map((o) => ({ key: String(o.key), label: String(o.label ?? ''), meaning: String(o.meaning ?? '') })),
+  }))
+  return open.length ? { open, asked: all.length, answered: all.length - open.length } : undefined
 }
 
 const shapeOf = (state) => (state?.shape === 'sweep' ? 'sweep' : 'build')
@@ -250,6 +261,13 @@ export function pressPlan(banner, option, facts, ctx) {
       return { fillText: approveText(banner, option), dismiss: true }
     case 'answer':
       return { fill: run?.asks?.[0]?.n, dismiss: true }
+    case 'question': {
+      const q = run?.questions?.open?.[0]
+      if (!q || q.id !== banner.questionId) return null
+      const pick = { ...lcw('question', q.id, 'pick', option) }
+      if (option === 'other') return { steps: [pick], fillText: `Your call on ${q.id}: `, dismiss: true }
+      return { steps: [pick], toast: 'Saved for the next wave.', dismiss: true }
+    }
     case 'mark': {
       const usage = facts?.usage ?? {}
       const money = facts?.billing === 'payg' && usage.capUsd > 0 && usage.markUsd > 0

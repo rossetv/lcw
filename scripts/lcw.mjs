@@ -24,18 +24,18 @@ const now = () => (Number.isFinite(Number(process.env.LCW_NOW)) && process.env.L
 // flags each command takes (all take a value); --session is accepted everywhere
 const COMMAND_FLAGS = {
   start: ['title', 'shape'], task: ['model', 'effort'], ask: ['waiting'], approval: ['meaning'], finish: ['pr', 'branch'], stop: ['pr'],
-  hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr'], checkpoint: ['keep'],
+  hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr'], checkpoint: ['keep'], question: ['text', 'why', 'a', 'b', 'c'],
 }
 // flags that take no value
 const SWITCHES = { where: ['json'], awake: ['check'], checkpoint: ['compact'] }
-const MUTATING = ['stage', 'set', 'task', 'req', 'ask', 'answer', 'approval', 'mark', 'pause', 'resume', 'stop', 'finish', 'worktree', 'take', 'abandon', 'hunt', 'wave', 'merge']
+const MUTATING = ['stage', 'set', 'task', 'req', 'ask', 'answer', 'question', 'approval', 'mark', 'pause', 'resume', 'stop', 'finish', 'worktree', 'take', 'abandon', 'hunt', 'wave', 'merge']
 // commands that name their run by its id, rather than acting on the run this session drives
 const BY_ID = ['take', 'abandon']
 // a run no session has shown for this long is no longer open anywhere
 const SHOWN_WITHIN_MS = 15 * 60000
 const STAGES = ['Brainstorm', 'Spec', 'Plan', 'Build', 'Review', 'Ship']
 const SWEEP_STAGES = ['Charter', 'Hunt', 'Plan', 'Build', 'Review', 'Ship']
-const PROTECTED = ['id', 'version', 'tasks', 'asks', 'requirements', 'driver', 'approval', 'shape']
+const PROTECTED = ['id', 'version', 'tasks', 'asks', 'requirements', 'driver', 'approval', 'shape', 'questions']
 const PR_CHOICES = { stacked: 'stacked, one draft for each wave', merged: 'merged as it goes', end: 'one at the end' }
 const HUNT_COUNTS = ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop']
 
@@ -52,6 +52,7 @@ take <runId> makes this session take over a run of this repository that no sessi
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
 flags: --session <id> (any command); start --title --shape; task --model --effort; ask --waiting; approval --meaning; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
+question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] puts a short question to the person in LCW's box, in a sweep; question <id> pick <a|b|c|park|other> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
 checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
 const refuse = (msg) => { console.log(msg); process.exit(1) }
@@ -130,6 +131,14 @@ function githubRepo(root) {
 const gh = (cwd, ...a) => execFileSync('gh', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 const firstLine = (e) => String(e.stderr || e.message).trim().split('\n')[0]
 const wholeNumber = (text, what) => (/^\d+$/.test(String(text)) ? Number(text) : fail(`${what} takes a whole number, not ${text}. Nothing was changed.`))
+
+const QUESTION_KEYS = ['a', 'b', 'c']
+/** "  Q82 [answered: a, Answer 422] Trade the friendly 409 for a generic 422?" */
+function questionLine(q) {
+  const picked = q.options.find((o) => o.key === q.pick)
+  const said = q.status === 'open' ? '' : q.words ? `: ${q.words}` : q.pick === 'park' ? ': leave it parked' : q.pick === 'other' ? ': their own words, in the prompt' : picked ? `: ${q.pick}, ${picked.label}` : ''
+  return `  ${q.id} [${q.status}${said}] ${q.text}`
+}
 
 /** The context the status line last saw for this session, { tokens, window }, or null when there is no fresh reading. */
 function contextOf(id) {
@@ -273,6 +282,7 @@ const commands = {
       `mark: ${money ? moneyMark(money) : `${s.markPercent}%`}${s.worktree ? `  worktree: ${s.worktree}  branch: ${s.branch}` : ''}${s.base ? `  base: ${s.base}` : ''}`,
       'tasks:', ...(s.tasks.length ? s.tasks.map((t) => `  ${t.id} [${t.status}] ${t.title}`) : ['  none']),
       'asks:', ...(s.asks.length ? s.asks.map((a) => `  ${a.n}. ${a.text}`) : ['  none']),
+      ...((s.questions ?? []).length ? ['questions (lcw question):', ...s.questions.map(questionLine)] : []),
       ...(isSweep(s) ? sweepStatus(run) : [`folder: ${run.dir}`, `brainstorm: ${p.brainstorm}`, `spec: ${p.spec}`, `plan: ${p.plan}`, `ledger: ${p.ledger}`]),
       `next step: ${nextStepOf(run) || 'none recorded'}`,
       'ledger (last 15):', ...ledger,
@@ -413,6 +423,47 @@ const commands = {
       '  lcw checkpoint --compact          compacts when this turn ends, then you are prompted with the next step',
       '  lcw checkpoint --keep "<why>"     carries on with this context, in this turn',
       `Every turn re-reads the whole context, so keeping it costs more on each one; a compaction keeps only what the records hold. Choose what serves the next step.`)
+  },
+
+  // A short question for the person, shown one at a time in LCW's box; their press is saved with no turn. A sweep's own.
+  question() {
+    const run = need()
+    sweepOnly(run)
+    const list = (run.state.questions ??= [])
+    const [first, ...more] = rest
+    if (!first) return out(...(list.length ? list.map(questionLine) : ['no questions']))
+    if (first === 'add') {
+      const [id] = more
+      const options = QUESTION_KEYS.filter((k) => flags[k] !== undefined).map((key) => {
+        const [label, ...meaning] = String(flags[key]).split(': ')
+        return { key, label: label.trim(), meaning: meaning.join(': ').trim() }
+      })
+      if (!id || !flags.text || options.length < 2 || options.some((o) => !o.label || !o.meaning)) fail('Usage: lcw question add <id> --text "<question>" [--why "<line>"] --a "<label>: <what it means>" --b "<label>: <what it means>" [--c ...]')
+      if (list.some((q) => q.id === id)) fail(`Question ${id} exists. Nothing was changed.`)
+      change(run, `question ${id} added: ${flags.text}`, (s) => { s.questions.push({ id, text: flags.text, why: flags.why ?? '', options, status: 'open', pick: null, at: now() }) })
+      return out(`${id} added; LCW's box puts it to the person`)
+    }
+    const q = list.find((x) => x.id === first) || fail(`No question ${first}. Nothing was changed.`)
+    const [verb, ...words] = more
+    if (verb === 'pick') {
+      const pick = words[0]
+      if (![...q.options.map((o) => o.key), 'park', 'other'].includes(pick)) fail(`Usage: lcw question ${q.id} pick <${[...q.options.map((o) => o.key), 'park', 'other'].join('|')}>`)
+      if (q.status !== 'open') return out(`${q.id} is ${q.status} already`)
+      change(run, `question ${q.id} picked: ${pick}`, () => { Object.assign(q, { status: pick === 'other' ? 'typing' : 'answered', pick, answeredAt: now() }) })
+      return out(`${q.id}: saved`)
+    }
+    if (verb === 'answer') {
+      const text = words.join(' ')
+      if (!text) fail(`Usage: lcw question ${q.id} answer "<their words>"`)
+      change(run, `question ${q.id} answered: ${text}`, () => { Object.assign(q, { status: 'answered', pick: q.pick ?? 'other', words: text, answeredAt: now() }) })
+      return out(`${q.id}: answered`)
+    }
+    if (verb === 'used') {
+      if (q.status !== 'answered') fail(`${q.id} is ${q.status}; only an answered question is used. Nothing was changed.`)
+      change(run, `question ${q.id} used`, () => { q.status = 'used' })
+      return out(`${q.id}: used`)
+    }
+    fail(`Usage: lcw question [add ... | <id> pick <option> | <id> answer "<words>" | <id> used]`)
   },
 
   // The mark belongs to the session it is said in, run or no run; a run uses the mark of the session that drives it.
