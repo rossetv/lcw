@@ -343,7 +343,10 @@ test('the status line saves its session\'s context size for lcw checkpoint', () 
 test('the mascot counts the open waves of a sweep, not the empty run-level lists', () => {
   const { home, dir, input } = startRun(10)
   const state = readJson(dir + '/state.json')
-  const face = () => (bare(line(input, { home }).out).match(/T/g) ?? []).length
+  // One clock for every call, and only the creature's own cells: its frame follows the clock, and the rest of the
+  // line (times, folder names) can hold a T too.
+  const env = { LCW_NOW: String(Date.now() + 5000), TZ: 'UTC' }
+  const face = () => (bare(line(input, { home, env }).out).split('\n').map((row) => [...row].slice(0, 6).join('')).join('\n').match(/T/g) ?? []).length
   const baseline = face()
   const sweep = { ...state, shape: 'sweep', stage: 'Build', tasks: [], requirements: [], sweep: { prs: 'stacked', waves: [
     { n: 1, status: 'shipped', merged: false, requirements: [{ id: 'R1', status: 'failing' }], tasks: [] },
