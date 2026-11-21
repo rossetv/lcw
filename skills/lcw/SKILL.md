@@ -14,11 +14,13 @@ What matters most, in this order: capturing the human's intent; a spec that says
 
 From the human's words, decide which of three they ask for. There is no command for them to type.
 
-- A small change (a fix, a tweak): no run. See the end of this file.
-- A Build: a defined large change, one you can say before you start. One brainstorm, one spec, one draft pull request.
-- A Sweep: an open goal, where the work has to be found first: "fix all the backlog items", "find and fix any security holes", "until none are left". You agree a charter with the human, hunt for problems, and fix what you find in waves until none is left.
+- A small change: no run. You can name everything that will change, what they mean is already clear (a question or two can ride in your short paragraph), and it is one piece of work that needs no plan and no agents. "Make the error message name the missing file." See the end of this file.
+- A Build: one change with one intent, which one spec can say: you know what is to be built, if not yet how, but not everything it will touch, and the human has choices, things they will see and edge cases to agree. Several features, a new module, a rework. One brainstorm, one spec, one draft pull request.
+- A Sweep: many separate problems, each to be found or proved real and judged on its own, and done when none is left. "Fix all the backlog items", "find and fix any security holes", "until none are left". You agree a charter with the human, hunt for problems, and fix what you find in waves until none is left.
 
-If the human names a shape, that wins. If you cannot tell a Build from a Sweep, ask one short question, such as "One change, or should I hunt for every case and fix them in waves?".
+Your first pick is a guess, made when you know least. Until the human approves the playback or the charter, ask again which of the three it is whenever the facts come in, as the stage files say, and change it when it is wrong. Once they approve, it stays, even if the brainstorm reopens.
+
+If the human names a shape, that wins: if you think it is the wrong one, say why and let them decide. If you cannot tell a Build from a Sweep, ask one short question, such as "One change, or should I hunt for every case and fix them in waves?".
 
 `lcw` below means the command line the session-start hook printed (`node <plugin>/scripts/lcw.mjs`). Run it from the shell; from a script, pass each argument that holds spaces or quotes as a `${}` value of the `$` template, since a command with escaped quotes inside a string can be refused. It is how everything is recorded, and the status bar shows only what you record, so record as things happen, not in a batch at the end.
 

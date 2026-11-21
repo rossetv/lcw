@@ -68,6 +68,15 @@ Keep the intent checklist on the status bar current. `lcw set` replaces a whole 
 lcw set 'intent.settled=["why","who for"]' intent.now="what done means" 'intent.next=["edge cases","priorities"]' intent.questionsOpen=3
 ```
 
+## Is it still a Build?
+
+Ask again which of the three this is (SKILL.md, Two shapes) each time the probes report, and once more before the playback; not when the brainstorm reopens, since once approved the shape stays.
+
+- A Sweep, when what you are agreeing turns into a list of separate problems, each needing its own proof and its own decision, rather than one change; or when done comes out as "none left".
+- A small change, when you can now name everything that will change, nothing is left for the human to settle but a question or two, and it needs no plan.
+
+If it is the wrong shape and you picked it, tell the human in one line which shape it is and why, then change it. For a Sweep: `lcw stop` this run, `lcw start <name> --title "<one line>" --shape sweep` with a name for the sweep (the same name gets `-2` added), read stages/charter.md and start there, carrying over to charter.md what is already settled, so nothing is asked twice. For a small change: `lcw stop` the run, say the change in one short paragraph, and wait for their yes. If the human named a Build, do not change it yourself: say why you think it is the wrong shape and let them decide.
+
 ## Ending the brainstorm
 
 When nothing is open and no probe whose answer could change the intent is still running, play the whole intent back in one message. Wait for those probes first: a playback that goes out before the facts are in gets approved on a guess.

@@ -68,6 +68,15 @@ lcw set sweep.charter=4 sweep.open=1
 lcw set sweep.prs=stacked      # or merged, or end, once the PRs line is settled
 ```
 
+## Is it still a Sweep?
+
+Ask again which of the three this is (SKILL.md, Two shapes) each time the sizing probes report, and once more before the playback.
+
+- A Build, when the probes find one change with one intent behind it rather than many separate problems: the bugs all come from one missing piece, say, or the backlog is really one feature.
+- A small change, when you can now name everything that will change, nothing is left for the human to settle but a question or two, and it needs no plan.
+
+If it is the wrong shape and you picked it, tell the human in one line which shape it is and why, then change it. For a Build: `lcw stop` this run, `lcw start <name> --title "<one line>"` with a name for the change (the same name gets `-2` added), read stages/brainstorm.md and start there, carrying over to brainstorm.md what is already settled, so nothing is asked twice. For a small change: `lcw stop` the run, say the change in one short paragraph, and wait for their yes. If the human named a Sweep, do not change it yourself: say why you think it is the wrong shape and let them decide.
+
 ## Ending the charter
 
 When all ten lines are settled and no probe whose answer could change them is still running, play the whole charter back in one message. Open it with the question, in bold: is this the charter they want? Then the ten lines, one each, and how big the work looks. Tell them this is the one approval the sweep needs: from here you hunt, sort the findings against the charter, and fix them in waves on your own; you come back to them only if something they agreed cannot be done. Parked items wait for them in parked.md and hold up nothing. End with the same question and the three replies they can type:
