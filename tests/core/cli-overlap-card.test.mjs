@@ -78,6 +78,7 @@ test('the state the cli writes for two open waves is drawn as a lane for each, w
     if (status !== 'todo') t.at(2, 'req', id, status)
   }
   t.at(2, 'stage', 'Review')
+  for (const id of ['R4', 'R5']) t.at(1, 'req', id, 'pass')
   t.at(1, 'stage', 'Ship')
   t.at(1, 'wave', 'step', 'final checks')
 

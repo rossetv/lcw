@@ -1507,3 +1507,67 @@ test('status names the wave an ask is about', () => {
   t.cli('ask', 'push needs your token', '--wave', '2')
   assert.match(t.cli('status').out, /^ {2}1\. push needs your token \(wave 2\)$/m)
 })
+
+test('wave files leaves out a wave once it is at merging', () => {
+  const t = bothShipping()
+  commit(t.wt2, 'e.txt', 'wave 2 fix\n')
+  t.at(1, 'wave', 'step', 'final checks')
+  assert.match(t.cli('wave', 'files').out, /^ {2}b\.txt \(wave 1\)$/m)
+  t.at(1, 'wave', 'step', 'merging')
+  assert.deepEqual(t.cli('wave', 'files').out.trim().split('\n').slice(1), ['  e.txt (wave 2)'])
+})
+
+test('a wave leaves Review only once every fix has its verdict', () => {
+  const t = overlapping()
+  for (const id of ['F1', 'F2', 'F3']) t.at(1, 'req', 'add', id, `fix ${id}`)
+  t.at(1, 'req', 'F1', 'pass')
+  t.at(1, 'req', 'F3', 'failing')
+  const r = t.at(1, 'stage', 'Ship')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /F2 todo, F3 failing/)
+  assert.equal(t.w(1).stage, 'Review')
+  t.at(1, 'req', 'F2', 'partial')
+  t.at(1, 'req', 'F3', 'park')
+  assert.equal(t.at(1, 'stage', 'Ship').code, 0)
+})
+
+test('a wave refuses a task named with one of its fixes\' ids', () => {
+  const t = overlapping()
+  t.at(1, 'req', 'add', 'F21', 'fix F21')
+  const r = t.at(1, 'task', 'add', 'F21', 'move the shared rule')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /one of wave 1's fixes/)
+  assert.equal(t.at(1, 'task', 'add', 'X1', 'move the shared rule').code, 0)
+  assert.deepEqual(t.w(1).tasks.map((x) => x.id), ['X1'])
+})
+
+test('a shipped wave\'s worktree goes with the files it ignores, and stays while it holds an untracked one', () => {
+  for (const [stray, gone] of [[null, true], ['notes.txt', false]]) {
+    const t = bothShipping()
+    commit(t.wt1, '.gitignore', 'cache/\n')
+    fs.mkdirSync(`${t.wt1}/cache`)
+    fs.writeFileSync(`${t.wt1}/cache/built`, 'made again by a build\n')
+    t.at(1, 'wave', 'step', 'final checks')
+    t.at(1, 'wave', 'step', 'merging')
+    t.at(2, 'wave', 'take')
+    t.at(2, 'wave', 'step', 'final checks')
+    t.at(2, 'wave', 'step', 'merging')
+    t.at(1, 'wave', 'shipped')
+    if (stray) fs.writeFileSync(`${t.wt1}/${stray}`, 'mine\n')
+    const r = t.cli('wave', 'shipped')
+    assert.equal(r.code, 0, r.out)
+    assert.equal(fs.existsSync(t.wt1), !gone, r.out)
+    assert.match(r.out, gone ? /worktree removed/ : /worktree kept: .*uncommitted or untracked/)
+  }
+})
+
+test('status counts the fixes a wave holds once more have joined it than were queued', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1', '2')
+  t.start()
+  for (const id of ['F1', 'F2', 'F3']) t.cli('req', 'add', id, `fix ${id}`)
+  t.cli('req', 'F3', 'drop')
+  const out = t.cli('status').out
+  assert.match(out, /^ {2}1 \[running\] 3 fixes /m)
+  assert.match(out, /^ {2}2 \[queued\] 2 fixes /m)
+})

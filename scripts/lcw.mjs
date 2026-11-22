@@ -47,7 +47,7 @@ const argv = process.argv.slice(2)
 const USAGE = `lcw commands: ${'start status stage set task req ask answer question approval ledger checkpoint mark cap spend-command usage pause resume stop finish worktree pictures runs where take abandon awake hunt wave merge'}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
 In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked, charter.md written, no wave queued and every open wave in Ship; with waves open it makes .claude/worktrees/<name>-latest, detached, holding every open wave's work (the newest wave's tip alone if they conflict), which status prints as latest work while the round runs. worktree makes only the branch lcw/<name>; the session stays in the main checkout and each wave gets its own worktree.
-hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>), once that wave has reached Review and while fewer than two waves are in Plan, Build or Review (a wave sent back from Ship waits on the same cap); it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first; stage Review and the final checks need all of them. wave round raises the review round. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the clean worktrees of the waves shipped before it; wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
+hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>), once that wave has reached Review and while fewer than two waves are in Plan, Build or Review (a wave sent back from Ship waits on the same cap); it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, leaving out a wave at merging, whose head is settled; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first; stage Review and the final checks need all of them, and stage Ship from Review needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
 --wave <n> names the wave that stage Plan|Build|Review|Ship, task, req, set plan.* or milestone, ledger, ask and wave round|step|take|defer|shipped act on. Without it they act on the open wave whose worktree lcw runs in, else the only open wave; with several open they refuse, but ledger writes the run's ledger only and ask is the run's own, as they are during a hunt. ask --wave marks the wave waiting until its asks are answered.
 req <id> rename "<name>" and req <id> drop change a requirement when what is built changes; in a sweep's running wave req <id> park takes a fix out of the wave for the person, and req <id> partial marks a fix that was built but leaves the charter's done line unmet: it is not counted as fixed. req <id> drop --wave <n> drops a fix a shipped wave parked.
 approval ["<Go label>" ...] [--meaning "<what Go builds>"] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. Asked again, it replaces the last; a new stage clears it.
@@ -1124,11 +1124,14 @@ function addWorktree(run, dir, branch, from) {
   return real
 }
 
-/** The files the given waves have changed, each over its review range, so not what it took in: a fix planned in a later wave must not need one. */
+/**
+ * The files the given waves have changed, each over its review range, so not what it took in: a fix planned in a later
+ * wave must not need one. A wave at merging is left out: its head is settled, and the next wave is cut from it.
+ */
 function changedFiles(s, waves) {
   const by = new Map()
   for (const w of waves) {
-    if (!w.after || !w.branch) continue
+    if (!w.after || !w.branch || w.step === 'merging') continue
     for (const f of git(s.repoRoot, 'diff', '--name-only', `refs/heads/${takesFrom(s, w.after)}...refs/heads/${w.branch}`).split('\n').filter(Boolean)) by.set(f, [...(by.get(f) ?? []), w.n])
   }
   const files = [...by].sort(([a], [b]) => a.localeCompare(b)).map(([f, ns]) => `  ${f} (wave ${ns.join(', ')})`)
@@ -1151,7 +1154,12 @@ function enterStage(s, stage) {
 function waveStage(run, wave, stage) {
   if (wave.stage === stage) return out(`wave ${wave.n} stage ${stage}`) // already there: a repeat must not clear its step, checked head or the later waves' checks
   if (stage === 'Review') mustHoldRange(run.state, wave, 'its review')
-  if (stage === 'Ship' && wave.stage === 'Review') mustHoldRange(run.state, wave, 'leaving Review')
+  if (stage === 'Ship' && wave.stage === 'Review') {
+    mustHoldRange(run.state, wave, 'leaving Review')
+    // a fix set back for a later round and never given its verdict again would ship uncounted
+    const open = (wave.requirements ?? []).filter((r) => r.status === 'todo' || r.status === 'failing')
+    if (open.length) fail(`Wave ${wave.n} cannot leave Review with ${open.map((r) => `${r.id} ${r.status}`).join(', ')}: record each fix as it stands, lcw req <id> pass|partial --wave ${wave.n}, or take it out with lcw req <id> park|drop --wave ${wave.n}. Nothing was changed.`)
+  }
   if (wave.stage === 'Ship' && BUSY.includes(stage)) {
     const busy = openWaves(run.state).filter((x) => x !== wave && x.status === 'running' && BUSY.includes(x.stage))
     if (busy.length >= 2) fail(`Waves ${busy.map((x) => `${x.n} (${x.stage})`).join(' and ')} are being built or reviewed, and at most two are at once; wave ${wave.n} goes back to ${stage} once one of them holds in Ship. Nothing was changed.`)
@@ -1198,13 +1206,16 @@ function clearLater(s, wave) {
 
 const tipOf = (s, w) => git(s.repoRoot, 'rev-parse', `refs/heads/${w.branch}`)
 
+/** The fixes a wave holds: the count it was queued with, or more once findings joined it on the way. */
+const fixesIn = (x) => Math.max(x.fixes ?? 0, (x.requirements?.length ?? 0) + (x.dropped ?? 0))
+
 /** A sweep's part of lcw status: the pull request choice, the round, each wave, each open wave's own records and its files. */
 function sweepStatus(run) {
   const s = run.state
   const w = s.sweep
   return [
     `pull requests: ${PR_CHOICES[w.prs] ?? 'not chosen yet'}  round: ${w.round}  fixed: ${w.fixed}  ${w.partial ? `partly fixed: ${w.partial}  ` : ''}parked: ${w.parked}  dropped: ${w.dropped}`,
-    'waves:', ...(w.waves.length ? w.waves.map((x) => `  ${x.n} [${x.status}] ${x.fixes} fixes  branch: ${x.branch ?? 'none yet'}  ${x.pr ? `PR #${x.pr} ${x.merged ? 'merged' : 'not merged'}` : x.empty ? 'empty, no PR' : 'no PR'}`) : ['  none queued']),
+    'waves:', ...(w.waves.length ? w.waves.map((x) => `  ${x.n} [${x.status}] ${fixesIn(x)} fixes  branch: ${x.branch ?? 'none yet'}  ${x.pr ? `PR #${x.pr} ${x.merged ? 'merged' : 'not merged'}` : x.empty ? 'empty, no PR' : 'no PR'}`) : ['  none queued']),
     ...openWaves(s).flatMap((x) => waveStatus(run, x)),
     // a hunt round reads its own worktree of every open wave's work; otherwise the newest wave's worktree holds the latest
     `latest work: ${s.stage === 'Hunt' && w.latest && fs.existsSync(w.latest) ? w.latest : [...w.waves].reverse().find((x) => x.worktree && fs.existsSync(x.worktree))?.worktree ?? s.repoRoot}`,
@@ -1308,8 +1319,10 @@ function keepWorktree(s, wt) {
   try {
     // every untracked file, whatever status.showUntrackedFiles says: git worktree remove would delete them
     if (git(wt, 'status', '--porcelain', '--untracked-files=all')) return 'it has uncommitted or untracked files'
-    // git worktree remove deletes ignored files, such as a .env, without asking
-    const ignored = git(wt, 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory').split('\n').filter(Boolean)
+    // git worktree remove deletes ignored files, such as a .env, without asking. A wave's worktree is the sweep's own:
+    // only its agents wrote there, so what it ignores (an environment, caches) can be made again and does not hold it
+    const ofWave = (s.sweep?.waves ?? []).some((w) => w.worktree === wt)
+    const ignored = ofWave ? [] : git(wt, 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory').split('\n').filter(Boolean)
     if (ignored.length) return `it holds ignored files such as ${ignored.slice(0, 2).join(', ')}, so it is left for you`
     if (!branchesOf(s).map((b) => `refs/heads/${b}`).includes(git(wt, 'symbolic-ref', '-q', 'HEAD'))) return `it is not on the run's branch ${s.branch}`
   } catch (e) { return `git could not read it: ${String(e.stderr || e.message).trim().split('\n')[0]}` }
@@ -1352,6 +1365,7 @@ function listItem(cmd, field, statuses, make) {
     const label = words.join(' ')
     if (!id || !label) fail(`Usage: lcw ${cmd} add <id> "<title>"`)
     if (list.some((x) => x.id === id)) fail(`${id} exists`)
+    if (cmd === 'task' && wave?.requirements?.some((r) => r.id === id)) fail(`${id} is one of wave ${wave.n}'s fixes; its tasks are T1, T2 and on, and its fix tasks X1, X2 and on. Nothing was changed.`)
     change(run, `${cmd} ${id} added: ${label}`, () => list.push(make(id, label)), of)
     return out(`${id} added`)
   }
