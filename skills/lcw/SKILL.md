@@ -22,7 +22,7 @@ Your first pick is a guess, made when you know least. Until the human approves t
 
 If the human names a shape, that wins: if you think it is the wrong one, say why and let them decide. If you cannot tell a Build from a Sweep, ask one short question, such as "One change, or should I hunt for every case and fix them in waves?".
 
-`lcw` below means the command line the session-start hook printed (`node <plugin>/scripts/lcw.mjs`). Run it from the shell; from a script, pass each argument that holds spaces or quotes as a `${}` value of the `$` template, since a command with escaped quotes inside a string can be refused. It is how everything is recorded, and the status bar shows only what you record, so record as things happen, not in a batch at the end.
+`lcw` below means the command line the session-start hook printed (`node <plugin>/scripts/lcw.mjs`). Run it from the shell; from a script, pass each argument that holds spaces or quotes as a `${}` value of the `$` template, since a command with escaped quotes inside a string can be refused. It is how everything is recorded, and the status bar shows only what you record, so record as things happen, not in a batch at the end. Once the session is in a Build's worktree, Claude Code refuses a shell command it cannot check stays inside it, from you or from an agent: one it cannot read as plain commands (a shell function, say) with the letters git anywhere in it, even in a ledger line. So keep commands plain, and run git as a command of its own: `git rev-parse HEAD` first, then the ledger line with what it printed.
 
 ## You manage, agents do the work
 

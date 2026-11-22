@@ -40,7 +40,7 @@ A failing test is fixed or reported. It is never deleted, skipped or loosened to
 A slow suite gets run less, and then it guards less. A unit test takes milliseconds and a part's own tests a few seconds.
 
 - **Call the code, not the program.** Starting a process for each check is the usual thief. Keep one or two end-to-end tests for the wiring and test the rest through functions.
-- **No real waiting.** No sleep and no real clock: pass the time in, and step it in the test. Step it in as few moves as the test needs.
+- **No real waiting.** No sleep and no real clock: pass the time in, and step it in the test. Start from a fixed instant, such as noon on a set date, in a fixed time zone where the code reads local time: never the current time, nor one worked out from it, which passes at noon and fails at night. Step it in as few moves as the test needs.
 - **Build a fixture once** where the tests only read it; build it per test only where a test changes it.
 - **Small cases.** Three inputs that differ in kind, not three hundred that differ in number.
 - **Independent, so they can run in parallel.** Each test makes what it needs in its own temporary place and leaves nothing: no shared file, no fixed port, no reliance on order. Turn on the runner's parallel mode where the project allows it.

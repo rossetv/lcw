@@ -21,13 +21,15 @@ lcw req R8 failing
 
 Reviewers never see the ledger, so they challenge decisions made earlier in the run. You hold those decisions and the intent, and every concern gets your call: change the work, or accept it as it is. Weigh a challenge on its merits, not on the fact that a decision was already made: a decision is overturned when the reviewer's point is right. Record each call: `lcw ledger "accepted: <the concern>, because <why>"` for one you keep as it is (the pull request lists those the human would act on), or a fix task for one you change. Something that grows without limit or breaks within months is accepted only for a reason you would defend to the human. An approved example that differs is fixed in the build, never in the example, unless the ledger says why the two cannot match.
 
-If you decided to change anything: `lcw ledger "round <n> fixes start from <git rev-parse HEAD in the run's worktree>"` (in a sweep, with `--wave <n>`), `lcw stage Build`, add a task for each fix (`lcw task add F1 "<fix>" --model sonnet --effort medium`), have them built as stages/build.md says, then `lcw stage Review` and run a new round with fresh reviewers. Your own check waits until a round is clean.
+If you decided to change anything: `lcw ledger "round <n> fixes start from <git rev-parse HEAD in the run's worktree>"` (in a sweep, with `--wave <n>`), `lcw stage Build`, add a task for each fix (`lcw task add F1 "<fix>" --model sonnet --effort medium`), have them built as stages/build.md says, then `lcw stage Review` and run a new round with fresh reviewers.
 
-## Your final check
+When no requirement is failing and every fix of a round is to a code comment, a document for people or a test, the next round has one reviewer (Sonnet, high) in place of the groups' reviewers. Text an agent or a program reads, such as a skill, a prompt or a setting, is behaviour, not a document. Give it each concern with the commit that answers it. It checks each fix against its concern, says if a commit changed anything else, and runs the suites as above. If one did, run a full round.
 
-Only when a round leaves nothing to change: judge the whole against the intent in brainstorm.md. Does it do what the human meant? You do not read the diff or run it yourself. Have a reviewer, or a worker, run the thing as the human would use it and report what it does for each thing they asked for; then compare that report with the brainstorm. This is not a second pass for small things. A real issue you find here goes back to Build like any other, and the next round checks it.
+## Your own check
 
-The review ends when you have made the call on every concern of a round and none needs a change, and your final check finds nothing either. Then:
+Judge the whole against the intent in brainstorm.md. Does it do what the human meant? You do not read the diff or run it yourself. Have a reviewer run the thing as the human would use it, in a throwaway worktree at the round's commit, and report what it does for each thing they asked for; then compare that report with the brainstorm. Launch that reviewer with the second round's, or after the first round when it leaves nothing to change. When it reports: `lcw ledger "own check at <commit>: <what you found>"`. This is not a second pass for small things. A real issue you find here goes back to Build like any other, and the next round checks it. Run it again only when fixes made since that commit change what the thing does for the human: with the round that checks them, and only for what they changed.
+
+The review ends when you have made the call on every concern of a round and none needs a change, and your own check finds nothing either. Then:
 
 ```
 lcw ledger "review passed on round <n>"
@@ -47,7 +49,7 @@ A wave is reviewed once, as a whole, as above. Each reviewer gets charter.md, it
 
 The fix tasks you add to a wave are named X1, X2 and on (`lcw task add X1 "<fix>" ...`), never F ids, which belong to the wave's fixes.
 
-Your final check judges the wave against charter.md and the wave's findings in place of brainstorm.md.
+Your own check judges the wave against charter.md and the wave's findings in place of brainstorm.md.
 
 **Closures, once the review has passed.** No backlog closure is written before this point. When the review passes, `lcw ledger --wave <n> "review passed on round <r>"` and `lcw wave step closures --wave <n>`, then launch one worker (Sonnet, medium) in the wave's worktree to write the wave's closures, once: the rows its passed fixes closed, what is left on a row a fix only partly fixed, the rows its findings showed already fixed, and the items the person's answers closed as decided. Then launch one reviewer (Sonnet, high) with charter.md, findings.md, the fixes with their verdicts from `lcw status` and the closures' commit, to check each closure against that evidence: a row closed only for a fix that passed, partly fixed only for a partial one, already fixed only where findings.md shows it. A wrong closure goes back to a worker, and the reviewer checks again. A wave with nothing to close skips this. If the wave before has moved since the wave took it in, take it in again first (`lcw wave take --wave <n>`): leaving Review is refused until it does. A conflicted take-in here is reviewed as the paragraph on conflicted take-ins above says. Only then does the wave go on to Ship and its final checks:
 
