@@ -121,6 +121,41 @@ export function stallPrompt(due, all) {
   return `LCW: ${what}. Do not keep waiting. Act now as the lcw skill says under "When an agent stalls": ask it once what it is doing; if it has already been asked, or is going round in circles, stop it and give its work to a fresh agent.`
 }
 
+// The API errors that clear on their own; a lost connection is a server_error. Every other kind, and one not known, is left alone.
+const CARRY_KINDS = ['server_error', 'overloaded']
+const CARRY_WAITS = [1, 5, 15, 30].map((m) => m * 6e4)
+const CARRY_FOR = 3 * 60 * 6e4
+
+/**
+ * The main session's turn ended on an API error of this kind: the carry-on with its next try due, waiting 1, 5, 15,
+ * then 30 minutes after each try made so far. Null for a kind that does not clear on its own, and once the next try
+ * would fall more than 3 hours after the first error. carry: {firstAt, kind, tries, dueAt} from before, or null.
+ */
+export function carryFailed(carry, kind, now) {
+  if (!CARRY_KINDS.includes(kind)) return null
+  const c = { firstAt: now, tries: 0, ...carry, kind }
+  const dueAt = now + CARRY_WAITS[Math.min(c.tries, CARRY_WAITS.length - 1)]
+  return dueAt - c.firstAt > CARRY_FOR ? null : { ...c, dueAt }
+}
+
+/**
+ * What a carry-on does now. A try that has fallen due counts, sent or not: it is sent unless blocked (something typed,
+ * a turn running, a run the person paused), else skipped with the next one scheduled. send is the try's number, or 0.
+ */
+export function carryDue(carry, now, blocked) {
+  if (!carry || carry.dueAt == null || now < carry.dueAt) return { carry, send: 0 }
+  if (now - carry.firstAt > CARRY_FOR) return { carry: null, send: 0 }
+  const tries = carry.tries + 1
+  if (blocked) return { carry: carryFailed({ ...carry, tries }, carry.kind, now), send: 0 }
+  return { carry: { ...carry, tries, dueAt: null }, send: tries }
+}
+
+/** The prompt that carries the session on after an API error; Claude Code shows it as a message from the plugin. */
+export function carryPrompt(kind, tries) {
+  const what = kind === 'overloaded' ? 'the API was overloaded' : 'the API connection was lost, or the API had a server error'
+  return `LCW: your last turn ended because ${what}, so your last reply may have stopped part-way. Carry on from where it stopped. This is LCW's try ${tries} to carry the session on by itself.`
+}
+
 /**
  * A row's spans with neighbouring spans of one button gathered: [{id, spans}] or [{spans}]. The buttons have no
  * hotkey, so Claude Code draws no "N: " before them: a click opens them.

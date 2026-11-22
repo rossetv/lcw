@@ -11,6 +11,7 @@ import { readMoney, recordSpend, dropSpend, setBilling } from './lib/money.mjs'
 import { settle } from '../lib/billing.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import { diffOf } from './lib/diff.mjs'
+import { workOf } from '../lib/banner.mjs'
 
 const WEEK_MS = 168 * 3600 * 1000
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -70,6 +71,7 @@ function runFacts(run, ids, now, share) {
     return {}
   }
   const count = (list, status) => (list ?? []).filter((x) => x.status === status).length
+  const { tasks, requirements } = workOf(run.state)
   // The mod's count of quiet and stalled agents stands only while the mod is alive to keep it.
   let agents = null
   try { if (now - Number(fs.readFileSync(run.paths.modAlive, 'utf8').trim()) <= 15000) agents = readJson(run.paths.quiet) } catch {}
@@ -80,10 +82,10 @@ function runFacts(run, ids, now, share) {
     quiet: agents?.quiet ?? 0,
     stalled: agents?.stalled ?? 0,
     share,
-    total: run.state.requirements?.length ?? 0,
-    passing: count(run.state.requirements, 'pass'),
-    failing: count(run.state.requirements, 'failing'),
-    parked: count(run.state.tasks, 'parked'),
+    total: requirements.length,
+    passing: count(requirements, 'pass'),
+    failing: count(requirements, 'failing'),
+    parked: count(tasks, 'parked'),
   }
 }
 
@@ -158,8 +160,11 @@ export async function main({ margin = 5 } = {}) {
     }
     // While the session's run has its worktree, that is where the work is: the bar names the run's branch and
     // counts the run's changes. Without one, it counts the checkout the session is in.
-    const runTree = run?.state.worktree && fs.existsSync(run.state.worktree) ? run.state.worktree : null
-    if (runTree && run.state.branch) mapped.input.branch = run.state.branch
+    // A sweep has no worktree of its own: its latest work is the newest wave's worktree that still exists.
+    const latest = run && Array.isArray(run.state.sweep?.waves) ? [...run.state.sweep.waves].reverse().find((x) => x?.worktree && fs.existsSync(x.worktree)) : null
+    const runTree = latest ? latest.worktree : run?.state.worktree && fs.existsSync(run.state.worktree) ? run.state.worktree : null
+    const runBranch = latest ? latest.branch ?? run.state.branch : run?.state.branch
+    if (runTree && runBranch) mapped.input.branch = runBranch
     try { mapped.input.diff = diffOf(runTree ?? mapped.cwd, home(), now) } catch {}
     const week = usage?.sevenDay
     const live = typeof week?.percentUsed === 'number' && !(week.resetsAt && Date.parse(week.resetsAt) <= now)

@@ -7,7 +7,7 @@ import {
   LEARN_TEXT, awakeApplies, awakeCheckWanted, SHOWN_WITHIN_MS, claudeCommand, markSpell, dismissKeys, discussPrompt, fixSpendPrompt, nextStepOf, pressPlan, resumePrompt, runFact, sameBox,
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue,
 } from '../../hooks/boxes.mjs'
-import { bannerFor } from '../../lib/banner.mjs'
+import { bannerFor, openWaves } from '../../lib/banner.mjs'
 
 const NOW = Date.parse('2026-11-20T12:00:00Z')
 const MIN = 60000
@@ -226,6 +226,13 @@ test('the unfinished run box says it removes a worktree only for a run that has 
   assert.equal(abandon({}), 'Abandon stops it for good.')
 })
 
+test("the unfinished box counts a sweep's wave worktrees, as the sweep has none of its own", () => {
+  const abandon = (waves) => bannerFor({ now: NOW, advisorModel: 'fable', unfinished: unfinishedFact({ dir: '/runs/s2', shownAt: NOW - 3600000,
+    state: { id: 's2', name: 'old-sweep', shape: 'sweep', status: 'running', stage: 'Build', worktree: null, branch: 'lcw/old-sweep', sweep: { waves } } }, '') }).lines.at(-1)
+  assert.match(abandon([{ n: 1, status: 'shipped', worktree: null }, { n: 2, status: 'running', worktree: '/wt/old-sweep-wave-2' }]), /removes its worktrees?;/)
+  assert.doesNotMatch(abandon([{ n: 1, status: 'shipped', worktree: null }]), /worktree/)
+})
+
 test('the approval reaches the boxes only while the run is with the person in its Brainstorm, labels tidied, at most three', () => {
   const state = (over) => ({ id: 'r1', stage: 'Brainstorm', status: 'with-you', approval: { go: [' Go  (a) ', '', 'Go (b)', 'c', 'd'], meaning: '', at: 5 }, ...over })
   assert.deepEqual(runFact(state()).approval, { go: ['Go (a)', 'Go (b)', 'c'], meaning: 'build it as played back', at: 5 })
@@ -310,4 +317,29 @@ test('a run paused at the mark shows the mark box before its questions', () => {
   const run = { ...asking([Q('Q1')]), status: 'paused', pausedReason: 'mark', pausedAt: '2026-11-20T03:00:00Z' }
   const facts = { now: NOW, advisorFlag: true, run: runFact(run), usage: { usedPercent: 76, markPercent: 75, resetsAt: '2026-11-22T14:00:00Z' } }
   assert.equal(bannerFor(facts).kind, 'mark')
+})
+
+test('an unfinished sweep carries every open wave and counts their tasks, not the run-level ones', () => {
+  const fact = (state) => unfinishedFact({ dir: '/runs/s3', shownAt: NOW - 3600000, state: { id: 's3', name: 'backlog', shape: 'sweep', status: 'running', stage: 'Build', ...state } }, '')
+  const f = fact({ tasks: [], sweep: { prs: 'stacked', waves: [
+    { n: 1, status: 'running', stage: 'Ship', step: 'final checks', tasks: [{ status: 'done' }, { status: 'done' }] },
+    { n: 2, status: 'running', stage: 'Build', waiting: true, tasks: [{ status: 'done' }, { status: 'todo' }] },
+    { n: 3, status: 'queued' }] } })
+  assert.deepEqual(f.waves.map((w) => [w.n, w.stage, w.step, w.waiting]), [[1, 'Ship', 'final checks', false], [2, 'Build', null, true]])
+  assert.equal(f.wave, 1)
+  assert.deepEqual([f.done, f.left], [3, 1])
+})
+
+test('a shipped wave is open only while the charter merges as it goes and its pull request is not merged', () => {
+  const waves = (prs, merged) => openWaves({ shape: 'sweep', sweep: { prs, waves: [{ n: 1, status: 'shipped', merged }] } })
+  assert.deepEqual(waves('merged', false).map((w) => [w.stage, w.step]), [['Ship', 'merging']])
+  assert.equal(waves('merged', true).length, 0)
+  assert.equal(waves('stacked', false).length, 0)
+})
+
+test('a 0.4 wave with no stage reads the run-level stage and lists', () => {
+  const [w] = openWaves({ shape: 'sweep', stage: 'Review', tasks: [{ status: 'todo' }], requirements: [{ status: 'pass' }], sweep: { waves: [{ n: 1, status: 'running' }] } })
+  assert.equal(w.stage, 'Review')
+  assert.equal(w.tasks.length, 1)
+  assert.equal(w.requirements.length, 1)
 })

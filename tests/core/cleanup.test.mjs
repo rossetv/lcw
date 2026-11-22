@@ -363,3 +363,15 @@ test('a worktree whose folder was deleted by hand is offered, with its branch wh
   assert.deepEqual(branches(repo).sort(), ['main', 'wip'])
   assert.deepEqual(git(repo, 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).map((l) => l.slice(9)).sort(), [repo, loose].sort())
 })
+
+test('a live sweep keeps every wave worktree, open or shipped; an ended one frees them', () => {
+  const repo = makeRepo()
+  const h = tmp('home')
+  const [open, shipped, other] = ['lcw/s-wave-1', 'lcw/s-wave-2', 'lcw/t-wave-1'].map((b) => { git(repo, 'branch', b); return worktree(repo, b) })
+  const waves = [{ n: 1, status: 'shipped', worktree: shipped }, { n: 2, status: 'running', stage: 'Build', worktree: open }]
+  runState(h, repo, 'r-sweep', { status: 'running', shape: 'sweep', worktree: null, sweep: { waves } })
+  runState(h, repo, 'r-done', { status: 'finished', shape: 'sweep', sweep: { waves: [{ n: 1, status: 'shipped', worktree: other }] } })
+  const listed = names(candidates(repo, h))
+  assert.ok(listed.includes(`worktree:${other}`))
+  assert.ok(!listed.includes(`worktree:${open}`) && !listed.includes(`worktree:${shipped}`))
+})

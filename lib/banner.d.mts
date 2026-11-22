@@ -53,7 +53,7 @@ export interface BannerFacts {
   /** lastError: the stored phrase for what went wrong ('printed "401 Unauthorized"', 'took longer than 30 s'). */
   spendFailing?: { fails: number; since?: Time; lastError?: string | null } | null
   /** name is the run's name; title the one line it was started with ("Add a CSV export ..."); milestone as Build records it ("2 of 3"). Without name, title is the name. */
-  unfinished?: { id: string; name?: string; title: string; stage?: string; milestone?: string | number; wave?: number; done?: number; left?: number; nextStep?: string; stoppedAt?: Time; worktree?: boolean; branch?: boolean } | null
+  unfinished?: { id: string; name?: string; title: string; stage?: string; milestone?: string | number; wave?: number; waves?: { n: number; stage?: string; step?: string | null; waiting?: boolean }[]; done?: number; left?: number; nextStep?: string; stoppedAt?: Time; worktree?: boolean; branch?: boolean } | null
   sleep?: { canHold?: boolean; heldByOther?: boolean } | null
   update?: {
     running?: string
@@ -78,3 +78,11 @@ export function approveKey(run: BannerRun & { approval: NonNullable<BannerRun['a
 /** overCard: a run's card is drawn under it, at the full cols, so the box is as wide. */
 /** tight: the approval box without its plain line, for where the full one does not fit. */
 export function bannerRows(banner: Banner | null, cols: number, overCard?: boolean, tight?: boolean): Row[]
+
+export type OpenWave = { n: number; stage: string; step: string | null; waiting: boolean; worktree?: string; tasks: any[]; requirements: any[] }
+/** Whether a wave of a sweep's state is open: running, or shipped and unmerged while the charter merges as it goes, never an empty one. */
+export function isOpenWave(state: any, wave: any): boolean
+/** The open waves of a sweep (running, or shipped and awaiting its merge), each with its own lists; none for a build. */
+export function openWaves(state: any): OpenWave[]
+/** The tasks and requirements a run stands on: the open waves' added up in a sweep, else the run's own. */
+export function workOf(state: any): { tasks: any[]; requirements: any[] }

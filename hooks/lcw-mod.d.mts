@@ -49,3 +49,7 @@ export function nudgeable(state: any): boolean
 export function stallNudges(agents: readonly CardAgent[] | undefined, nudged: Nudged | undefined, now: number, stalledMs?: number, againMs?: number):
   { due: (CardAgent & { times: number })[]; nudged: Nudged }
 export function stallPrompt(due: readonly (CardAgent & { times: number })[], all: readonly CardAgent[] | undefined): string
+export type Carry = { firstAt: number; kind: string; tries: number; dueAt: number | null }
+export function carryFailed(carry: Carry | null | undefined, kind: string, now: number): Carry | null
+export function carryDue(carry: Carry | null | undefined, now: number, blocked: boolean): { carry: Carry | null | undefined; send: number }
+export function carryPrompt(kind: string, tries: number): string

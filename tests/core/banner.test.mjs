@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { bannerFor, bannerRows } from '../../lib/banner.mjs'
+import { bannerFor, bannerRows, openWaves } from '../../lib/banner.mjs'
 import * as S from './banner-samples.mjs'
 import { runFact } from '../../hooks/boxes.mjs'
 
@@ -346,4 +346,21 @@ test("the unfinished run box says which wave a sweep was in, and a build's miles
   assert.match(text({ wave: 2 }), /in Build, wave 2: 14 tasks done, 6 left\./)
   assert.doesNotMatch(text({ wave: 2 }), /milestone 2/)
   assert.match(text({}), /in Build, milestone 2 of 3: /)
+})
+
+test('the unfinished run box names every open wave in the status bar words', () => {
+  const text = (waves) => bannerFor({ ...S.F, unfinished: { ...S.F.unfinished, wave: waves[0].n, waves } }).lines.join(' ')
+  const t = text([{ n: 1, stage: 'Ship', step: 'final checks' }, { n: 2, stage: 'Build' }])
+  assert.match(t, /with wave 1 in its final checks, wave 2 building: /)
+  assert.match(text([{ n: 1, stage: 'Ship', step: 'merging' }, { n: 2, stage: 'Build', waiting: true }]), /wave 1 merging, wave 2 waits on your answer/)
+  assert.match(text([{ n: 1, stage: 'Review', step: 'closures' }, { n: 2, stage: 'Build' }]), /wave 1 on its closures, wave 2 building/)
+  assert.match(text([{ n: 1, stage: 'Ship' }, { n: 2, stage: 'Build' }]), /wave 1 with its final checks next, wave 2 building/)
+  assert.match(text([{ n: 1, stage: 'Review' }, { n: 2, stage: 'Build' }]), /with wave 1 in review, wave 2 building: /)
+  assert.doesNotMatch(t, /shipped|running/)
+})
+
+test('a shipped wave waiting on its merge is open, but an empty one with no pull request is not', () => {
+  const state = (w) => ({ shape: 'sweep', stage: 'Hunt', sweep: { prs: 'merged', waves: [{ n: 1, status: 'shipped', merged: false, ...w }] } })
+  assert.deepEqual(openWaves(state({ pr: 4 })).map((w) => w.n), [1])
+  assert.deepEqual(openWaves(state({ empty: true })), [])
 })

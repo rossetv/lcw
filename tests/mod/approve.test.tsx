@@ -116,6 +116,16 @@ test("a sweep's question stays in a short window, with the card giving way", asy
   await short.unmount()
 })
 
+test('a slash command from the person leaves the box showing', async ($, on) => {
+  const w = engine(on, approving())
+  await start($)
+  await $.prompt.submit({ text: '/model', command: { name: 'model', args: '' } } as any)
+  await w.clock.advance(2000)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeDefined()
+  await band.unmount()
+})
+
 test('a prompt the person sends ends the box', async ($, on) => {
   const w = engine(on, approving())
   await start($)

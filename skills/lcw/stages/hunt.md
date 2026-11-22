@@ -1,16 +1,16 @@
 # Hunt
 
-Each round of a sweep starts here: probes look for problems in the areas the charter names, and you sort what they find. Entering Hunt adds one to the round. You do not read code: probes do, and they report.
+Each round of a sweep starts here: probes look for problems in the areas the charter names, and you sort what they find. Entering Hunt adds one to the round. A later round starts with `lcw stage Hunt` once no wave is queued and every open wave is holding in Ship; it does not wait for their final checks or merges, which go on alongside it (stages/ship.md). You do not read code: probes do, and they report.
 
-`lcw set health="hunting, area by area"` in round 1, `health="hunting again, round <n>"` in a later one. Read charter.md and, in a later round, findings.md, both in the run folder.
+`lcw set health="hunting, area by area"` in round 1, `health="hunting again, round <n>; <each open wave and what it does>"` in a later one, such as `health="hunting again, round 2; wave 3 in its final checks"` (SKILL.md). Read charter.md and, in a later round, findings.md, both in the run folder.
 
 ## Which areas
 
 In round 1, every area the charter names.
 
-In a later round, only an area that had a finding sorted to Fix in the round before, or that a wave has changed since. An area that came up clean, or whose findings were all parked or dropped, and that no wave changed, is not hunted again. While a stop line that counts fixes is not met, a later round also hunts the charter's items or areas that no round has hunted yet. To see what the waves changed, take the commit the last round read (findings.md records it) and run `git diff --name-only <that commit> lcw/<name>`; an area whose files are in that list has changed.
+In a later round, only an area that had a finding sorted to Fix in the round before, or that a wave has changed since. An area that came up clean, or whose findings were all parked or dropped, and that no wave changed, is not hunted again. While a stop line that counts fixes is not met, a later round also hunts the charter's items or areas that no round has hunted yet. To see what the waves changed, take the commit the last round read (findings.md records it) and run `git -C <latest work> diff --name-only <that commit> HEAD`; an area whose files are in that list has changed.
 
-Probes read the code where the sweep stands: the main checkout in round 1, before the sweep has a worktree; `lcw/<name>` in its worktree after that. Start the round's heading in findings.md with the commit they read (`git rev-parse HEAD` there).
+Probes read the code where the sweep stands: the `latest work` path `lcw status` prints, which is the main checkout in round 1. With waves open, `lcw stage Hunt` makes it a worktree holding every open wave's work, and prints it as `latest work:`. If that line says it holds only the newest wave's tip, tell the probes which wave's later work it lacks. Start the round's heading in findings.md with the commit they read (`git -C <latest work> rev-parse HEAD`).
 
 ## Sending the probes
 
@@ -52,7 +52,7 @@ findings.md holds every finding with its recipe and its sort, round by round, an
 lcw hunt --fix 151 --park 14 --drop 21
 ```
 
-Then `lcw set health="sorted against the charter"`.
+Then `lcw set health="sorted against the charter; <each open wave and what it does>"`, naming the open waves as above.
 
 Then put to the human, in LCW's box, each parked item that a short answer would settle and that would be small to fix once answered: a yes or no, or a choice between two or three ways. Not every parked item: one that needs a long discussion, a schema or a no-go zone stays in parked.md only. For each:
 
@@ -66,9 +66,9 @@ Show the sorted list in the conversation, short: what goes to Fix, area by area;
 
 ## Waves
 
-If nothing was sorted to Fix, the sweep is over: go to "Ending the sweep" below.
+If nothing was sorted to Fix, the sweep is over: once every open wave has shipped (stages/ship.md), go to "Ending the sweep" below.
 
-Otherwise group the fixes into waves of about the charter's size. Within a wave, group the fixes by area, and choose areas that touch different files, so they can be built at the same time. Write each wave in findings.md (its number, its fixes by id, its areas), and queue them, one count of fixes for each wave, in the order they will run:
+Otherwise group the fixes into waves of about the charter's size. Within a wave, group the fixes by area, and choose areas that touch different files, so they can be built at the same time. Write each wave in findings.md (its number, its fixes by id, its areas), and queue them, one count of fixes for each wave, in the order they will run; this works while earlier waves still hold in Ship:
 
 ```
 lcw wave add 25 25 24 26 25 26
@@ -77,15 +77,14 @@ lcw wave add 25 25 24 26 25 26
 Say in a line how many waves are queued and what the first one holds. Then:
 
 ```
-lcw stage Plan
-lcw checkpoint "Plan: read stages/plan.md and start wave <n>"
+lcw checkpoint "wave <n>: Plan, read stages/plan.md and start it; <each open wave and where it stands>"
 ```
 
 and do as it says (SKILL.md, Compaction).
 
 ## Ending the sweep
 
-The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix. A stop line that counts fixes counts what the charter's goals line calls done, which is `fixed` in `lcw status`: a partly fixed fix is not one, so the sweep goes on to find a replacement. It ends short of the count only when a round finds nothing more to fix, and says why. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it.
+The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix. A stop line that counts fixes counts what the charter's goals line calls done, which is `fixed` in `lcw status`: a partly fixed fix is not one, so the sweep goes on to find a replacement. It ends short of the count only when a round finds nothing more to fix, and says why. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it. The sweep ends with no wave open: a wave still open is taken through its Ship first, and no queued wave starts. A wave held at merging on the human's answer about its push, and each wave after it at merging, is recorded shipped with no pull request, in order (`lcw wave shipped --wave <n>`), and stays unpushed.
 
 Before you report, settle the pull requests as the charter's PRs line says. Whichever it is, run `lcw status` just before `lcw finish` and keep what it prints, the totals and each wave's pull request: once the run is finished, the session is no longer bound to it.
 
@@ -107,8 +106,8 @@ Before you report, settle the pull requests as the charter's PRs line says. Whic
 - **one at the end**: if any wave shipped with commits (`git rev-list --count <default branch>..lcw/<name>` prints more than 0), push the sweep's branch (`git push -u origin lcw/<name>`), load the `lcw:pull-request` skill and write the one draft pull request for everything as it says, open it against the default branch (`gh pr create --draft --head lcw/<name> --base <default branch> --title "<title>" --body-file <file>`), and `lcw finish --pr <url>`. With no GitHub remote or no way to push, `lcw finish --branch lcw/<name>`, tell the human the work is on `lcw/<name>` and why there is no pull request, and put the text in the conversation, as stages/ship.md says. If none did, there is nothing to open: `lcw finish`, and the report says no pull request was opened because no wave changed anything.
 - **stacked**: `lcw finish`.
 
-In stacked or merged as it goes, a wave whose push still waits on the human's answer ends the sweep unpushed, with every wave after it: the report says so, and clean-up's checks keep the worktree and its branches.
+In stacked or merged as it goes, a wave whose push still waits on the human's answer ends the sweep unpushed, with every wave after it: the report names each as unpushed, and clean-up's checks keep its branches and any worktree still there.
 
-Then clean up as stages/ship.md says under "Afterwards: clean up", for the sweep's worktree and its local branches.
+Then clean up as stages/ship.md says under "Afterwards: clean up", for the waves' worktrees still there and the sweep's local branches.
 
 Tell the human, short, from what `lcw status` printed and findings.md (with each question still open in LCW's box, and each answered but never acted on, as `lcw question` lists them; both stay in parked.md, the answer beside it): what was fixed, area by area, not only how many; what was parked and what was dropped; at an earlier end with waves still queued, the fixes queued and not built; which pull requests exist and in what state (open as drafts, merged, or left open, and why); and where parked.md is.

@@ -60,11 +60,11 @@ Only you consult the advisor. Agents never do, and their own files tell them so:
 
 ## Starting, or carrying on
 
-If the session-start context named a run for this session, or you were just compacted, or the session restarted: run `lcw status`, read the stage file for the stage it shows, and carry on from its next step and the ledger. For a sweep, `lcw status` also shows the charter's pull request choice, the round, each wave (shipped, running or queued) and the totals; with charter.md, that is all you need to carry on. Once the run has a worktree (`lcw status` shows it), make sure you are working in it; if not, call EnterWorktree with its path first. If `lcw status` shows the run paused by the human, it stays paused until they say carry on: do not resume it yourself. Do not start again and do not ask the human what was happening.
+If the session-start context named a run for this session, or you were just compacted, or the session restarted: run `lcw status`, read the stage file for the stage it shows, and carry on from its next step and the ledger. For a sweep, `lcw status` also shows the charter's pull request choice, the round, each wave (shipped, running or queued), the totals, each open wave's stage, worktree, review range, plan and lists, and the latest work; with charter.md and each open wave's ledger, that is all you need to carry on every open wave. Once a Build has a worktree (`lcw status` shows it), make sure you are working in it; if not, call EnterWorktree with its path first. A sweep has no worktree of its own: see "The stages". If `lcw status` shows the run paused by the human, it stays paused until they say carry on: do not resume it yourself. Do not start again and do not ask the human what was happening.
 
 Otherwise start a run: `lcw start <name> --title "<one line>"` for a Build, `lcw start <name> --title "<one line>" --shape sweep` for a Sweep, where name is a short kebab-case slug of the change (it becomes the branch `lcw/<name>`). It prints the run folder, the paths of its records (below) and the artifacts folder.
 
-One session drives one run, of either shape, and `lcw start` refuses while the session drives an unfinished run. A sweep lives in this open session for all its waves; nothing carries it on in the background. For a second run at the same time, a Build or a Sweep, tell the human to open another session and ask there. A new session in the same repository takes a run over only when the person presses Resume on LCW's unfinished-run box (`lcw take <runId>`); then carry on from the run's next step in its worktree, as above.
+One session drives one run, of either shape, and `lcw start` refuses while the session drives an unfinished run. A sweep lives in this open session for all its waves; nothing carries it on in the background. For a second run at the same time, a Build or a Sweep, tell the human to open another session and ask there. A new session in the same repository takes a run over only when the person presses Resume on LCW's unfinished-run box (`lcw take <runId>`); then carry on from the run's next step, as above.
 
 ## The stages
 
@@ -81,7 +81,9 @@ A Build: Brainstorm, Spec, Plan, Build, Review, Ship. A Sweep: Charter, Hunt, th
 | Review | a review round leaves nothing you decide to change |
 | Ship | the draft pull request is open |
 
-In a sweep, the last four rows hold for each wave, with its own plan, and Ship ends when the wave has landed on the sweep's branch `lcw/<name>`. Then the next queued wave starts at Plan, or, with none queued, a new round starts at Hunt.
+In a sweep, the last four rows hold for each wave, with its own plan, worktree and ledger, and Ship ends when the wave has landed on the sweep's branch `lcw/<name>`. Waves overlap: the next queued wave starts at Plan once the wave before it is built, while fewer than two are being built or reviewed, so several can be open at once, each at its own stage. Each time a wave enters Review or Ship, ships or merges, see whether the next may start (stages/plan.md). With none queued and every open wave holding in Ship, a new round starts at Hunt (stages/hunt.md). Read the stage file of each stage an open wave is in.
+
+In a sweep the session stays in the repository's main checkout and never calls EnterWorktree. Each open wave works in its own worktree, which `lcw wave start` prints and `lcw status` shows. Every brief names the worktree of the wave it serves, and no agent writes in the main checkout. In the stage files, the run's worktree means the wave's. With several waves open, `lcw` refuses a command about one wave (stage, task, req, set plan.* or milestone, and the wave commands) unless you pass `--wave <n>`, or it runs inside a wave's worktree, which means that wave. With several open, `lcw ledger` and `lcw ask` without `--wave` are the run's own, so a line or an ask about one wave takes `--wave <n>`.
 
 ## Records
 
@@ -89,7 +91,7 @@ The run folder lives outside the repository (under ~/.lcw), so nothing in it is 
 
 The ledger is how a later you knows what was done and what is left. Every command that changes state adds a line; add your own with `lcw ledger "<text>"` for each decision you make on the human's behalf, with its reason.
 
-Keep `health` current with a few plain words of what is happening, such as `lcw set health="on track"` or `lcw set health="2 tasks wait on your answer, the rest carry on"`. Leave times out of it; the bar shows those. In a sweep, while an ask about an earlier wave is open, every `lcw set health` keeps "wave <m> waits on your answer; " in front of its words; after `lcw answer`, set the words again without it.
+Keep `health` current with a few plain words of what is happening, such as `lcw set health="on track"` or `lcw set health="2 tasks wait on your answer, the rest carry on"`. Leave times out of it; the bar shows those. In a sweep, health names each open wave and what it is doing, such as `lcw set health="wave 1 in its final checks, wave 2 in review, wave 3 building"`; a stage file's words are its own wave's part. While an ask about a wave is open, that wave comes first, with what the others do: `health="wave 1 waits on your answer; wave 2 carries on"`. After `lcw answer`, set the words again without it.
 
 ## Compaction
 
@@ -99,7 +101,7 @@ Checkpoint at the end of every stage after the brainstorm or the charter (when t
 - From 200K, the call is yours. `lcw checkpoint --compact` when a fresh start serves the next step better: end your turn, and after the compaction you are prompted with the next step. `lcw checkpoint --keep "<why>"` when the next step needs what is in view, such as the findings a fix round is about to act on; carry on, as under 200K. Weigh it as the one who answers for the run: every turn re-reads the whole context, so 500K costs five times what 100K does on each one, and a compaction keeps only what the records hold. Above 200K, `lcw stage`, `set` and `status` remind you of the size.
 - Near the window's end (80% of it), or when lcw cannot see the size, it compacts: end your turn.
 
-`lcw checkpoint --compact "<next step>"` compacts at any size, when you judge a fresh start is better. Write the next step so that a fresh you, with only `lcw status` and this skill, could act on it.
+`lcw checkpoint --compact "<next step>"` compacts at any size, when you judge a fresh start is better. Write the next step so that a fresh you, with only `lcw status` and this skill, could act on it. In a sweep it names each open wave and where it stands, with its running agents' ids: "wave 1: final checks running, agent <id>; wave 2: Review round 1, reviewers <ids>".
 
 ## Agents
 
@@ -107,7 +109,7 @@ Launch agents with the Agent tool and never give one a name, and do not run the 
 
 In Code Mode a launch from a script returns at once, even when you await it: the result says `async_launched` and gives the agent's id, and the agent's report comes later, as a task notification in a turn of its own. So launch the agents that go together (a milestone's workers, a round's reviewers) in one script, keep each id, and end your turn; act on each report as its notification arrives, since the notification carries the report. Do not wait for them inside a script or read their output files.
 
-What the human says to any agent counts. Ask every agent to report anything the human told it. If that changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements (`lcw req add`, `lcw req <id> rename "<name>"`, `lcw req <id> drop`), and tell the agents it affects; otherwise it only steered that agent.
+What the human says to any agent counts. Ask every agent to report anything the human told it. If that changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements (`lcw req add`, `lcw req <id> rename "<name>"`, `lcw req <id> drop`, with `--wave <n>` for a fix of a shipped wave), and tell the agents it affects; otherwise it only steered that agent.
 
 ## When an agent stalls
 
@@ -119,6 +121,10 @@ LCW tells you when an agent has run for fifteen minutes without moving, and the 
 4. `lcw ledger "<the agent> stalled on <its work>: <what you did>"`.
 
 Where an extra orchestrator launched the stalled agent, send that orchestrator the same news first; step in yourself if it does not act.
+
+An agent whose work ended on an error that clears on its own (its report or notification ends on a lost connection, an overloaded API or a server error) has not failed. Tell it to carry on, SendMessage to its id: its work was cut off, and it carries on from where it stopped. Do not start the work again with a fresh agent. A rate limit clears on its own too: start a background wait that notifies when done (a Bash `sleep 300` with run_in_background; a foreground sleep is refused), then carry the agent on the same way with SendMessage when it ends, or at the next agent report if that comes first. A usage limit is the session's, so launch nothing and do what stages/build.md says at the mark (`lcw pause mark`) rather than starting the work again. Only an authentication error, a prompt that is too long or two failed carry-ons call for the steps above. Use TaskStop only for an agent still running; one whose turn has ended needs no stop.
+
+Where an extra orchestrator reports a rate-limited agent, wait for the limit to clear with that background wait, then SendMessage the orchestrator, not the worker, to carry that agent on: it still learns the task finished and launches its milestone check.
 
 ## Asking the human
 
@@ -132,7 +138,7 @@ Where the spec and the brainstorm, or the charter, leave something open that is 
 
 Go to the human in three cases: something they agreed in the brainstorm or the charter cannot be done as agreed, and you cannot get past it yourself (a thing that turns out impossible, so the intent itself has to change, or that cannot be built without what only they can give, such as a credential, an account or a payment); an X or Y you cannot settle from their intent; and a risky, hard-to-undo step, before you take it. In a sweep, a finding only the human can decide is parked, not asked; one a short answer would settle is also put to them in LCW's box (`lcw question`, stages/hunt.md), and nothing waits on the answer. A prompt from them that starts "Your call on Q82:" is their own answer to that question: record it at once, `lcw question Q82 answer "<their words>"`, and carry on; the next wave's Plan acts on it.
 
-Then use `lcw ask "<the question, why it is theirs, and the ways out you see with your recommendation>" --waiting <number of tasks waiting>`, say it in the conversation too, and carry on with everything that does not depend on it. Several asks are numbered, oldest first, and the human answers by number in plain words; record each with `lcw answer <n> "<answer>"`. If the answer changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements as above.
+Then use `lcw ask "<the question, why it is theirs, and the ways out you see with your recommendation>" --waiting <number of tasks waiting>`, say it in the conversation too, and carry on with everything that does not depend on it. In a sweep, an ask about one wave adds `--wave <n>`: that wave waits, and the other waves carry on. Several asks are numbered, oldest first, and the human answers by number in plain words; record each with `lcw answer <n> "<answer>"`. If the answer changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements as above.
 
 ## What the human can say at any time
 

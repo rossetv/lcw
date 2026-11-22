@@ -216,7 +216,9 @@ test('the mascot worries within five points of the usage mark and cries once the
   const face = (used) => {
     const input = JSON.stringify({ session_id: 'pet-' + used, cwd: tmp('cwd'), rate_limits: { seven_day: { used_percentage: used, resets_at: now / 1000 + 3 * 86400 } } })
     // Only the creature's cells at the start of each row: the folder name further along can hold a T too.
-    const out = bare(line(input, { env: { LCW_NOW: String(now), TZ: 'UTC' } }).out) // the creature yawns at night, local time.split('\n').map((row) => [...row].slice(0, 6).join('')).join('\n')
+    // TZ is pinned because the creature yawns at night, local time.
+    const whole = bare(line(input, { env: { LCW_NOW: String(now), TZ: 'UTC' } }).out)
+    const out = whole.split('\n').map((row) => [...row].slice(0, 6).join('')).join('\n')
     return (out.match(/T/g) ?? []).length === 2 ? 'crying' : /ó/.test(out) && /ò/.test(out) ? 'worried' : 'neither'
   }
   assert.equal(face(60), 'neither') // the mark is 75 unless the person moves it
@@ -302,6 +304,18 @@ test("during a run with a worktree, the bar names the run's branch and counts th
 })
 
 
+test("during a sweep, the bar names the newest wave's branch and counts its worktree's changes", () => {
+  const { home, dir, input } = startRun(10)
+  const repo = JSON.parse(input).cwd
+  const plain = () => line(input, { home }).out.replace(/\x1b\[[0-9;]*m/g, '').split('\n')[0]
+  const tree = lcw(['worktree'], { home, cwd: repo, session: 's1' }).out.trim()
+  fs.writeFileSync(tree + '/new.txt', 'a\nb\n')
+  const state = readJson(dir + '/state.json')
+  const waves = [{ n: 1, status: 'shipped', worktree: '/gone/wave-1', branch: 'lcw/demo-wave-1' }, { n: 2, status: 'running', worktree: tree, branch: 'lcw/demo-wave-2' }]
+  fs.writeFileSync(dir + '/state.json', JSON.stringify({ ...state, shape: 'sweep', worktree: null, sweep: { prs: 'stacked', waves } }))
+  assert.match(plain(), /· lcw\/demo-wave-2\s+│\s+\+2$/)
+})
+
 test('two runs in one repository: each session counts and names only its own run', () => {
   const repo = makeRepo()
   const home = tmp('home')
@@ -324,4 +338,22 @@ test('the status line saves its session\'s context size for lcw checkpoint', () 
   const saved = readJson(`${home}/cache/context-ctx1.json`)
   assert.equal(saved.tokens, 310_000)
   assert.equal(saved.window, 1_000_000)
+})
+
+test('the mascot counts the open waves of a sweep, not the empty run-level lists', () => {
+  const { home, dir, input } = startRun(10)
+  const state = readJson(dir + '/state.json')
+  // A fixed noon, so the yawns of the small hours cannot change the face, and only the creature's own cells: the rest
+  // of the line (times, folder names) can hold a T too.
+  const env = { LCW_NOW: String(Date.UTC(2026, 10, 19, 12)), TZ: 'UTC' }
+  const face = () => (bare(line(input, { home, env }).out).split('\n').map((row) => [...row].slice(0, 6).join('')).join('\n').match(/T/g) ?? []).length
+  const baseline = face()
+  const sweep = { ...state, shape: 'sweep', stage: 'Build', tasks: [], requirements: [], sweep: { prs: 'stacked', waves: [
+    { n: 1, status: 'shipped', merged: false, requirements: [{ id: 'R1', status: 'failing' }], tasks: [] },
+    { n: 2, status: 'running', stage: 'Build', tasks: [{ id: 'T1', status: 'todo' }], requirements: [{ id: 'R1', status: 'pass' }] }] } }
+  fs.writeFileSync(dir + '/state.json', JSON.stringify(sweep))
+  assert.equal(face(), baseline, 'a failing requirement of a wave that is not open does not count')
+  sweep.sweep.waves[1].requirements.push({ id: 'R2', status: 'failing' })
+  fs.writeFileSync(dir + '/state.json', JSON.stringify(sweep))
+  assert.ok(face() > baseline, 'a failing requirement of an open wave makes it cry')
 })
