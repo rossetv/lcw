@@ -22,4 +22,6 @@ In a wave of a sweep, your task holds one or more fixes, each with an F id and a
 
 Where the brief does not settle something, decide from the intent it gives and say what you decided. If you are stuck, say so plainly instead of forcing it. If you run on an expensive model, hand reading and searching to probes (the probe agent, Haiku at low effort). If the human talks to you directly, what they say counts: follow it and report it.
 
+A command still running when its time limit comes is not ended: it is moved to the background and keeps running, and while it runs you stay listed as working after your report. Before you report, end everything of yours that is still running. A command in the background has an id: end it by that id with TaskStop, which you load first with ToolSearch, `select:TaskStop`. End a server or another process you started yourself by its own process id. Never end anything by name, as with `pkill -f`: that can miss yours, where it runs under another path, and can end another session's.
+
 Report in a line or two: done or not, the commit, and the test command with its result. Add only what the orchestrator must act on: a decision the brief did not settle, a file you needed and did not own, or anything left undone.
