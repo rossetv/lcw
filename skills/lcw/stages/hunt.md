@@ -24,7 +24,7 @@ List the round's parts in findings.md, then launch the probes in batches of up t
 lcw hunt --areas 36 --hunted 14 --running 6 --findings 23
 ```
 
-Write each report into findings.md under its part as it arrives, so after a compaction you can see which parts have reported. A report with no recipe is not a finding: ask the probe for what is missing, and if it cannot say, leave it out. A finding already parked or dropped in an earlier round is not sorted again; one written in during a wave (what a partly fixed fix left) is sorted with this round's, and so is each question answered and not yet used (`lcw question`), as plan.md's step 3 says.
+Write each report into findings.md under its part as it arrives, so after a compaction you can see which parts have reported. A report with no recipe is not a finding: ask the probe for what is missing, and if it cannot say, leave it out. A finding already parked or dropped in an earlier round is not sorted again; one written in during a wave (what a partly fixed fix left, or a concern its review sent on because the wave had not changed it) is sorted with this round's, and so is each question answered and not yet used (`lcw question`), as plan.md's step 3 says.
 
 ## Sorting
 
@@ -68,7 +68,7 @@ Show the sorted list in the conversation, short: what goes to Fix, area by area;
 
 If nothing was sorted to Fix, the sweep is over: once every open wave has shipped (stages/ship.md), go to "Ending the sweep" below.
 
-Otherwise group the fixes into waves of about the charter's size. Within a wave, group the fixes by area, and choose areas that touch different files, so they can be built at the same time. Write each wave in findings.md (its number, its fixes by id, its areas), and queue them, one count of fixes for each wave, in the order they will run; this works while earlier waves still hold in Ship:
+Otherwise group the fixes into waves of about the charter's size. Within a wave, group the fixes by area, and choose areas that touch different files, so they can be built at the same time. Order the waves so that each touches different files from the wave before it, where the fixes allow, such as a backend wave and then a UI wave: the next wave starts while this one is still in review, and takes no fix that needs a file this one changed (stages/plan.md), so two waves in a row on the same files run one after the other. Where two waves must share files, put a wave that shares none between them. Write each wave in findings.md (its number, its fixes by id, its areas), and queue them, one count of fixes for each wave, in the order they will run; this works while earlier waves still hold in Ship:
 
 ```
 lcw wave add 25 25 24 26 25 26
