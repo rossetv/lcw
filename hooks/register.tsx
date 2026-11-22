@@ -11,10 +11,10 @@ import { hex } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep,
-  nudgeable, quietCounts, reopenDue, reopenPrompt, resumePrompt, retryGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
+  longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, resumePrompt, retryGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
   wakeable, wakeDue, wakePrompt,
 } from './lcw-mod.mjs'
-import type { CardAgent, Carry, Nudged, Row, Seen, Span, Totals } from './lcw-mod.mjs'
+import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
   AWAKE_EVERY_MS, RUNS_EVERY_MS, awakeApplies, awakeCheckWanted, claudeCommand, dismissKeys, markSpell, pressPlan, runFact, said, sameBox, spendFailingFact,
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue, weeklyIdle,
@@ -40,6 +40,7 @@ const S = {
   agents: [] as CardAgent[],
   seen: {} as Seen,
   nudged: {} as Nudged,
+  told: {} as Told,
   quiet: null as { quiet: number; stalled: number } | null,
   totals: {} as Partial<Totals>,
   totalsChanged: false,
@@ -174,6 +175,7 @@ async function refresh($: EngineInterface) {
     S.agents = []
     S.seen = {}
     S.nudged = {}
+    S.told = {}
     S.hideRows = false
     return
   }
@@ -216,11 +218,15 @@ async function pollAgents($: EngineInterface) {
     S.quiet = quiet
     await $.fs.write(run.paths.quiet, JSON.stringify({ ...quiet, at: now })).catch(() => {})
   }
-  // A stalled agent is the orchestrator's to deal with: tell the main loop, which acts once it is idle.
+  // An agent that has stalled, or been long at work, is the orchestrator's to look at: tell the main loop, which acts
+  // once it is idle. Who was told of long work is kept through a pause, so nobody is told twice.
   if (nudgeable(run.state)) {
     const stall = stallNudges(S.agents, S.nudged, now)
     S.nudged = stall.nudged
-    if (stall.due.length) submitSoon($, stallPrompt(stall.due, S.agents))
+    const long = longNudges(S.agents, S.told)
+    S.told = long.told
+    const due = [...stall.due, ...long.due]
+    if (due.length) submitSoon($, stallPrompt(due, S.agents))
   } else S.nudged = {}
   const totals = addTotals(S.totals, list, run.state.createdAt ?? 0)
   if (totals.agents !== S.totals.agents || totals.tokens !== S.totals.tokens) S.totalsChanged = true

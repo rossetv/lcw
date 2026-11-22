@@ -47,7 +47,7 @@ function engine(on: any, status: string, agents: { list: unknown[] }) {
       await new Promise((r) => setTimeout(r, 20))
     }
   }
-  return { pass, prompts }
+  return { pass, prompts, files }
 }
 
 const start = ($: any) => $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -74,4 +74,65 @@ test('a stalled agent of a paused run is not reported', async ($, on) => {
   await start($)
   await paused.pass(40)
   expect(paused.prompts.length).toBe(0)
+})
+
+test('an agent that reported and is still listed fifteen minutes later is reported in words of its own', async ($, on) => {
+  const w = engine(on, 'running', { list: [worker({ status: 'waiting', taskStatus: 'completed' })] })
+  await start($)
+  await w.pass(14)
+  expect(w.prompts.length).toBe(0)
+  await w.pass(2)
+  expect(w.prompts.length).toBe(1)
+  for (const fact of [/Add date filters/, /id a1/, /gave its report 16 minutes ago/, /Do not message it/, /TaskStop with its id/]) expect(w.prompts[0]).toMatch(fact)
+  expect(/When an agent stalls/.test(w.prompts[0] ?? '')).toBe(false)
+})
+
+test('an agent that waits on an agent it launched is not held, and one whose turn ran again is held from its new end', async ($, on) => {
+  const parent = worker({ id: 'o1', status: 'waiting', taskStatus: 'completed' })
+  const agents = { list: [] as unknown[] }
+  const w = engine(on, 'running', agents)
+  for (let i = 0; i < 3; i++) {
+    agents.list = [parent, worker({ id: 'k1', parentId: 'o1', tokenCount: i })]
+    await (i ? w.pass(10) : start($))
+  }
+  await w.pass(10)
+  expect(w.prompts.length).toBe(0)
+  agents.list = [parent]
+  await w.pass(10)
+  agents.list = [worker({ id: 'o1', tokenCount: 50 })]
+  await w.pass(1)
+  agents.list = [parent]
+  await w.pass(1)
+  await w.pass(14)
+  expect(w.prompts.length).toBe(0)
+  await w.pass(2)
+  expect(w.prompts.length).toBe(1)
+  expect(w.prompts[0]).toMatch(/gave its report 16 minutes ago/)
+})
+
+test('an agent still at work after an hour is checked on once, and not again after a pause', async ($, on) => {
+  const agents = { list: [worker()] as unknown[] }
+  const w = engine(on, 'running', agents)
+  await start($)
+  for (let i = 1; i <= 5; i++) {
+    agents.list = [worker({ tokenCount: 10 + i })]
+    await w.pass(10)
+  }
+  expect(w.prompts.length).toBe(0)
+  agents.list = [worker({ tokenCount: 20 })]
+  await w.pass(11)
+  expect(w.prompts.length).toBe(1)
+  for (const fact of [/Add date filters/, /id a1/, /61 minutes/, /a check, not a fault/, /told this once/]) expect(w.prompts[0]).toMatch(fact)
+  agents.list = [worker({ tokenCount: 21 })]
+  await w.pass(1)
+  expect(w.prompts.length).toBe(1)
+  // Two passes each way: the first reads the new state, the second acts on it and sends what the first queued.
+  w.files[RUN + '/state.json'] = state('paused')
+  await w.pass(1)
+  await w.pass(1)
+  w.files[RUN + '/state.json'] = state('running')
+  agents.list = [worker({ tokenCount: 22 })]
+  await w.pass(1)
+  await w.pass(1)
+  expect(w.prompts.length).toBe(1)
 })

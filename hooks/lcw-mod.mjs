@@ -4,7 +4,7 @@ import { gateExpired } from '../lib/usage.mjs'
 import { thresholds as TH } from '../lib/theme.mjs'
 import { recordReading, next0800 } from '../lib/spend.mjs'
 import { settle } from '../lib/billing.mjs'
-import { dollars } from '../lib/format.mjs'
+import { dollars, tokens as tokenCount } from '../lib/format.mjs'
 
 const LIVE = ['pending', 'running', 'waiting']
 const TEN_MINUTES = 10 * 60 * 1000
@@ -32,6 +32,9 @@ export const SPARK_CELLS = 8
 /**
  * Normalises $.agent.list() for the card and tracks when each agent's tokens last moved.
  * An agent that is not running (waiting on a shell or a child, or pending) is never quiet.
+ * An agent is held when its turn has ended and it is still listed with no live agent of its own: background work it
+ * started, such as a command that never ended, keeps it there. heldMs is how long that has lasted, and listedMs how
+ * long the agent has been listed in one go.
  * seen: {id: {tokens, since, ...}} from the previous poll; the returned seen holds live agents only.
  * Each agent also keeps, for the card, the tokens it gained in each of its last eight 20-second spans (spark,
  * oldest first; replaying real agents' transcripts, shorter spans gave near-flat lines),
@@ -40,6 +43,7 @@ export const SPARK_CELLS = 8
 export function trackAgents(list, seen, now) {
   const agents = []
   const next = {}
+  const parents = new Set((list ?? []).filter((a) => LIVE.includes(a.status) && a.parentId).map((a) => a.parentId))
   for (const a of list ?? []) {
     if (!LIVE.includes(a.status)) continue
     const tokens = agentTokens(a)
@@ -56,7 +60,10 @@ export function trackAgents(list, seen, now) {
     if (now - from >= SPARK_EVERY) from = now
     const was = moved ? prev.tokens : prev?.was ?? tokens
     const movedAt = moved ? now : prev?.movedAt ?? null
-    next[a.id] = { tokens, since, spark, from, base, was, movedAt }
+    const held = a.taskStatus === 'completed' && !parents.has(a.id)
+    const heldSince = held ? prev?.heldSince ?? now : null
+    const listed = prev?.listed ?? now
+    next[a.id] = { tokens, since, spark, from, base, was, movedAt, heldSince, listed }
     agents.push({
       id: a.id,
       description: a.description ?? '',
@@ -67,6 +74,10 @@ export function trackAgents(list, seen, now) {
       parentId: a.parentId,
       status: a.status,
       quietMs: now - since,
+      held,
+      heldMs: held ? now - heldSince : 0,
+      listedMs: now - listed,
+      hasChild: parents.has(a.id),
       spark,
       tokensWas: was,
       movedAt,
@@ -77,12 +88,12 @@ export function trackAgents(list, seen, now) {
 
 /**
  * How many agents the card would mark as quiet and as stalled: running, with tokens that have not moved for
- * five minutes and for fifteen. The mascot beside the status rows reads this count.
+ * five minutes and for fifteen, or held for fifteen. The mascot beside the status rows reads this count.
  */
 export function quietCounts(agents, quietMs = TH.agentQuietAfterMinutes * 6e4, stalledMs = TH.agentStalledAfterMinutes * 6e4) {
   let quiet = 0, stalled = 0
   for (const a of agents ?? []) {
-    if (a.quietMs >= stalledMs) stalled++
+    if (a.quietMs >= stalledMs || a.heldMs >= stalledMs) stalled++
     else if (a.quietMs >= quietMs) quiet++
   }
   return { quiet, stalled }
@@ -93,32 +104,65 @@ export const nudgeable = (state) => !!state && !['finished', 'stopped', 'paused'
 
 /**
  * Which stalled agents the orchestrator is told about now. An agent is stalled when it is running and its
- * tokens have not moved for stalledMs (the card's own threshold). It is named when it gets there, then again
- * every againMs while it stays there, three times in all: by then the orchestrator has been told enough.
+ * tokens have not moved for stalledMs (the card's own threshold), or when it has been held that long. It is named
+ * when it gets there, then again every againMs while it stays there, three times in all: by then the orchestrator
+ * has been told enough. why says which: 'still' or 'held'.
  * nudged: {id: {at, times}} from the previous poll; the returned one holds only agents that are still stalled.
  */
 export function stallNudges(agents, nudged, now, stalledMs = TH.agentStalledAfterMinutes * 6e4, againMs = TH.agentQuietAfterMinutes * 6e4) {
   const due = []
   const next = {}
   for (const a of agents ?? []) {
-    if (!(a.quietMs >= stalledMs)) continue
+    const why = a.quietMs >= stalledMs ? 'still' : a.heldMs >= stalledMs ? 'held' : null
+    if (!why) continue
     const last = nudged?.[a.id]
-    if (!last) { next[a.id] = { at: now, times: 1 }; due.push({ ...a, times: 1 }) }
-    else if (last.times < 3 && now - last.at >= againMs) { next[a.id] = { at: now, times: last.times + 1 }; due.push({ ...a, times: last.times + 1 }) }
+    if (!last) { next[a.id] = { at: now, times: 1 }; due.push({ ...a, times: 1, why }) }
+    else if (last.times < 3 && now - last.at >= againMs) { next[a.id] = { at: now, times: last.times + 1 }; due.push({ ...a, times: last.times + 1, why }) }
     else next[a.id] = last
   }
   return { due, nudged: next }
 }
 
-/** The prompt that tells the orchestrator which agents have stalled; all is every live agent, to name a parent. */
-export function stallPrompt(due, all) {
-  const one = (a) => {
-    const parent = (all ?? []).find((p) => p.id === a.parentId)
-    const mins = Math.floor(a.quietMs / 6e4)
-    return `"${a.description || 'an agent'}" (${a.model || 'model unknown'}, id ${a.id}${parent ? `, launched by "${parent.description}", id ${parent.id}` : ''}) has not moved for ${mins} minutes${a.times > 1 ? ', and this is the ' + (a.times === 2 ? 'second' : 'third and last') + ' time you are told' : ''}`
+/**
+ * Which agents the orchestrator is asked to look in on now: listed for longMs in one go and still at work, so not
+ * held, not stalled and not waiting on an agent of its own. Each is named once, with why 'long'.
+ * told: {id: 1} from the previous poll; the returned one holds only agents that are still listed.
+ */
+export function longNudges(agents, told, longMs = TH.agentLongAfterMinutes * 6e4, stalledMs = TH.agentStalledAfterMinutes * 6e4) {
+  const due = []
+  const next = {}
+  for (const a of agents ?? []) {
+    if (told?.[a.id]) next[a.id] = 1
+    else if (a.listedMs >= longMs && !a.held && !a.hasChild && !(a.quietMs >= stalledMs)) { next[a.id] = 1; due.push({ ...a, why: 'long' }) }
   }
-  const what = due.length === 1 ? `the agent ${one(due[0])}` : `${due.length} agents have stalled: ${due.map(one).join('; ')}`
-  return `LCW: ${what}. Do not keep waiting. Act now as the lcw skill says under "When an agent stalls": ask it once what it is doing; if it has already been asked, or is going round in circles, stop it and give its work to a fresh agent.`
+  return { due, told: next }
+}
+
+/**
+ * The prompt that tells the orchestrator about the agents due, a paragraph for each kind: stalled, held after
+ * their report, long at work. Each says what to do, since the session's skill text may be older than this.
+ * all is every live agent, to name a parent.
+ */
+export function stallPrompt(due, all) {
+  const name = (a) => {
+    const parent = (all ?? []).find((p) => p.id === a.parentId)
+    return `"${a.description || 'an agent'}" (${a.model || 'model unknown'}, id ${a.id}${parent ? `, launched by "${parent.description}", id ${parent.id}` : ''})`
+  }
+  const mins = (ms) => Math.floor(ms / 6e4)
+  const again = (a) => (a.times > 1 ? ', and this is the ' + (a.times === 2 ? 'second' : 'third and last') + ' time you are told' : '')
+  const kinds = [
+    ['still', (a) => `${name(a)} has not moved for ${mins(a.quietMs)} minutes${again(a)}`, 'agents have stalled',
+      'Do not keep waiting. Act now as the lcw skill says under "When an agent stalls": ask it once what it is doing; if it has already been asked, or is going round in circles, stop it and give its work to a fresh agent.'],
+    ['held', (a) => `${name(a)} gave its report ${mins(a.heldMs)} minutes ago and has not ended${again(a)}`, 'agents have reported and not ended',
+      'Such an agent ended its turn with background work of its own still running, such as a command that never ended, and until that work ends it stays on LCW\'s card, though ListAgents may call it completed. Do not message it: a message would start it working again. If its report was complete, stop it now, TaskStop with its id, which ends that work too: its turn has ended, and it still needs this stop. If its report said it was waiting for that work, leave it: it will report again.'],
+    ['long', (a) => `${name(a)} has been at work for ${mins(a.listedMs)} minutes and has used ${tokenCount(a.tokens)} tokens`, 'agents have been at work for a long time',
+      'This is a check, not a fault: long work may be going well, and then it carries on. See whether it is getting somewhere from what it has produced so far, such as its commits and the files it has changed, without interrupting it. If it is, do nothing. Only if you cannot tell, ask it once where it has got to, SendMessage to its id, and tell it to carry on after it answers. If it is going round in circles, stop it, TaskStop with its id, and give its work to a fresh agent with what you learned. You are told this once.'],
+  ]
+  return kinds.flatMap(([why, one, many, act]) => {
+    const of = due.filter((a) => (a.why ?? 'still') === why)
+    if (!of.length) return []
+    return [`LCW: ${of.length === 1 ? `the agent ${one(of[0])}` : `${of.length} ${many}: ${of.map(one).join('; ')}`}. ${act}`]
+  }).join('\n\n')
 }
 
 // The API errors that clear on their own; a lost connection is a server_error. Every other kind, and one not known, is left alone.

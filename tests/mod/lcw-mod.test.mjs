@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import {
   addTotals, addUsage, agentTokens, buttons, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
-  quietCounts, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt,
+  longNudges, quietCounts, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt,
   measureStep, retryGate, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
@@ -46,6 +46,7 @@ test('agents are normalised for the card and finished ones dropped', () => {
   assert.deepEqual(agents, [{
     id: 'a1', description: 'Add date filters', model: 'claude-sonnet-5-5', effort: 'medium',
     tokens: 1000, startTime: NOW - 5 * MIN, parentId: 'o1', status: 'running', quietMs: 0,
+    held: false, heldMs: 0, listedMs: 0, hasChild: false,
     spark: [], tokensWas: 1000, movedAt: null,
   }])
   assert.deepEqual(Object.keys(seen), ['a1'])
@@ -79,6 +80,30 @@ test('an agent waiting on a shell or a child is never quiet', () => {
   assert.equal(r.agents[0].quietMs, 0)
   r = trackAgents([agent()], r.seen, NOW + 21 * MIN)
   assert.equal(r.agents[0].quietMs, MIN)
+})
+
+test('an agent whose turn has ended is held while it stays listed with no live agent of its own', () => {
+  const ended = (over) => agent({ status: 'waiting', taskStatus: 'completed', ...over })
+  let r = trackAgents([ended()], {}, NOW)
+  assert.deepEqual([r.agents[0].held, r.agents[0].heldMs], [true, 0])
+  r = trackAgents([ended()], r.seen, NOW + 16 * MIN)
+  assert.deepEqual([r.agents[0].heldMs, r.agents[0].quietMs], [16 * MIN, 0])
+  r = trackAgents([agent({ taskStatus: 'running' })], r.seen, NOW + 17 * MIN)
+  assert.deepEqual([r.agents[0].held, r.agents[0].heldMs], [false, 0], 'its turn runs again')
+  r = trackAgents([ended()], r.seen, NOW + 18 * MIN)
+  assert.equal(r.agents[0].heldMs, 0, 'a later hold starts from nothing')
+  const withChild = [ended(), agent({ id: 'kid', parentId: 'a1' })]
+  r = trackAgents(withChild, trackAgents(withChild, {}, NOW).seen, NOW + 20 * MIN)
+  assert.deepEqual([r.agents[0].held, r.agents[0].heldMs, r.agents[0].hasChild], [false, 0, true])
+})
+
+test('an agent is listed in one go from when it is first seen, and afresh once it has left the list', () => {
+  let r = trackAgents([agent()], {}, NOW)
+  r = trackAgents([agent({ tokenCount: 2000 })], r.seen, NOW + 61 * MIN)
+  assert.equal(r.agents[0].listedMs, 61 * MIN)
+  r = trackAgents([agent({ status: 'completed' })], r.seen, NOW + 62 * MIN)
+  r = trackAgents([agent()], r.seen, NOW + 70 * MIN)
+  assert.equal(r.agents[0].listedMs, 0)
 })
 
 test('neighbouring spans of one id are one button, with no hotkey', () => {
@@ -319,6 +344,41 @@ test('an agent that only waits on a shell or a child is never reported', () => {
   assert.deepEqual(stallNudges(t2.agents, {}, NOW + 40 * MIN).due, [])
 })
 
+test('a held agent is reported on the same schedule as a stalled one, as held', () => {
+  const held = (minutes) => stalling('h', 0, { status: 'waiting', held: true, heldMs: minutes * MIN })
+  let r = stallNudges([held(14)], {}, NOW)
+  assert.deepEqual(r.due, [])
+  r = stallNudges([held(15)], r.nudged, NOW + MIN)
+  assert.deepEqual(r.due.map((a) => [a.id, a.times, a.why]), [['h', 1, 'held']])
+  r = stallNudges([held(20)], r.nudged, NOW + 6 * MIN)
+  assert.deepEqual(r.due.map((a) => [a.times, a.why]), [[2, 'held']])
+  assert.equal(stallNudges([stalling('a', 15)], {}, NOW).due[0].why, 'still')
+})
+
+test('an agent long at work is named once, and not while held, stalled or waiting on an agent of its own', () => {
+  const at = (minutes, more = {}) => stalling('w', 0, { listedMs: minutes * MIN, ...more })
+  let r = longNudges([at(59)], {})
+  assert.deepEqual(r.due, [])
+  for (const more of [{ held: true }, { hasChild: true }, { quietMs: 15 * MIN }]) assert.deepEqual(longNudges([at(90, more)], {}).due, [], JSON.stringify(more))
+  r = longNudges([at(60)], r.told)
+  assert.deepEqual(r.due.map((a) => [a.id, a.why]), [['w', 'long']])
+  r = longNudges([at(61)], r.told)
+  assert.deepEqual(r.due, [], 'once')
+  assert.deepEqual(longNudges([], r.told).told, {}, 'forgotten once it has left the list')
+})
+
+test('the prompt tells a held agent and a long one apart from a stalled one, each with what to do', () => {
+  const held = stallPrompt([{ ...stalling('p1', 0, { heldMs: 16 * MIN }), times: 1, why: 'held' }], [])
+  for (const fact of ['Build the p1', 'id p1', 'gave its report 16 minutes ago', 'ListAgents may call it completed', 'Do not message it', 'TaskStop with its id', 'leave it']) assert.ok(held.includes(fact), fact)
+  assert.ok(!held.includes('When an agent stalls'))
+  const long = stallPrompt([{ ...stalling('w1', 0, { listedMs: 61 * MIN, tokens: 1200000 }), why: 'long' }], [])
+  for (const fact of ['Build the w1', 'id w1', '61 minutes', '1.2M tokens', 'a check, not a fault', 'do nothing', 'told this once']) assert.ok(long.includes(fact), fact)
+  const both = stallPrompt([{ ...stalling('a', 15), times: 1, why: 'still' }, { ...stalling('p1', 0, { heldMs: 15 * MIN }), times: 1, why: 'held' }], []).split('\n\n')
+  assert.equal(both.length, 2)
+  assert.ok(both[0].includes('has not moved for 15 minutes') && both[0].includes('When an agent stalls'))
+  assert.ok(both[1].includes('gave its report 15 minutes ago') && !both[1].includes('When an agent stalls'))
+})
+
 test('the stall prompt names the agent, how long, who launched it, and where to read what to do', () => {
   const orch = stalling('o1', 0, { description: 'Drive the API milestone' })
   const one = stallPrompt([{ ...stalling('w1', 16, { parentId: 'o1' }), times: 1 }], [orch])
@@ -332,6 +392,10 @@ test('agents are counted quiet after five still minutes and stalled after fiftee
   assert.deepEqual(quietCounts(agents), { quiet: 2, stalled: 2 })
   assert.deepEqual(quietCounts([]), { quiet: 0, stalled: 0 })
   assert.deepEqual(quietCounts(undefined), { quiet: 0, stalled: 0 })
+})
+
+test('a held agent counts as stalled after fifteen minutes, and never as quiet', () => {
+  assert.deepEqual(quietCounts([{ id: 'a', quietMs: 0, heldMs: 6 * MIN }, { id: 'b', quietMs: 0, heldMs: 15 * MIN }]), { quiet: 0, stalled: 1 })
 })
 
 // Pay-per-token billing. NOW is 12:00 in Dublin (winter, so local time is UTC): the next 08:00 is tomorrow's.

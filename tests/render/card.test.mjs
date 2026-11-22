@@ -488,6 +488,13 @@ test('buildView: quiet, stalled and waiting agents', () => {
   assert.equal(buildView({ ...i, agents: [{ id: 'x', status: 'completed' }] }).agents.length, 0);
 });
 
+test('buildView: an agent held after its report is marked stalled at fifteen minutes, and not before', () => {
+  const i = inputsOf('RunningA');
+  const mk = (heldMs) => buildView({ ...i, agents: [{ id: 'x', description: 'd', model: 'm', startTime: NOW, tokens: 1, status: 'waiting', quietMs: 0, heldMs }] }).agents[0].chip;
+  assert.equal(mk(14 * 6e4), null);
+  assert.equal(mk(15 * 6e4), 'stalled');
+});
+
 test('buildView: states', () => {
   const i = inputsOf('RunningA');
   assert.equal(buildView(i).mode, 'running');

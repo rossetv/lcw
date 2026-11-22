@@ -5,8 +5,9 @@ export interface AgentInput {
   id: string; description?: string; model?: string; effort?: string;
   tokens?: number | null;       // null or missing: shown as a dash (the card without the mod)
   startTime?: number; parentId?: string | null;
-  status?: string;              // "waiting" is never quiet or stalled; completed, done, failed, killed, stopped, cancelled are not shown
+  status?: string;              // "waiting" is never quiet, and stalled only once held; completed, done, failed, killed, stopped, cancelled are not shown
   quietMs?: number;             // how long its token count has not moved
+  heldMs?: number;              // how long it has stayed listed since its turn ended, with no live agent of its own
   spark?: number[];             // tokens gained in each of its last 20-second spans, oldest first (the mod keeps them)
   tokensWas?: number;           // the figure its tokens moved from, at movedAt: the card rolls up from it
   movedAt?: number | null;

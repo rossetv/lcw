@@ -3,9 +3,10 @@ export type Row = Span[]
 export type CardAgent = {
   id: string; description: string; model: string; effort: string; tokens: number
   startTime: number; parentId?: string; status: string; quietMs: number
+  held: boolean; heldMs: number; listedMs: number; hasChild: boolean
   spark: number[]; tokensWas: number; movedAt: number | null
 }
-export type Seen = Record<string, { tokens: number; since: number; spark?: number[]; from?: number; base?: number; was?: number; movedAt?: number | null }>
+export type Seen = Record<string, { tokens: number; since: number; spark?: number[]; from?: number; base?: number; was?: number; movedAt?: number | null; heldSince?: number | null; listed?: number }>
 export const SPARK_EVERY: number
 export const SPARK_CELLS: number
 export type SevenDay = { percentUsed: number; resetsAt?: string | null }
@@ -47,8 +48,11 @@ export function quietCounts(agents: readonly CardAgent[] | undefined, quietMs?: 
 export type Nudged = Record<string, { at: number; times: number }>
 export function nudgeable(state: any): boolean
 export function stallNudges(agents: readonly CardAgent[] | undefined, nudged: Nudged | undefined, now: number, stalledMs?: number, againMs?: number):
-  { due: (CardAgent & { times: number })[]; nudged: Nudged }
-export function stallPrompt(due: readonly (CardAgent & { times: number })[], all: readonly CardAgent[] | undefined): string
+  { due: (CardAgent & { times: number; why: 'still' | 'held' })[]; nudged: Nudged }
+export type Told = Record<string, 1>
+export function longNudges(agents: readonly CardAgent[] | undefined, told: Told | undefined, longMs?: number, stalledMs?: number):
+  { due: (CardAgent & { why: 'long' })[]; told: Told }
+export function stallPrompt(due: readonly (CardAgent & { times?: number; why?: 'still' | 'held' | 'long' })[], all: readonly CardAgent[] | undefined): string
 export type Carry = { firstAt: number; kind: string; tries: number; dueAt: number | null }
 export function carryFailed(carry: Carry | null | undefined, kind: string, now: number): Carry | null
 export function carryDue(carry: Carry | null | undefined, now: number, blocked: boolean): { carry: Carry | null | undefined; send: number }

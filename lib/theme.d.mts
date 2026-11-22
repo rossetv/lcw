@@ -5,7 +5,7 @@ export const thresholds: {
   usageMarkPercent: number;
   contextYellowFrom: number; contextRedFrom: number;
   runShareYellowFrom: number; runShareRedFrom: number;
-  agentQuietAfterMinutes: number; agentStalledAfterMinutes: number;
+  agentQuietAfterMinutes: number; agentStalledAfterMinutes: number; agentLongAfterMinutes: number;
   narrowBelowColumns: number;
 };
 /**
