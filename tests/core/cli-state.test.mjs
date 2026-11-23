@@ -106,6 +106,19 @@ test('an ask keeps its number until it is answered', () => {
   assert.equal(t.cli('ask', 'fourth?').out.trim(), 'ask 4')
 })
 
+test('an ask may offer options as lcw question add does, its pick among them, and is answered as any ask', () => {
+  const t = started()
+  assert.equal(t.cli('ask', 'Which remote?', '--a', 'origin: once the token can write', '--b', 'fork: push to your fork', '--recommend', 'b').out.trim(), 'ask 1')
+  const [ask] = t.state().asks
+  assert.deepEqual([ask.options.map((o) => [o.key, o.label, o.meaning]), ask.recommend], [[['a', 'origin', 'once the token can write'], ['b', 'fork', 'push to your fork']], 'b'])
+  for (const bad of [['--a', 'origin: x', '--recommend', 'a'], ['--a', 'origin: x', '--b', 'fork: y'], ['--a', 'origin', '--b', 'fork: y', '--recommend', 'a'], ['--recommend', 'a']]) {
+    assert.equal(t.cli('ask', 'Which?', ...bad).code, 1, bad.join(' '))
+  }
+  assert.equal(t.state().asks.length, 1, 'a refused ask is not recorded')
+  t.cli('answer', '1', 'fork: push to your fork')
+  assert.deepEqual(t.state().asks, [])
+})
+
 test('set cannot move the usage mark or the driving session', () => {
   const t = started()
   for (const k of ['markPercent=100', 'driver=other']) assert.equal(t.cli('set', k).code, 1)

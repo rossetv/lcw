@@ -45,19 +45,27 @@ export function runFact(state, kept) {
   return {
     id: state.id, title: state.name || state.id, stage: state.stage, status: state.status, pausedReason: state.pausedReason ?? undefined,
     pausedAt: state.pausedAt ?? undefined, runningSince: state.runningSince ?? undefined, ...taskCounts(state),
-    asks: asks.filter((a) => Number.isFinite(a?.n)).map((a) => ({ n: a.n, text: String(a.text ?? ''), waiting: a.waiting, at: a.at })).sort((a, b) => a.n - b.n),
+    asks: asks.filter((a) => Number.isFinite(a?.n)).map(askOf).sort((a, b) => a.n - b.n),
     awake: !!kept, guide: state.guide === true, firstOnMachine: state.firstOnMachine === true, shape: shapeOf(state),
     approval: approvalOf(state),
     questions: questionsOf(state),
   }
 }
 
+const optionOf = (o) => ({ key: String(o.key), label: String(o.label ?? ''), meaning: String(o.meaning ?? '') })
+
+/** An open ask as the answer box reads it; one asked with options (lcw ask --a --b) carries them and the pick. */
+const askOf = (a) => ({
+  n: a.n, text: String(a.text ?? ''), waiting: a.waiting, at: a.at,
+  ...(Array.isArray(a.options) && a.options.length ? { options: a.options.map(optionOf), ...(a.recommend == null ? {} : { recommend: String(a.recommend) }) } : {}),
+})
+
 /** A sweep's short questions for the person: the open ones in the order asked, and how many were asked in all. */
 function questionsOf(state) {
   const all = OPEN(state) && Array.isArray(state.questions) ? state.questions.filter((q) => q?.id && Array.isArray(q.options)) : []
   const open = all.filter((q) => q.status === 'open').map((q) => ({
     id: String(q.id), text: String(q.text ?? ''), why: String(q.why ?? ''), ...(q.recommend == null ? {} : { recommend: String(q.recommend) }),
-    options: q.options.map((o) => ({ key: String(o.key), label: String(o.label ?? ''), meaning: String(o.meaning ?? '') })),
+    options: q.options.map(optionOf),
   }))
   return open.length ? { open, asked: all.length, answered: all.length - open.length } : undefined
 }
@@ -201,11 +209,11 @@ export const awakeCheckWanted = (state, notices, dismissed) =>
 export const dismissKeys = (banner) => (String(banner.key) === banner.kind ? [banner.kind] : [banner.kind + ':' + banner.key])
 
 /**
- * Whether a box drawn earlier is still the one that applies: same kind and occurrence, and it still offers option
+ * Whether a box drawn earlier is still the one that applies: same kind and occurrence (for an ask's options, the same ask), and it still offers option
  * under the label that was drawn ("Run up to $3,600" runs 3,600 or nothing).
  */
 export function sameBox(drawn, fresh, option) {
-  if (!drawn || !fresh || drawn.kind !== fresh.kind || String(drawn.key) !== String(fresh.key)) return false
+  if (!drawn || !fresh || drawn.kind !== fresh.kind || String(drawn.key) !== String(fresh.key) || drawn.askN !== fresh.askN) return false
   const label = drawn.options.find(([id]) => id === option)?.[1]
   return label !== undefined && fresh.options.some(([id, l]) => id === option && l === label)
 }
@@ -230,6 +238,11 @@ export function resumePrompt(root, sessionId, u, resumed) {
     `Load the lcw:lcw skill with the Skill tool and run \`${cli(root)} status --session ${sessionId}\`. Once it names a worktree, call EnterWorktree with that path and work there.`,
     `Then carry on from the run's next step${u.nextStep ? ' (' + quote(u.nextStep) + ')' : ''} and its ledger. Do not start again, and do not ask the person what was happening.`,
   ].join(' ')
+}
+
+/** After an option pressed on the answer box: LCW has recorded the answer, act on it. */
+export function answeredPrompt(run, ask, words) {
+  return `LCW: the person answered ask ${ask.n} of the run ${run.title} (${run.id}), ${quote(ask.text)}, by pressing an option on LCW's box: ${quote(words)}. LCW has recorded it with lcw answer, so do not record it again. Act on it as the lcw skill's "Asking the human" says for an answer.`
 }
 
 /** Fix it on the failing spend check. */
@@ -265,7 +278,7 @@ export function discussPrompt(root, cleanup, cleanupPath) {
  *   its output said in a toast, and the box stays;
  * - prompt: submitted ({ text, asUser }); when it cannot be, the box stays and the person is told;
  * - notices: written into notices.json (the machine's "never again" choices);
- * - fill: the ask number Answer now puts in the prompt;
+ * - fill: the ask number Answer now (an ask's Other) puts in the prompt;
  * - fillText: the reply put in an empty prompt, never sent (the person presses Enter);
  * - proxyQuotaChoice: saved in its connection's notice file, only after a requested fill succeeds;
  * - dismiss: the box's occurrence is hidden for this session;
@@ -286,8 +299,18 @@ export function pressPlan(banner, option, facts, ctx) {
       return { ...(option === 'setup' ? { fillText: PROXY_QUOTA_TEXT } : {}), proxyQuotaChoice: { endpoint: facts.proxyQuota.endpoint, choice: option }, dismiss: true }
     case 'approve':
       return { fillText: approveText(banner, option), dismiss: true }
-    case 'answer':
-      return { fill: run?.asks?.[0]?.n, dismiss: true }
+    case 'answer': {
+      const a = run?.asks?.[0]
+      const o = a?.options?.find((x) => x.key === option)
+      if (!o) return { fill: a?.n, dismiss: true }
+      if (a.n !== banner.askN) return null
+      // Not dismissed: once this ask is answered the box shows the next one, if any.
+      const words = o.meaning ? o.label + ': ' + o.meaning : o.label
+      return {
+        steps: [lcw('answer', String(a.n), words)], prompt: { text: answeredPrompt(run, a, words) },
+        promptFailed: `LCW recorded your answer to ask ${a.n}. Say "carry on" so the run acts on it.`,
+      }
+    }
     case 'question': {
       const q = run?.questions?.open?.[0]
       if (!q || q.id !== banner.questionId) return null

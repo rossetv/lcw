@@ -1176,30 +1176,32 @@ export const register: Register = (on) => {
         const state = Number.isFinite(S.totals.tokens) ? { ...run.state, totals: { ...run.state.totals, agents: S.totals.agents, tokens: S.totals.tokens } } : run.state
         const view = buildView({ state, agents: S.agents, usage: run.usage, gate: run.gate, money: run.money, quota: run.quota, now, ui: S.ui })
         const tick = isAnimating(run.state) ? Math.floor((now - S.shownSince) / 100) : undefined
-        // The mark box offers the raises, so the card does not also say "say run up to ...", unless the box waits for room.
-        const draw = (maxRows: number, hideMarkHint: boolean) => {
-          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, hideMarkHint }
+        // The mark box offers the raises and the answer box shows the asks, so the card does not say them again,
+        // unless the box waits for room.
+        const draw = (maxRows: number, boxed: boolean) => {
+          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, hideMarkHint: boxed && shown?.kind === 'mark', askInBox: boxed && shown?.kind === 'answer' }
           return renderCard(view, opts)
         }
-        const markBox = drawn.length > 0 && shown?.kind === 'mark'
-        card = draw(room, markBox)
+        const boxed = drawn.length > 0 && (shown?.kind === 'mark' || shown?.kind === 'answer')
+        card = draw(room, boxed)
         // The approval box has a tight form, one row shorter, for where the full one does not fit above the card.
         if (shown?.kind === 'approve' && drawn.length && room - drawn.length - 1 < Math.min(CARD_ROOM, card.length)) banner = drawn = bannerRows(shown, cols, true, true)
-        // A question has a short form too: the question and its buttons in a row, without what each one means.
-        if (shown?.kind === 'question' && drawn.length && room - drawn.length - 1 < Math.min(CARD_ROOM, card.length)) banner = drawn = bannerRows({ ...shown, choices: undefined, lines: [] }, cols, true)
-        // Where both do not fit, the approval or the question box stays and the card takes what is left, or goes:
-        // only the box asks it. Any other box waits and the card keeps the rows it needs (up to CARD_ROOM), since
-        // the card carries what that box says.
+        // A question, and an ask with options, has a short form too: the question and its buttons in a row, without what each one means.
+        const choosing = shown?.kind === 'question' || (shown?.kind === 'answer' && !!shown.choices)
+        if (choosing && drawn.length && room - drawn.length - 1 < Math.min(CARD_ROOM, card.length)) banner = drawn = bannerRows({ ...shown, choices: undefined, lines: [] }, cols, true)
+        // Where both do not fit, the approval or the question box (or an ask's options) stays and the card takes what
+        // is left, or goes: only the box asks it. Any other box waits and the card keeps the rows it needs (up to
+        // CARD_ROOM), since the card carries what that box says.
         const left = room - drawn.length - 1
         if (drawn.length && left < Math.min(CARD_ROOM, card.length)) {
-          if (shown?.kind === 'approve' || shown?.kind === 'question') {
-            card = draw(left, false)
+          if (shown?.kind === 'approve' || choosing) {
+            card = draw(left, boxed)
             if (card.length > left) card = []
           } else {
             banner = []
-            if (markBox) card = draw(room, false)
+            if (boxed) card = draw(room, false)
           }
-        } else if (drawn.length) card = draw(left, markBox)
+        } else if (drawn.length) card = draw(left, boxed)
       }
       if (!card.length && !banner.length) { S.holdsCard = false; return next(e) }
       // The band's focus ring is a place in its list of buttons, not a button: when the focused one goes and another
@@ -1217,7 +1219,7 @@ export const register: Register = (on) => {
       const rows: Row[] = banner.length && below.length ? [...banner, [{ t: ' ' }], ...below] : [...banner, ...below]
       const hide = !S.collapsed && rows.some((row) => row.some((s) => /^(view|toggle):/.test(s.id ?? '')))
       if (hide !== S.hideRows) { S.hideRows = hide; S.dirty = true }
-      // Claimed even when the approval or question box leaves the card no room: else the status line draws it.
+      // Claimed even when the approval or question box, or an ask's options, leave the card no room: else the status line draws it.
       S.holdsCard = !!run
       if (run && (now - S.alive.at >= 5000 || S.alive.runDir !== run.runDir)) void writeAlive($, run, now).catch(() => {})
 

@@ -440,3 +440,22 @@ test('an open question shows before an open ask, so its options are not hidden b
   assert.equal(bannerFor({ run, now: 0 })?.kind, 'question')
   assert.equal(bannerFor({ run, now: 0, dismissed: new Set(['question:r:Q82']) })?.kind, 'answer')
 })
+
+const asking = (asks) => runFact({ id: 'r', name: 'export-csv', stage: 'Build', status: 'running', asks }, false)
+const CHOICE = { n: 1, text: 'GitHub refuses the push. Which remote?', at: 1, recommend: 'b', options: [{ key: 'a', label: 'origin', meaning: 'retry once you give the token write access' }, { key: 'b', label: 'fork', meaning: 'push to your fork instead' }] }
+
+test("an ask with options draws them as buttons, Claude's pick filled, with Other and Later", () => {
+  const b = bannerFor({ run: asking([CHOICE]), now: 0 })
+  assert.equal(b.kind, 'answer')
+  const ids = bannerRows(b, 92).flat().filter((s) => s.id).map((s) => s.id)
+  assert.deepEqual(ids, ['banner:answer:a', 'banner:answer:b', 'banner:answer:other', 'banner:answer:later'])
+  assert.deepEqual(filled(bannerRows(b, 92)), ['banner:answer:b'])
+  assert.match(bannerRows(b, 92).flat().map((s) => s.t).join(''), /Which remote\?/)
+  assert.deepEqual(filled(bannerRows({ ...b, choices: undefined, lines: [] }, 92, true)), ['banner:answer:b'], 'in the short form too')
+})
+
+test('an ask without options keeps the box it always had', () => {
+  const b = bannerFor({ run: asking([{ n: 1, text: 'Which format?', at: 1 }, CHOICE].map((a, i) => ({ ...a, n: i + 1 }))), now: 0 })
+  assert.deepEqual(b.options, [['now', 'Answer now'], ['later', 'Later']])
+  assert.equal(b.choices, undefined)
+})

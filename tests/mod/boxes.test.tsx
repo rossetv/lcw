@@ -288,6 +288,42 @@ test('where Answer now cannot fill the prompt, the box says to type the answer t
   await band.unmount()
 })
 
+test('under the answer box the card does not repeat the question; once put off, the card has it again', async ($, on) => {
+  const w = engine(on, asking([{ n: 1, text: 'Which export format should the report use?', waiting: 2 }]))
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /needs you/ })).toBeDefined()
+  // one row says it, the box's: a row is a Text, and so is each of its spans
+  expect((await band.findAll({ type: 'Text', text: /^│.*Which export format/ })).length).toBe(1)
+  await band.press({ key: 'banner:answer:later' })
+  await w.clock.advance(2000)
+  expect(await band.find({ type: 'Text', text: /Which export format/ })).toBeDefined()
+  await band.unmount()
+})
+
+const REMOTE = { n: 1, text: 'Which remote?', recommend: 'b', options: [{ key: 'a', label: 'origin', meaning: 'once the token can write' }, { key: 'b', label: 'fork', meaning: 'push to your fork' }] }
+
+test("an ask's option pressed records the answer and tells the run, with no prompt to type", async ($, on) => {
+  const w = engine(on, asking([REMOTE]))
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:answer:b' })
+  expect(lcwCalls(w.runs, 'answer')).toEqual(['answer 1 fork: push to your fork --session s1'])
+  expect(w.prompts.map((p) => p.text).join(' ')).toMatch(/answered ask 1 .*fork: push to your fork/)
+  expect(w.filled).toEqual([])
+  await band.unmount()
+})
+
+test("an ask's Other puts its number in the prompt, as Answer now does", async ($, on) => {
+  const w = engine(on, asking([REMOTE]))
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:answer:other' })
+  expect(w.filled).toEqual(['1: '])
+  expect(lcwCalls(w.runs, 'answer')).toEqual([])
+  await band.unmount()
+})
+
 const leftHalfway = (over: object = {}) => ({
   '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }),
   [OLD + '/state.json']: JSON.stringify({ id: 'r2', name: 'old-run', title: 'adding a CSV export', status: 'running', stage: 'Build', tasks: [], asks: [], ...over }),

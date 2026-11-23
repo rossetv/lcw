@@ -395,3 +395,22 @@ test('a 0.4 wave with no stage reads the run-level stage and lists', () => {
   assert.equal(w.tasks.length, 1)
   assert.equal(w.requirements.length, 1)
 })
+
+const choosing = (asks) => ({ now: NOW, run: runFact({ id: 'r1', name: 'export-csv', status: 'running', stage: 'Build', asks }) })
+const REMOTE = { n: 2, text: 'Which remote?', at: NOW, recommend: 'b', options: [{ key: 'a', label: 'origin', meaning: 'once the token can write' }, { key: 'b', label: 'fork', meaning: 'push to your fork' }] }
+
+test("an ask's option records the answer with its words and tells the run; Other puts the ask's number in the prompt", () => {
+  const plan = press(choosing([REMOTE]), 'b')
+  assert.deepEqual(plan.steps.map((s) => s.argv.slice(2)), [['answer', '2', 'fork: push to your fork', '--session', 's1']])
+  assert.match(plan.prompt.text, /ask 2/)
+  assert.match(plan.prompt.text, /fork: push to your fork/)
+  assert.equal(plan.dismiss, undefined, 'the next open ask shows once this one is answered')
+  assert.deepEqual(press(choosing([REMOTE]), 'other'), { fill: 2, dismiss: true })
+})
+
+test("an ask's option drawn before the ask changed is not acted on, though the new ask's option has the same label", () => {
+  const drawn = bannerFor(choosing([REMOTE]))
+  const next = bannerFor(choosing([{ ...REMOTE, n: 3, text: 'And the tag?' }]))
+  assert.equal(sameBox(drawn, next, 'b'), false)
+  assert.equal(sameBox(drawn, bannerFor(choosing([REMOTE])), 'b'), true)
+})
