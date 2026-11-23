@@ -13,11 +13,12 @@ const files = (more: Record<string, string> = {}) => ({
 })
 
 // The world beneath the mod: files in memory, a clock the test moves, compactions that can be refused, and the prompts sent.
-function engine(on: any, files: Record<string, string>, opts: { refuse?: number; slowWrites?: boolean } = {}) {
+function engine(on: any, files: Record<string, string>, opts: { refuse?: number; veto?: number; slowWrites?: boolean } = {}) {
   const clock = mock.clock(on, { now: NOW })
   const prompts: string[] = []
   const compacts: unknown[] = []
   let refusals = opts.refuse ?? 0
+  let vetoes = opts.veto ?? 0
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
@@ -35,6 +36,7 @@ function engine(on: any, files: Record<string, string>, opts: { refuse?: number;
   on('session.compact', (_: any, e: any) => {
     compacts.push(e)
     if (refusals-- > 0) throw new Error('a turn is running')
+    if (vetoes-- > 0) return { skip: 'a PreCompact hook blocked it' }
     return { messages: [{ role: 'user', text: 'the summary', toolUses: [] }] }
   })
   on('prompt.submit', (_: any, e: any) => { prompts.push(e.text); return { text: e.text } })
@@ -64,6 +66,21 @@ test('a compaction refused because a turn has started keeps the checkpoint, and 
   await start($)
   await turnEnds($)
   await w.clock.advance(1000)
+  expect(w.compacts.length).toBe(1)
+  expect(w.files[RUN + '/checkpoint']).toBe(STEP)
+  expect(w.resumes().length).toBe(0)
+  await turnEnds($)
+  await w.clock.advance(1000)
+  expect(w.compacts.length).toBe(2)
+  expect(w.files[RUN + '/checkpoint']).toBe('')
+  expect(w.resumes().length).toBe(1)
+})
+
+test('a compaction a hook vetoes keeps the checkpoint and sends nothing, is not tried again by itself, and the next turn to end tries again', async ($, on) => {
+  const w = engine(on, files({ [RUN + '/checkpoint']: STEP }), { veto: 1 })
+  await start($)
+  await turnEnds($)
+  await w.clock.advance(60000)
   expect(w.compacts.length).toBe(1)
   expect(w.files[RUN + '/checkpoint']).toBe(STEP)
   expect(w.resumes().length).toBe(0)

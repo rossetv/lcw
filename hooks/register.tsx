@@ -578,10 +578,11 @@ async function checkpoint($: EngineInterface) {
   const step = String((await $.fs.read(run.paths.checkpoint).catch(() => '')) ?? '').trim()
   if (!step || S.compacting) return
   S.compacting = true
-  // The step stays in its file until the compaction has happened: one refused because a turn has started is
-  // tried again when a turn next ends.
+  // The step stays in its file until the compaction has happened: one refused because a turn has started, or
+  // vetoed by a hook, is tried again when a turn next ends.
   $.clock.after(700, () => void (async () => {
-    await $.session.compact({ instructions: compactInstructions(run.state, run.runDir, step) })
+    const done = await $.session.compact({ instructions: compactInstructions(run.state, run.runDir, step) })
+    if (done?.skip) return
     await $.fs.write(run.paths.checkpoint, '')
     await $.prompt.submit({ text: resumePrompt($.plugin.root, step) })
   })().catch(() => {}).finally(() => { S.compacting = false }))
