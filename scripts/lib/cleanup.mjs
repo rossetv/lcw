@@ -10,6 +10,19 @@ import { listRuns } from './runs.mjs'
 const real = (p) => { try { return fs.realpathSync(p) } catch { return path.resolve(p) } }
 const within = (p, dir) => p === dir || p.startsWith(dir + '/')
 const tryGit = (cwd, ...args) => { try { return git(cwd, ...args) } catch { return null } }
+
+/**
+ * A file on disk that git is told not to look at (skip-worktree, tagged S, or assume-unchanged, a lower-case tag):
+ * status shows no change in it, and removing the worktree would delete its edits. Returns its path, or null.
+ * A skip-worktree path that is not on disk, as in a sparse checkout, holds nothing.
+ */
+export function hiddenEdit(wt) {
+  const tags = git(wt, 'ls-files', '-v', '-z').split('\0').filter(Boolean)
+  const hit = tags.find((l) => (l[0] === 'S' || (l[0] >= 'a' && l[0] <= 'z')) && fs.existsSync(path.join(wt, l.slice(2))))
+  return hit ? hit.slice(2) : null
+}
+// git that cannot be read counts as hiding something
+const hidden = (wt) => { try { return hiddenEdit(wt) } catch { return true } }
 const lines = (text) => (text ? text.split('\n').filter(Boolean) : [])
 const ended = (state) => state.status === 'finished' || state.status === 'stopped'
 const gitError = (e) => (String(e.stderr || e.message).trim().split('\n')[0] || 'git refused').replace(/^(error|fatal): /, '')
@@ -115,6 +128,7 @@ function survey(cwd, lcwHome) {
       const status = tryGit(w.path, 'status', '--porcelain', '--untracked-files=all')
       if (status === null) t.not = 'git cannot read it'
       else if (status) t.not = 'it has uncommitted or untracked changes'
+      else if (hidden(w.path)) t.not = 'git is told to ignore edits in it'
       // git worktree remove deletes ignored files too (.env, node_modules), so a worktree holding any is not safe
       else if (tryGit(w.path, 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory') !== '') t.not = 'it holds ignored files'
     }

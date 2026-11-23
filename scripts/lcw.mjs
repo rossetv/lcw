@@ -6,7 +6,7 @@ import { runsDir, repoKey, runPaths, placeFile, slug, sessionFile, spendFile, co
 import { compactChoice, tokensText, KEEP_UNDER } from '../lib/checkpoint.mjs'
 import { home, readJson, writeJson, writeAtomic, git, mainCheckout, saveState, appendLedger as appendRunLedger, loadState } from './lib/store.mjs'
 import { findRun, bindSession, unbindSession, listRuns, open, runOf, lastShown, machineRunCount } from './lib/runs.mjs'
-import { sessionFolders } from './lib/cleanup.mjs'
+import { sessionFolders, hiddenEdit } from './lib/cleanup.mjs'
 import { canHold, heldByOther, keptHold, startHold, releaseHold, alive, claudeAlive } from './lib/awake.mjs'
 import { readUsage, applyGate, atMark, sessionMark, setSessionMark, DEFAULT_MARK, driverMark } from './lib/gate.mjs'
 import { readMoney, readCap, writeCap, spendRecords } from './lib/money.mjs'
@@ -1441,6 +1441,8 @@ function keepWorktree(s, wt) {
   try {
     // every untracked file, whatever status.showUntrackedFiles says: git worktree remove would delete them
     if (git(wt, 'status', '--porcelain', '--untracked-files=all')) return 'it has uncommitted or untracked files'
+    const hidden = hiddenEdit(wt)
+    if (hidden) return `git is told to ignore edits to ${hidden}, so removing it could lose them`
     // git worktree remove deletes ignored files, such as a .env, without asking. A wave's worktree is the sweep's own:
     // only its agents wrote there, so what it ignores (an environment, caches) can be made again and does not hold it
     const ofWave = (s.sweep?.waves ?? []).some((w) => w.worktree === wt)

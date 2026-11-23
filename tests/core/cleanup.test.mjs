@@ -375,3 +375,23 @@ test('a live sweep keeps every wave worktree, open or shipped; an ended one free
   assert.ok(listed.includes(`worktree:${other}`))
   assert.ok(!listed.includes(`worktree:${open}`) && !listed.includes(`worktree:${shipped}`))
 })
+
+test('a worktree with a skip-worktree or assume-unchanged edit is not listed, nor its branch', () => {
+  for (const flag of ['--skip-worktree', '--assume-unchanged']) {
+    const repo = makeRepo()
+    branch(repo, 'done', { merge: true })
+    const wt = worktree(repo, 'done')
+    git(wt, 'update-index', flag, 'a.txt')
+    fs.writeFileSync(`${wt}/a.txt`, 'my local edit\n')
+    assert.deepEqual(candidates(repo, tmp('home')), [], flag)
+  }
+})
+
+test('a skip-worktree path that is not on disk, as in a sparse checkout, does not hold a worktree', () => {
+  const repo = makeRepo()
+  branch(repo, 'done', { merge: true })
+  const wt = worktree(repo, 'done')
+  git(wt, 'update-index', '--skip-worktree', 'a.txt')
+  fs.rmSync(`${wt}/a.txt`)
+  assert.deepEqual(names(candidates(repo, tmp('home'))), [`branch:done`, `worktree:${fs.realpathSync(wt)}`].sort())
+})
