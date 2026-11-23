@@ -960,6 +960,7 @@ const commands = {
       }
       if (step === 'merging') {
         const tip = tipOf(s, wave)
+        if (wave.step === 'merging' && tip === wave.checked) return out(`wave ${wave.n} is at merging already, at ${tip}`)
         if (wave.step === 'final checks' && wave.checked) {
           if (tip !== wave.checked) fail(`${wave.branch} moved from ${wave.checked} to ${tip} while its final checks ran, so they do not count; run them again on the settled head. Nothing was changed.`)
         } else {

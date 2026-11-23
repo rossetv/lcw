@@ -359,6 +359,20 @@ test('a wave whose head moved during its final checks does not merge until they 
   assert.equal(git(t.repo, 'rev-parse', 'lcw/tidy'), tip)
 })
 
+test('a repeat of step merging on the head that was checked says it is at merging already and changes nothing', () => {
+  const t = shipping(1)
+  const tip = commit(t.wt, 'b.txt', 'fix\n')
+  t.cli('wave', 'step', 'final checks')
+  t.cli('wave', 'step', 'merging')
+  const before = JSON.stringify(t.state().sweep)
+  const ledger = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
+  const r = t.cli('wave', 'step', 'merging')
+  assert.equal(r.code, 0, r.out)
+  assert.equal(r.out.trim(), `wave 1 is at merging already, at ${tip}`)
+  assert.equal(JSON.stringify(t.state().sweep), before)
+  assert.equal(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), ledger)
+})
+
 test('waves land in order, and a shipped wave\'s worktree stays as the latest work until a later wave ships', () => {
   const t = bothShipping()
   t.at(1, 'wave', 'step', 'final checks')
