@@ -1251,6 +1251,7 @@ function enterStage(s, stage) {
   s.stageSince = now()
   s.approval = null // asked for the playback of this Brainstorm only
   s.milestone = null // the build sets it again for each milestone it launches
+  if (s.status === 'paused') return // a pause holds until resume, whatever the stage
   if (withYou(stage)) s.status = 'with-you'
   else s.status = 'running'
   s.pausedReason = null
