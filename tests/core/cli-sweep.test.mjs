@@ -1609,14 +1609,19 @@ test('a worktree folder deleted outside git does not block wave start or a hunt 
   t.cli('wave', 'add', '1')
   const gone = (dir, ...a) => { git(t.repo, 'worktree', 'add', '-q', ...a, dir); fs.rmSync(dir, { recursive: true, force: true }) }
   gone(`${t.repo}/.claude/worktrees/tidy-wave-1`, '-b', 'stray')
+  // a worktree of the person's own whose folder is missing, such as one on a drive not plugged in, stays on git's record
+  const theirs = `${tmp('theirs')}/elsewhere`
+  gone(theirs, '-b', 'their-work')
   const started = t.start()
   assert.equal(started.code, 0, started.out)
+  assert.match(git(t.repo, 'worktree', 'list', '--porcelain'), /their-work/)
   t.cli('stage', 'Ship')
   gone(`${t.repo}/.claude/worktrees/tidy-latest`, '--detach')
   const hunt = t.cli('stage', 'Hunt')
   assert.equal(hunt.code, 0, hunt.out)
   assert.equal(t.state().sweep.round, 2)
   assert.ok(fs.existsSync(`${t.repo}/.claude/worktrees/tidy-latest/a.txt`))
+  assert.match(git(t.repo, 'worktree', 'list', '--porcelain'), /their-work/)
 })
 
 test('stop removes the hunt\'s worktree and the refs that kept its rounds\' commits', () => {

@@ -1152,15 +1152,16 @@ function checkSweepSetting(s, key, value) {
   if (!ok[key]) fail(`${key} is ${{ 'sweep.charter': 'a whole number from 0 to 10', 'sweep.open': 'a whole number', 'sweep.prs': 'stacked, merged or end' }[key]}, not ${JSON.stringify(value)}. Nothing was changed.`)
 }
 
-/** Forgets worktrees whose folders were deleted outside git, which would otherwise refuse a new worktree at the same path. */
-function pruneWorktrees(root) {
-  try { git(root, 'worktree', 'prune') } catch {}
+/** Forgets the worktree git still has on record at dir when its folder was deleted outside git, which would refuse a new one there; no other worktree's record is touched. */
+function forgetMissing(root, dir) {
+  if (fs.existsSync(dir)) return
+  try { git(root, 'worktree', 'remove', '--force', dir) } catch {}
 }
 
 /** A new worktree on a new branch, kept out of the main checkout's git status, where lcw finds this run. Returns its real path. */
 function addWorktree(run, dir, branch, from) {
   const root = run.state.repoRoot
-  pruneWorktrees(root)
+  forgetMissing(root, dir)
   git(root, 'worktree', 'add', '-b', branch, dir, ...(from ? [from] : []))
   const exclude = path.resolve(root, git(root, 'rev-parse', '--git-path', 'info/exclude'))
   fs.mkdirSync(path.dirname(exclude), { recursive: true })
@@ -1324,7 +1325,7 @@ function freshLatest(s, round) {
   if (!open.length) return null
   const newest = open.at(-1)
   const dir = latestDir(s)
-  pruneWorktrees(s.repoRoot)
+  forgetMissing(s.repoRoot, dir)
   try { git(s.repoRoot, 'worktree', 'add', '-q', '--detach', dir, `refs/heads/${newest.branch}`) } catch (e) { fail(`git could not make the worktree ${dir}: ${firstLine(e)}. Nothing was changed.`) }
   const real = fs.realpathSync(dir)
   const tip = git(real, 'rev-parse', 'HEAD')
