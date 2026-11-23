@@ -96,7 +96,7 @@ const unfinished = (status) => unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 
 test('Resume takes the run over, resumes it only when it was paused, and hands Claude its next step', () => {
   const running = press({ now: NOW, unfinished: unfinished('running') }, 'resume')
   assert.deepEqual(argvs(running), ['take r2 --session s1'])
-  assert.match(running.prompt.text, /EnterWorktree/)
+  assert.doesNotMatch(running.prompt.text, /EnterWorktree/)
   assert.match(running.prompt.text, /merge T3/)
   assert.deepEqual(argvs(press({ now: NOW, unfinished: unfinished('paused') }, 'resume')), ['take r2 --session s1', 'resume --session s1'])
   const atMark = unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000, state: { id: 'r2', name: 'old-run', status: 'paused', pausedReason: 'mark', stage: 'Build' } }, '')

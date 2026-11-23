@@ -48,9 +48,9 @@ lcw set plan.tasks=20 plan.atOnce=6 'plan.models={"Sonnet":14,"Opus":4,"Haiku":2
 lcw ledger "shape: one orchestrator, <reason>"
 ```
 
-## Enter the run's worktree
+## Make the run's worktree
 
-`lcw worktree` creates the branch `lcw/<name>` and its worktree, and prints the path. This skill is your instruction to work in a worktree: call EnterWorktree with `path` set to that path. All build work happens there, so the main checkout and any other run stay untouched.
+`lcw worktree` creates the branch `lcw/<name>` and its worktree, and prints the path. All build work happens there, so the main checkout and any other run stay untouched. The session itself stays in the main checkout and never calls EnterWorktree (SKILL.md, "The stages"): every brief names that path.
 
 Then:
 

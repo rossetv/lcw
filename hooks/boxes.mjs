@@ -235,7 +235,7 @@ export function resumePrompt(root, sessionId, u, resumed) {
   return [
     `LCW: the person pressed Resume on the box for the unfinished run ${u.name} (${u.id}) of this repository. LCW has made this session take it over${resumed ? ' and resumed it' : ''}, so this session now drives it.`,
     ...(atMark ? ['It is paused at the usage mark and stays paused: do not resume it and do not raise the mark; LCW\'s box offers the person the raises.'] : []),
-    `Load the lcw:lcw skill with the Skill tool and run \`${cli(root)} status --session ${sessionId}\`. Once it names a worktree, call EnterWorktree with that path and work there.`,
+    `Load the lcw:lcw skill with the Skill tool and run \`${cli(root)} status --session ${sessionId}\`.`,
     `Then carry on from the run's next step${u.nextStep ? ' (' + quote(u.nextStep) + ')' : ''} and its ledger. Do not start again, and do not ask the person what was happening.`,
   ].join(' ')
 }
