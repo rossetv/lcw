@@ -534,6 +534,12 @@ async function measureSpend($: EngineInterface, e: { cost?: { usd: number } }, r
   const quota = await readQuota($, control, control?.markPercent ?? TH.usageMarkPercent, now)
   const step = measureStep(control, rec, { weekly: quota ? null : reading, cost: e.cost?.usd, quota }, now)
   if ((step.changed || control?.billing !== session?.billing) && session !== undefined) await $.fs.write(sessionFile(home, id), JSON.stringify({ ...session, billing: step.billing }))
+  // The canonical row is the one readers take first, so the billing settled here must reach it too.
+  const canonical = session?.sessionCanonicalId
+  if (step.billing !== 'unclear' && typeof canonical === 'string' && canonical !== id && /^[\w.-]{1,256}$/.test(canonical) && !/^\.+$/.test(canonical)) {
+    const anchor = await readParsed($, sessionFile(home, canonical))
+    if (anchor?.sessionCanonicalId === canonical && anchor.billing !== step.billing) await $.fs.write(sessionFile(home, canonical), JSON.stringify({ ...anchor, billing: step.billing }))
+  }
   if (step.drop) await $.process.run(['rm', '-f', spent]).catch(() => {})
   // A record caught mid-write is left for the next reading rather than started again from this one.
   if (step.record && rec !== undefined) await $.fs.write(spent, JSON.stringify(step.record))
