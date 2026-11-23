@@ -85,6 +85,22 @@ test('an unknown flag is refused, help prints the commands, and neither changes 
   assert.equal(t.cli('ask', 'why - now', '--waiting', '-3').code, 0)
 })
 
+test('an unknown flag or command is refused in a line that names what the command takes, without the whole help', () => {
+  const t = started()
+  const flag = t.cli('task', 'add', 'T1', 'x', '--waiting', '1')
+  assert.equal(flag.code, 1)
+  assert.match(flag.out, /Unknown flag or argument starting with "-": --waiting\. lcw task takes --model <value>, --effort <value>, --wave <value>, --session <id>\./)
+  const none = t.cli('frobnicate')
+  assert.equal(none.code, 1)
+  assert.match(none.out, /No lcw command "frobnicate"\. The commands are: start status /)
+  const order = t.cli('--session', 's1', 'ask', 'why')
+  assert.match(order.out, /The command must come first/)
+  for (const r of [flag, none, order]) {
+    assert.match(r.out, /"lcw help" prints every command/)
+    assert.equal(r.out.trim().split('\n').length, 1)
+  }
+})
+
 const parallel = (n, mk) => Promise.all(Array.from({ length: n }, (_, i) => new Promise((res) => {
   const t = mk(i)
   const p = spawn('node', [CLI, ...t.args], { cwd: t.o.cwd, env: { ...process.env, LCW_HOME: t.o.home, CLAUDE_CODE_SESSION_ID: t.o.session } })
