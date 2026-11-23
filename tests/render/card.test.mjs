@@ -1130,11 +1130,13 @@ test('a cut never leaves a separator before its "…"', () => {
 });
 
 test('a cut inside a span ahead of a separator drops the separator too', () => {
-  for (const [board, width] of [['RunningA', 46], ['19-finished-some-waves-short-of-your-rule', 28], ['NeedsYou', 62], ['ManyAgents', 77]]) {
+  for (const [board, width] of [['RunningA', 46], ['19-finished-some-waves-short-of-your-rule', 28], ['NeedsYou', 62], ['ManyAgents', 77], ['ManyAgents', 31], ['StageSpec', 56]]) {
     for (const w of [width, width + 1]) for (const frame of [true, false]) {
       const lines = strip(toAnsi(card(board, { width: w, frame }), 'dark', w)).split('\n');
       for (const l of lines) {
+        // A dim " …" after the lanes, waves or totals marks parts dropped, and keeps its space; a clipped word does not.
         assert.ok(!/[·›] ?…/.test(l), board + ' at ' + w + ': ' + l);
+        assert.ok(!/\S …/.test(l.replace(/(\d+ \w+|queued|fixed|done|waves?) …/g, '$1…')), board + ' at ' + w + ': ' + l);
         assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l);
       }
     }
