@@ -1517,6 +1517,21 @@ test('a hunt beside open waves reads a fresh worktree of every wave\'s latest wo
   assert.equal(git(t.repo, 'for-each-ref', 'refs/lcw/'), '')
 })
 
+test('a worktree folder deleted outside git does not block wave start or a hunt from making it again', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1')
+  const gone = (dir, ...a) => { git(t.repo, 'worktree', 'add', '-q', ...a, dir); fs.rmSync(dir, { recursive: true, force: true }) }
+  gone(`${t.repo}/.claude/worktrees/tidy-wave-1`, '-b', 'stray')
+  const started = t.start()
+  assert.equal(started.code, 0, started.out)
+  t.cli('stage', 'Ship')
+  gone(`${t.repo}/.claude/worktrees/tidy-latest`, '--detach')
+  const hunt = t.cli('stage', 'Hunt')
+  assert.equal(hunt.code, 0, hunt.out)
+  assert.equal(t.state().sweep.round, 2)
+  assert.ok(fs.existsSync(`${t.repo}/.claude/worktrees/tidy-latest/a.txt`))
+})
+
 test('stop removes the hunt\'s worktree and the refs that kept its rounds\' commits', () => {
   const t = holdingWithClosure()
   assert.equal(t.cli('stage', 'Hunt').code, 0)
