@@ -44,7 +44,10 @@ function load() {
 /** Writes the settings file whole: through a link to the file it names (a dotfiles manager's), keeping the link and the file's mode. */
 function put(text) {
   let target = settingsPath, mode
-  try { target = fs.realpathSync(settingsPath); mode = fs.statSync(target).mode & 0o777 } catch {}
+  try { target = fs.realpathSync(settingsPath); mode = fs.statSync(target).mode & 0o777 } catch {
+    // a link to a file that is not there yet: write where it points
+    try { target = path.resolve(path.dirname(settingsPath), fs.readlinkSync(settingsPath)) } catch {}
+  }
   fs.mkdirSync(path.dirname(target), { recursive: true })
   const tmp = `${target}.${process.pid}.tmp`
   fs.writeFileSync(tmp, text, { mode: mode ?? 0o666 })

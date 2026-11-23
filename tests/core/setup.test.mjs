@@ -107,3 +107,17 @@ test('uninstall with a damaged attribution record leaves attribution, says so, a
   assert.match(r.out, /attribution/)
   assert.equal(setup(home, settings, 'uninstall').code, 0, 'a second run does not trip on it')
 })
+
+test('setup writes through a settings link whose file is not there yet, and keeps the link', () => {
+  const home = tmp('home'), dir = tmp('s'), dotfiles = tmp('dotfiles')
+  fs.symlinkSync(`${dotfiles}/sub/settings.json`, `${dir}/settings.json`)
+  const r = setup(home, `${dir}/settings.json`, 'install')
+  assert.equal(r.code, 0, r.err)
+  assert.ok(fs.lstatSync(`${dir}/settings.json`).isSymbolicLink())
+  assert.deepEqual(read(`${dotfiles}/sub/settings.json`).attribution, { commit: '', pr: '' })
+
+  fs.symlinkSync('rel/target.json', `${dir}/other.json`)
+  assert.equal(setup(home, `${dir}/other.json`, 'install').code, 0)
+  assert.ok(fs.lstatSync(`${dir}/other.json`).isSymbolicLink())
+  assert.ok(read(`${dir}/rel/target.json`).statusLine, 'a relative link resolves against its own folder')
+})
