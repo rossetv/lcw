@@ -13,6 +13,7 @@ declare module 'claude-code' {
       nudged: Shaped<LcwNudged>
       completion: Shaped<LcwCompletion>
       carry: Shaped<{ session: string; carry: LcwCarry } | null>
+      owed: Shaped<{ session: string; runDir: string; text: string } | null>
     }
   }
 }

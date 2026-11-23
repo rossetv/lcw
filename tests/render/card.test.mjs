@@ -4,7 +4,7 @@ import { buildView, renderCard, weekOf, weekShare } from '../../lib/card.mjs';
 import { renderStatusRows } from '../../lib/status.mjs';
 import { toPlain, toAnsi } from '../../lib/paint.mjs';
 import { hex } from '../../lib/theme.mjs';
-import { inputsOf, NOW } from './boards.mjs';
+import { inputsOf, fixtures, NOW } from './boards.mjs';
 
 // A sweep's card in each of its states, and a build's beside them, as approved: every row but the agents', the rules
 // and the bottom border, each the text inside the frame. The last but one is drawn 40 cells wide, with no frame.
@@ -1028,5 +1028,70 @@ test("an agent's effort stays whole and in its column, with no token figure or w
     i.agents = [...i.agents.slice(0, 2), { ...i.agents[0], id: 'old', effort: 'medium', startTime: NOW - 65 * 6e4, quietMs: 20 * 6e4 }];
     const chip = efforts(i, width);
     assert.ok(chip.length === 3 && chip.every(([at, e]) => e && at === chip[0][0]), width + ': ' + JSON.stringify(chip));
+  }
+});
+
+const framedRows = (i, width) => strip(toAnsi(renderCard(buildView(i), { width, frame: true }), 'dark', width)).split('\n');
+
+test('the charter row keeps the line being asked at any width, and cuts the lines not reached yet after a "…"', () => {
+  for (const charter of [0, 1, 2]) {
+    const i = inputsOf('01-charter-with-you');
+    i.state.sweep = { ...i.state.sweep, charter };
+    const asked = ['goals', 'non-goals', 'anti-goals'][charter];
+    for (const width of [80, 100, 120]) {
+      const row = framedRows(i, width).find(l => l.includes('charter  '));
+      assert.ok(row.includes('› ' + asked) && row.includes('1 question open'), width + ': ' + row);
+    }
+  }
+  const i = inputsOf('01-charter-with-you');
+  i.state.sweep = { ...i.state.sweep, charter: 1 };
+  const row = framedRows(i, 80).find(l => l.includes('charter  '));
+  assert.match(row, /› non-goals.*…\s+1 question open/, row);
+});
+
+test("an agent row's effort is whole or absent when the card is narrow", () => {
+  for (const width of [60, 64, 68]) {
+    const rows = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), width).filter(l => l.includes('→'));
+    assert.ok(rows.length);
+    for (const l of rows) {
+      // What stands left of the sparkline ends in a whole model or a whole effort, never a word cut short.
+      const before = l.slice(0, l.search(/[▁-█]/)).trimEnd();
+      assert.match(before, /(?:\d\.\d|low|medium|high|xhigh|max)$/, width + ': ' + l);
+    }
+  }
+});
+
+test('a cut on the edge of a span leaves no dangling dot and says it cut', () => {
+  const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), 80).find(l => l.includes('areas '));
+  assert.ok(row.includes('…') && !/·\s+23 findings/.test(row), row);
+  assert.match(row, /…\s+23 findings so far/, row);
+});
+
+test('a cut that drops whole spans always shows "…", even where what is left ends on a word', () => {
+  for (const width of [65, 77]) {
+    const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), width).find(l => l.includes('areas '));
+    assert.match(row, /14 hunt.*…\s+23 findings so far/, width + ': ' + row);
+    assert.ok(!row.includes('16 left'), row);
+  }
+  const plain = strip(toAnsi(card('03-hunt-round-1-probes-at-work', { width: 61 }), 'dark', 61)).split('\n').find(l => l.startsWith('areas '));
+  assert.match(plain, /…\s+23 findings so far/, plain);
+});
+
+test('a cut leaves no dangling "›" before its "…"', () => {
+  for (const [width, frame] of [[80, true], [76, false]]) {
+    const row = strip(toAnsi(card('StageSpec', { width, frame }), 'dark', width)).split('\n').find(l => l.includes('blind review  '));
+    assert.ok(row.includes('…') && !/[›·]\s*…/.test(row), row);
+  }
+});
+
+test('no row of any board is wider than the card, at any width from 20 to 200', () => {
+  for (const name of Object.keys(fixtures)) {
+    for (let width = 20; width <= 200; width++) {
+      for (const frame of [false, true]) {
+        for (const l of strip(toAnsi(card(name, { width, frame }), 'dark', width)).split('\n')) {
+          assert.ok(cols(l) <= width, name + ' at ' + width + (frame ? ' framed' : '') + ': ' + l);
+        }
+      }
+    }
   }
 });
