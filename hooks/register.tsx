@@ -682,11 +682,29 @@ async function assessCompletion($: EngineInterface) {
     // Claim before submitting: the assessment's own turn must never wake another assessment, even after a reload.
     const notice = { at: now, tries: (last?.tries ?? 0) + 1, sent: true }
     S.completion = { ...S.completion, [run.runDir]: notice }
-    await update($, keptCompletion, () => S.completion)
-    if (blocked()) { notice.sent = false; await update($, keptCompletion, () => S.completion); return }
-    if (!(await submit($, { text: completionPrompt($.plugin.root) }))) {
-      notice.sent = false
+    let attempted = false
+    try {
       await update($, keptCompletion, () => S.completion)
+      const at = await $.clock.now()
+      const currentMoney = await readMoney($, run.session, s, run.gate, at)
+      const currentAgents = await $.agent.list()
+      if (currentAgents.some((a) => ['pending', 'running', 'waiting'].includes(a.status))) return
+      if (String(await $.fs.read(run.paths.checkpoint).catch(() => '')).trim()) return
+      const current = await readRun($, await $.clock.now())
+      if (!current || snapshot(current) !== snapshot(run)) return
+      if (usageFact({ state: current.state, session: current.session, usage: current.usage, money: currentMoney, quota: current.quota, now: at }).atMark) return
+      if ((await draft($)) !== '' || blocked()) return
+      attempted = true
+      if (!(await submit($, { text: completionPrompt($.plugin.root) }))) {
+        notice.sent = false
+        await update($, keptCompletion, () => S.completion)
+      }
+    } finally {
+      if (!attempted) {
+        if (last) S.completion[run.runDir] = last
+        else delete S.completion[run.runDir]
+        await update($, keptCompletion, () => S.completion)
+      }
     }
   } finally {
     S.completionBusy = false

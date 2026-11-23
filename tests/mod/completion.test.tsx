@@ -16,7 +16,7 @@ function engine(on: any, opts: { state?: object; drops?: number; kept?: Record<s
     [RUN + '/state.json']: JSON.stringify(state),
     [RUN + '/mod-alive']: String(NOW),
   }
-  const box = { draft: '', agents: [] as any[], drops: opts.drops ?? 0, onRead: null as (() => void) | null }
+  const box = { draft: '', agents: [] as any[], drops: opts.drops ?? 0, onRead: null as (() => void) | null, onClaim: null as (() => Promise<void>) | null }
   const kept = opts.kept ?? {}
   const prompts: string[] = []
   const commands: string[][] = []
@@ -43,7 +43,11 @@ function engine(on: any, opts: { state?: object; drops?: number; kept?: Record<s
   on('config.list', () => ({ value: [] }))
   on('ui.invalidate', () => ({ value: undefined }))
   on('state.get', (_: any, e: any) => ({ value: { value: kept[e.key], version: e.key in kept ? 1 : 0 } }))
-  on('state.set', (_: any, e: any) => { kept[e.key] = e.value; return { value: { isSet: true, version: 2 } } })
+  on('state.set', async (_: any, e: any) => {
+    if (e.key === 'completion') await box.onClaim?.()
+    kept[e.key] = e.value
+    return { value: { isSet: true, version: 2 } }
+  })
   const set = (more: object) => { Object.assign(state, more); files[RUN + '/state.json'] = JSON.stringify(state) }
   return { clock, files, box, kept, prompts, commands, set }
 }
@@ -59,11 +63,15 @@ test('an idle driver in Ship is asked to assess outstanding work, never automati
   expect(w.prompts).toHaveLength(0)
   await w.clock.advance(3000)
   expect(w.prompts).toHaveLength(1)
-  expect(w.prompts[0]).toMatch(/assess.*remaining agreed work/i)
-  expect(w.prompts[0]).toMatch(/requirements.*post-merge/i)
-  expect(w.prompts[0]).toMatch(/only if.*complete.*finish/i)
-  expect(w.prompts[0]).toMatch(/otherwise.*record/i)
-  expect(JSON.parse(w.files[RUN + '/state.json']).status).toBe('running')
+  const prompt = w.prompts[0]
+  if (prompt === undefined) throw new Error('completion assessment was not delivered')
+  expect(prompt).toMatch(/assess.*remaining agreed work/i)
+  expect(prompt).toMatch(/requirements.*post-merge/i)
+  expect(prompt).toMatch(/only if.*complete.*finish/i)
+  expect(prompt).toMatch(/otherwise.*record/i)
+  const saved = w.files[RUN + '/state.json']
+  if (saved === undefined) throw new Error('run state is missing')
+  expect(JSON.parse(saved).status).toBe('running')
   expect(w.commands.some((a) => a?.includes('finish'))).toBe(false)
   await end($)
   await w.clock.advance(32000)
@@ -196,6 +204,47 @@ test('stopping the session suppresses completion assessment until a new successf
   await w.clock.advance(32000)
   expect(w.prompts).toHaveLength(1)
 })
+
+for (const change of ['pause', 'driver', 'binding', 'draft', 'gate', 'usage', 'agents', 'checkpoint']) {
+  test(`completion assessment rechecks ${change} after a delayed durable claim and restores an unused try`, async ($, on) => {
+    const w = engine(on)
+    let claimed!: () => void
+    let release!: () => void
+    const claimStarted = new Promise<void>((resolve) => { claimed = resolve })
+    const claimReleased = new Promise<void>((resolve) => { release = resolve })
+    w.box.onClaim = async () => { w.box.onClaim = null; claimed(); await claimReleased }
+    await start($)
+    await end($)
+    const advancing = w.clock.advance(32000)
+    try {
+      const hasClaim = await Promise.race([claimStarted.then(() => true), advancing.then(() => false)])
+      expect(hasClaim).toBe(true)
+      if (change === 'pause') w.set({ status: 'paused', pausedReason: 'human' })
+      if (change === 'driver') w.set({ driver: 's2' })
+      if (change === 'binding') w.files['/lcw/sessions/s1.json'] = JSON.stringify({ runDir: '/other-run' })
+      if (change === 'draft') w.box.draft = 'wait'
+      if (change === 'gate') w.files[RUN + '/gate'] = JSON.stringify({ reason: 'mark' })
+      if (change === 'usage') w.files['/lcw/usage.json'] = JSON.stringify({ sevenDay: { percentUsed: 100, resetsAt: '2026-11-30T12:00:00Z' } })
+      if (change === 'agents') w.box.agents = [{ id: 'a1', status: 'waiting', startTime: NOW }]
+      if (change === 'checkpoint') w.files[RUN + '/checkpoint'] = 'verify setup'
+    } finally {
+      release()
+      await advancing
+    }
+    expect(w.prompts).toHaveLength(0)
+    expect(w.kept.completion?.value?.[RUN]).toBeUndefined()
+    w.set({ status: 'running', pausedReason: null, driver: 's1' })
+    w.files['/lcw/sessions/s1.json'] = JSON.stringify({ runDir: RUN })
+    w.box.draft = ''
+    w.box.agents = []
+    delete w.files[RUN + '/gate']
+    delete w.files['/lcw/usage.json']
+    delete w.files[RUN + '/checkpoint']
+    await w.clock.advance(4000)
+    expect(w.prompts).toHaveLength(1)
+    expect(w.kept.completion?.value?.[RUN]?.tries).toBe(1)
+  })
+}
 
 for (const ending of [{}, { reason: 'error' }, { isAborted: true }, { agentId: 'a1' }]) {
   test(`completion assessment needs an observed successful main turn: ${JSON.stringify(ending)}`, async ($, on) => {
