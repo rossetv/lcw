@@ -54,7 +54,7 @@ function settleBilling(ids, signedIn) {
     const change = {}
     if (session?.billing !== signedIn) change.billing = signedIn
     // the note this start gives is the payg instructions
-    if (signedIn === 'payg' && id === ids[0] && !rows.some((row) => row.session?.toldPayg)) change.toldPayg = true
+    if (signedIn === 'payg' && id === ids[0] && !session?.toldPayg) change.toldPayg = true
     if (Object.keys(change).length) writeJson(file, { ...session, ...change })
     if (signedIn === 'subscription' && session?.billing === 'payg') dropSpend(id)
   }
