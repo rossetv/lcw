@@ -944,6 +944,17 @@ test('outside the lanes the waves row keeps its label and cells, and its counts 
   for (let w = 44; w <= 90; w++) assert.match(row(w, none), /^waves none queued yet( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?$/, w + ': ' + row(w, none));
 });
 
+test('just after the weekly reset the week row gives no pace, until enough of the week has passed for it to mean something', () => {
+  const right = (weekElapsedPercent, weekUsedPercent) => {
+    const r = renderStatusRows({ ...inputsOf('Main').status, weekElapsedPercent, weekUsedPercent }, { width: 126 })[1];
+    return joined(r.slice(r.findIndex(s => s.r)));
+  };
+  assert.equal(right(20 / 60 / 168 * 100, 1), 'resets in 6d');
+  assert.equal(right(4.9, 1), 'resets in 6d');
+  assert.equal(right(5, 1), 'resets in 6d · +80% spare');
+  assert.equal(right(50, 60), 'resets in 3d · -20% short');
+});
+
 test("the lanes' heading keeps its wave cells to the room left, so none is cut while the lanes fit", () => {
   const queued = Array.from({ length: 20 }, (_, k) => ({ n: 10 + k, status: 'queued' }));
   const state = { name: 'sweep-x', shape: 'sweep', stage: 'Ship', status: 'running', createdAt: NOW - 3e6, stageSince: NOW - 1e6,
