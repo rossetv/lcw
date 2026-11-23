@@ -51,3 +51,18 @@ test('abandon keeps a worktree holding a skip-worktree edit', () => {
   assert.match(r.out, /worktree kept: .*a\.txt/)
   assert.equal(fs.readFileSync(`${wt}/a.txt`, 'utf8'), 'local edit\n')
 })
+
+test('stopping a sweep leaves another worktree that sits at its -latest path', () => {
+  const home = tmp('home')
+  const repo = makeRepo()
+  git(repo, 'remote', 'add', 'origin', 'https://github.com/acme/widgets.git')
+  const o = { home, cwd: repo, session: 's1' }
+  assert.equal(lcw(['start', 'tidy', '--title', 'Tidy', '--shape', 'sweep'], o).code, 0)
+  const other = `${repo}/.claude/worktrees/tidy-latest`
+  git(repo, 'worktree', 'add', '-q', '-b', 'mine', other)
+  fs.writeFileSync(`${other}/notes.txt`, 'unsaved\n')
+  const r = lcw(['stop'], o)
+  assert.equal(r.code, 0, r.out + r.err)
+  assert.equal(fs.readFileSync(`${other}/notes.txt`, 'utf8'), 'unsaved\n')
+  assert.match(r.out, /worktree kept: .*tidy-latest/)
+})

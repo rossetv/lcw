@@ -1359,10 +1359,22 @@ function waveStatus(run, x) {
 
 const latestDir = (s) => `${s.repoRoot}/.claude/worktrees/${s.name}-latest`
 
-/** Removes the hunt's throwaway worktree, if there is one; says what became of it. It holds nothing of its own to lose. */
-function dropLatest(s) {
+/**
+ * Removes the hunt's throwaway worktree, if there is one; says what became of it. It holds nothing of its own to lose,
+ * but a build run or a session named <name>-latest may live at the same path: only a worktree detached at a commit the
+ * hunt made (`also` is one it has just checked out) is removed.
+ */
+function dropLatest(s, also) {
   const dir = latestDir(s)
   if (!fs.existsSync(dir)) return null
+  let own = false
+  try {
+    const commits = [...huntRefs(s).map((r) => git(s.repoRoot, 'rev-parse', r)), also].filter(Boolean)
+    let attached = true
+    try { git(dir, 'symbolic-ref', '-q', 'HEAD') } catch { attached = false }
+    own = !attached && commits.includes(git(dir, 'rev-parse', 'HEAD'))
+  } catch {}
+  if (!own) return `worktree kept: ${dir}, because it is not the hunt's own worktree (detached at a commit of the hunt)`
   try { git(s.repoRoot, 'worktree', 'remove', '--force', dir) } catch (e) { return `worktree kept: ${dir}, because git would not remove it: ${firstLine(e)}` }
   return `worktree removed: ${dir}`
 }
@@ -1410,7 +1422,7 @@ function freshLatest(s, round) {
       try { conflicted = git(real, 'diff', '--name-only', '--diff-filter=U') } catch {}
       try { git(real, 'merge', '--abort') } catch {}
       if (!conflicted) {
-        const gone = dropLatest(s) ?? `worktree ${real} was already gone`
+        const gone = dropLatest(s, tip) ?? `worktree ${real} was already gone`
         fail(`git could not merge ${x.branch} into the hunt's worktree: ${firstLine(e)}. The stage was not changed; ${gone}.`)
       }
       git(real, 'reset', '-q', '--hard', tip)
