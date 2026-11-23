@@ -931,3 +931,15 @@ test('wide characters take two cells, so every row keeps to the width and the fr
     }
   }
 });
+
+test('outside the lanes the waves row keeps its label and cells, and its counts and totals give way whole', () => {
+  const waves = [1, 2, 3].map(n => ({ n, status: 'shipped', pr: n })).concat([4, 5].map(n => ({ n, status: 'queued' })));
+  const state = { name: 'sweep-x', shape: 'sweep', stage: 'Hunt', status: 'running', createdAt: NOW - 864e5, stageSince: NOW - 6e5,
+    sweep: { round: 2, fixed: 14, parked: 3, dropped: 2, prs: 'stacked', hunt: { fix: 6, park: 1, drop: 2 }, waves } };
+  const row = (width, s = state) => laneRows({ state: s, now: NOW }, width).find(l => l.startsWith('waves'));
+  for (let w = 44; w <= 90; w++) assert.match(row(w), /^waves ▰▰▰▱▱(  3 done( · 2 queued)?)?( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?$/, w + ': ' + row(w));
+  assert.match(row(80), /^waves ▰▰▰▱▱  3 done · 2 queued +round 2 · 14 fixed · 3 parked · 2 dropped$/);
+  // With no wave queued yet the totals give way too.
+  const none = { ...state, sweep: { ...state.sweep, waves: [] } };
+  for (let w = 44; w <= 90; w++) assert.match(row(w, none), /^waves none queued yet( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?$/, w + ': ' + row(w, none));
+});
