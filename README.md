@@ -41,13 +41,13 @@ lcw quota-command
 lcw quota-command off
 ```
 
-The command must be available when LCW refreshes, exit successfully within 30 seconds, and print one JSON object. Supply credentials to the reader through its own protected configuration, **not** as arguments or environment assignments in the saved command text. A successful reading looks like this (use a stable, non-secret 64-character lowercase hex digest for `accountKey`, never a raw account identifier):
+The command must be available when LCW refreshes, exit successfully within 30 seconds, and print one JSON object. Supply credentials to the reader through its own protected configuration, **not** as arguments or environment assignments in the saved command text. This successful reading is illustrative; its reset date is not a value to reuse (use a stable, non-secret 64-character lowercase hex digest for `accountKey`, never a raw account identifier):
 
 ```json
 {"v":1,"status":"ok","accountKey":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","weekly":{"percentUsed":42,"resetsAt":"2026-12-01T12:00:00.000Z"},"blocked":false}
 ```
 
-`percentUsed` must be a finite number from 0 to 100, and `resetsAt` a future ISO timestamp. If the reader cannot provide a trustworthy weekly window, return `{"v":1,"status":"unavailable","code":"no-weekly-window"}`; for provider refusal, return `{"v":1,"status":"refused","code":"provider-refused"}`. Other accepted codes are `auth`, `network`, `timeout`, `invalid-response`, `ambiguous-weekly-window`, `account-changed`, and `command-failed`; failure results may include the same non-secret `accountKey`. An unavailable or refused reading cannot configure the source; a failed replacement leaves the previous setting intact.
+`percentUsed` must be a finite number from 0 to 100, and `resetsAt` the provider's actual future weekly reset in ISO format, never an invented rolling date. If the reader cannot provide a trustworthy weekly window, return `{"v":1,"status":"unavailable","code":"no-weekly-window"}`; for provider refusal, return `{"v":1,"status":"refused","code":"provider-refused"}`. Other accepted codes are `auth`, `network`, `timeout`, `invalid-response`, `ambiguous-weekly-window`, `account-changed`, and `command-failed`; failure results may include the same non-secret `accountKey`. An unavailable or refused reading cannot configure the source; a failed replacement leaves the previous setting intact.
 
 Endpoint matching normalizes equivalent URLs but does not match other endpoints; selectors with credentials, query strings or fragments are rejected. Readings refresh about every five minutes. Failure, refusal, provider blocking, stale readings and reaching your percentage mark hold new work; the last good reading may be shown as history, not permission. A reset alone does not resume a paused run: a fresh allowable reading is required, and a human pause stays paused. The percentage is **account-wide**, not usage attributable to this machine or repository, and it supplies no dollar estimate. `lcw quota-command off` restores ordinary session selection without changing the separate spend command.
 
