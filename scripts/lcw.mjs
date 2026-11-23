@@ -1425,7 +1425,9 @@ function freshLatest(s, round) {
       try { conflicted = git(real, 'diff', '--name-only', '--diff-filter=U') } catch {}
       try { git(real, 'merge', '--abort') } catch {}
       if (!conflicted) {
-        const gone = dropLatest(s, git(real, 'rev-parse', 'HEAD')) ?? `worktree ${real} was already gone`
+        let head = tip
+        try { head = git(real, 'rev-parse', 'HEAD') } catch {}
+        const gone = dropLatest(s, head) ?? `worktree ${real} was already gone`
         fail(`git could not merge ${x.branch} into the hunt's worktree: ${firstLine(e)}. The stage was not changed; ${gone}.`)
       }
       git(real, 'reset', '-q', '--hard', tip)
