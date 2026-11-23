@@ -768,6 +768,15 @@ test('a wave at Ship says merging once its checks passed, and that its final che
   assert.match(laneOf(laneRows(withWave1({ stage: 'Ship', step: null })), 1), /▰{6} {4}final checks next +34m$/);
 });
 
+test('a wave with every task done and still in Build says its review is next', () => {
+  const done = (ids) => ids.map((id) => ({ id, title: id, status: 'done' }));
+  const built = { stage: 'Build', round: 0, tasks: done(['T1', 'T2', 'T3']) };
+  assert.match(laneOf(laneRows(withWave1(built)), 1), / 3 of  3 tasks done · review next +34m$/);
+  // A task still to start is work left in Build, so nothing is said of the review yet.
+  const left = { ...built, tasks: [...built.tasks, { id: 'T4', title: 'T4', status: 'todo' }] };
+  assert.match(laneOf(laneRows(withWave1(left)), 1), / 3 of  4 tasks done +34m$/);
+});
+
 test('a wave shipped and waiting on its merge keeps its lane at Ship while the charter merges as it goes', () => {
   const held = { status: 'shipped', merged: false, pr: 41, stage: 'Review', step: null };
   const rows = laneRows(withWave1(held, { prs: 'merged' }));
