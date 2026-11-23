@@ -121,3 +121,26 @@ test('setup writes through a settings link whose file is not there yet, and keep
   assert.ok(fs.lstatSync(`${dir}/other.json`).isSymbolicLink())
   assert.ok(read(`${dir}/rel/target.json`).statusLine, 'a relative link resolves against its own folder')
 })
+
+test('setup resolves a missing link target against the real folder of a linked settings folder', () => {
+  const home = tmp('home'), root = tmp('root')
+  fs.mkdirSync(`${root}/dotfiles/claude`, { recursive: true })
+  fs.symlinkSync(`${root}/dotfiles/claude`, `${root}/dot-claude`)
+  fs.symlinkSync('../shared/settings.json', `${root}/dotfiles/claude/settings.json`)
+  const r = setup(home, `${root}/dot-claude/settings.json`, 'install')
+  assert.equal(r.code, 0, r.err)
+  assert.ok(fs.lstatSync(`${root}/dotfiles/claude/settings.json`).isSymbolicLink())
+  assert.ok(read(`${root}/dotfiles/shared/settings.json`).statusLine, 'the file is where the link points, not beside the folder link')
+  assert.equal(fs.existsSync(`${root}/shared`), false, 'no stray file where the link folder sits')
+})
+
+test('setup keeps every link of a chain whose last file is not there yet', () => {
+  const home = tmp('home'), dir = tmp('s')
+  fs.symlinkSync(`${dir}/b.json`, `${dir}/a.json`)
+  fs.symlinkSync('real/c.json', `${dir}/b.json`)
+  const r = setup(home, `${dir}/a.json`, 'install')
+  assert.equal(r.code, 0, r.err)
+  assert.ok(fs.lstatSync(`${dir}/a.json`).isSymbolicLink())
+  assert.ok(fs.lstatSync(`${dir}/b.json`).isSymbolicLink(), 'the middle link is not replaced by a file')
+  assert.ok(read(`${dir}/real/c.json`).statusLine)
+})

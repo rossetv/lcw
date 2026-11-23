@@ -45,8 +45,15 @@ function load() {
 function put(text) {
   let target = settingsPath, mode
   try { target = fs.realpathSync(settingsPath); mode = fs.statSync(target).mode & 0o777 } catch {
-    // a link to a file that is not there yet: write where it points
-    try { target = path.resolve(path.dirname(settingsPath), fs.readlinkSync(settingsPath)) } catch {}
+    // a link (or a chain of them) to a file that is not there yet: write where the last one points
+    for (let hop = 0; hop < 8; hop++) {
+      try {
+        const dir = path.dirname(target)
+        let base = dir
+        try { base = fs.realpathSync(dir) } catch {}
+        target = path.resolve(base, fs.readlinkSync(target))
+      } catch { break }
+    }
   }
   fs.mkdirSync(path.dirname(target), { recursive: true })
   const tmp = `${target}.${process.pid}.tmp`
