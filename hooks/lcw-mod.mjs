@@ -292,14 +292,20 @@ export function gateFor(state, sevenDay, now, money) {
   return { reason: 'mark', markPercent: mark, usedPercent: sevenDay.percentUsed, resetsAt: sevenDay.resetsAt ?? null, at: now }
 }
 
+export function gateIdentity(gate) {
+  return gate?.unit === 'quota'
+    ? JSON.stringify([gate.holdId, gate.sourceId, gate.revision, gate.requestId, gate.accountKey, gate.resetsAt, gate.at])
+    : JSON.stringify([gate?.unit ?? 'percent', gate?.resetsAt, gate?.retryAt, gate?.markPercent, gate?.markUsd, gate?.at])
+}
+
 /** A recovery must carry a new allowable observation, not just an elapsed reset. */
 export function quotaWakeEvidence(gate, quota, now) {
-  if (gate?.unit !== 'quota' || quota?.sourceId !== gate.sourceId || quota.status !== 'ok' || quota.hold || quota.blocked) return null
+  if (!gate || !quota || (gate.unit === 'quota' && quota.sourceId !== gate.sourceId) || quota.status !== 'ok' || quota.hold || quota.blocked) return null
   if (!quota.revision || !quota.requestId || !quota.accountKey || !(Date.parse(quota.resetsAt) > now)) return null
-  if (!Number.isFinite(quota.observedAt) || quota.observedAt < gate.at || quota.observedAt > now || now - quota.observedAt >= MAX_AGE_MS) return null
+  if (!Number.isFinite(quota.observedAt) || quota.observedAt > now || now - quota.observedAt >= MAX_AGE_MS) return null
   if (quota.revision === gate.revision && quota.requestId === gate.requestId) return null
   return {
-    gate: JSON.stringify([gate.holdId, gate.sourceId, gate.revision, gate.requestId, gate.accountKey, gate.resetsAt, gate.at]),
+    gate: gateIdentity(gate),
     evidence: JSON.stringify([quota.sourceId, quota.revision, quota.accountKey, quota.resetsAt, quota.requestId, quota.observedAt]),
   }
 }

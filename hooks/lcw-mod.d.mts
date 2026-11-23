@@ -30,6 +30,7 @@ export function usageTokens(usage: any): number
 export function agentTokens(agent: any): number
 export function gateFor(state: any, sevenDay: SevenDay | null | undefined, now: number): Gate | null
 export function gateFor(state: any, sevenDay: SevenDay | null | undefined, now: number, money: Money | null | undefined): Gate | UsdGate | null
+export function gateIdentity(gate: any): string
 export function quotaWakeEvidence(gate: any, quota: import('../lib/quota.mjs').QuotaView | null | undefined, now: number): { gate: string; evidence: string } | null
 export function wakeDue(gate: { resetsAt?: string | null; unit?: string; retryAt?: number } | null | undefined, now: number,
   wokeFor: string | number | null | undefined, billing?: Billing | string, quota?: import('../lib/quota.mjs').QuotaView | null): boolean

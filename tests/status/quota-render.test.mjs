@@ -75,8 +75,17 @@ test('disabling external quota restores only its saved billing while a broken so
 test('external recovery requires fresh allowable evidence rather than an expired reset', () => {
   const gate = { unit: 'quota', sourceId: quota.sourceId, revision: 'r1', requestId: 'q1', accountKey: quota.accountKey, resetsAt: '2026-11-18T11:00:00Z', at: NOW - 1000 }
   assert.equal(wakeDue(gate, NOW, null, 'subscription'), false)
-  for (const q of [{ ...quota, hold: true }, { ...quota, blocked: true }, { ...quota, status: 'stale' }, { ...quota, sourceId: 'another-source' }, { ...quota, requestId: undefined }, { ...quota, requestId: 'q1' }, { ...quota, observedAt: NOW - 2000 }]) {
+  for (const q of [{ ...quota, hold: true }, { ...quota, blocked: true }, { ...quota, status: 'stale' }, { ...quota, sourceId: 'another-source' }, { ...quota, requestId: undefined }, { ...quota, requestId: 'q1' }]) {
     assert.equal(wakeDue(gate, NOW, null, 'subscription', q), false)
   }
+  assert.equal(wakeDue(gate, NOW, null, 'subscription', { ...quota, observedAt: gate.at - 1000 }), true)
   assert.equal(wakeDue(gate, NOW, null, 'subscription', quota), true)
+})
+
+test('current source views ignore obsolete gates without allowing held quota', () => {
+  const usd = { unit: 'usd', reason: 'mark', markUsd: 3000, usedUsd: 3100, retryAt: NOW + 100000, at: NOW }
+  assert.equal(buildView({ state, quota, gate: usd, now: NOW }).mode, 'running')
+  assert.equal(buildView({ state, quota: { ...quota, hold: true, status: 'refused' }, gate: usd, now: NOW }).mode, 'paused')
+  assert.equal(buildView({ state: { ...state, status: 'with-you' }, gate: { resetsAt: '2026-11-18T11:00:00Z' }, now: NOW }).mode, 'with-you')
+  assert.equal(buildView({ state, gate: { unit: 'quota', reason: 'mark' }, now: NOW }).mode, 'running')
 })
