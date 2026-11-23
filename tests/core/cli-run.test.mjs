@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { fnv1a32hex, repoKey } from '../../lib/key.mjs'
 import { spawn } from 'node:child_process'
-import { tmp, makeRepo, git, lcw, readJson, started, CLI } from './helpers.mjs'
+import { tmp, makeRepo, git, lcw, readJson, started, fakeClaude, CLI } from './helpers.mjs'
 
 test('start creates the run, binds the session, prints paths', () => {
   const t = started('export-csv')
@@ -168,4 +168,27 @@ test('finish stores no dollars for a session that is not billed per token', () =
   fs.writeFileSync(`${t.home}/spend/s1.json`, JSON.stringify({ v: 1, base: 0, max: 80, q: { 1: 80 } }))
   t.cli('finish')
   assert.ok(!('usd' in t.state().totals))
+})
+
+test('awake holds only for a Claude Code process on record, not any live process with that pid', { skip: process.platform === 'darwin' || process.platform === 'linux' ? false : 'LCW holds off sleep only on macOS and Linux' }, () => {
+  // stand-ins that end at once, so no test holds off this computer's sleep
+  const stubs = tmp('stubs')
+  for (const f of ['caffeinate', 'systemd-inhibit']) fs.writeFileSync(`${stubs}/${f}`, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+  const env = { PATH: `${stubs}:${process.env.PATH}` }
+  const t = started()
+  t.cli('stage', 'Build')
+  const pidOnRecord = (pid) => fs.writeFileSync(`${t.home}/sessions/s1.json`, JSON.stringify({ runDir: t.dir, claudePid: pid }))
+  const other = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 20000)'], { stdio: 'ignore' })
+  const claude = fakeClaude()
+  try {
+    pidOnRecord(other.pid)
+    const r = lcw(['awake'], { ...t.o, env })
+    assert.equal(r.code, 1, r.out)
+    assert.match(r.out, /no Claude Code process on record/)
+    assert.equal(fs.existsSync(`${t.dir}/awake`), false)
+    pidOnRecord(claude.pid)
+    const ok = lcw(['awake'], { ...t.o, env })
+    assert.equal(ok.code, 0, ok.out)
+    assert.equal(ok.out.trim(), 'kept awake')
+  } finally { other.kill(); claude.kill() }
 })

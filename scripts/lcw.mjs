@@ -843,7 +843,7 @@ const commands = {
       if (!canHold()) fail('LCW cannot keep this computer awake: it needs caffeinate on macOS, or systemd-inhibit on Linux.')
       if (keptHold(run.dir)) return out('already kept awake')
       const pid = Number(sessionId ? readJson(sessionFile(home(), sessionId))?.claudePid : NaN)
-      if (!alive(pid)) fail('This session has no Claude Code process on record (claudePid in its session file), so a hold could not end with it. Nothing was kept awake.')
+      if (!claudeAlive(pid)) fail('This session has no Claude Code process on record (claudePid in its session file), so a hold could not end with it. Nothing was kept awake.')
       if (!startHold(run.dir, pid, `LCW run ${s.name}`, now())) fail('The hold did not start. Nothing was kept awake.')
       appendLedger(run.paths, 'kept awake until the run pauses, finishes or stops, or Claude Code exits', ledgerWave(run.state))
       out('kept awake')
