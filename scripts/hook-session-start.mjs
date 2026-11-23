@@ -5,11 +5,12 @@ import { fileURLToPath } from 'node:url'
 import { runsDir, repoKey } from '../lib/key.mjs'
 import { home, mainCheckout, writeAtomic, readJson, writeJson, sweepTemp } from './lib/store.mjs'
 import { findRun, listRuns } from './lib/runs.mjs'
-import { sessionIds, sessionMark, DEFAULT_MARK } from './lib/gate.mjs'
+import { sessionIds, sessionMark, DEFAULT_MARK, applyGate } from './lib/gate.mjs'
 import { readMoney, dropSpend } from './lib/money.mjs'
 import { paygLines } from './lib/payg-note.mjs'
 import { alive } from './lib/awake.mjs'
 import { signInKind } from '../lib/billing.mjs'
+import { noteQuotaSession, readSessionQuota, quotaLine } from './lib/quota-session.mjs'
 import { sessionFile } from '../lib/key.mjs'
 import { openWaves } from '../lib/banner.mjs'
 
@@ -29,11 +30,11 @@ function signIn() {
 }
 
 /** Settles the session's billing from the sign-in, writing the session file once and only when something changes. */
-function settleBilling(id) {
+function settleBilling(id, signedIn) {
   const file = sessionFile(home(), id)
   const session = readJson(file)
   const had = session?.billing
-  const kind = had === 'subscription' ? had : signIn() // a settled subscription is never downgraded
+  const kind = had === 'subscription' ? had : signedIn // a settled subscription is never downgraded
   const billing = kind === 'unclear' ? had ?? 'unclear' : kind
   const change = {}
   if (billing !== (had ?? 'unclear')) change.billing = billing
@@ -95,10 +96,25 @@ try {
     if (run) break
   }
   const now = Number(process.env.LCW_NOW) || Date.now()
-  const billing = ids.length ? settleBilling(ids[0]) : 'unclear'
+  const prior = ids.map((id) => readJson(sessionFile(home(), id))).find((s) => s?.billing)
+  const signedIn = prior?.billing === 'subscription' && !prior.quotaSelection ? 'subscription' : signIn()
+  noteQuotaSession(ids, { startup: true, defaultBilling: signedIn })
+  const billing = ids.length ? settleBilling(ids[0], signedIn) : 'unclear'
+  for (const id of ids.slice(1)) {
+    const file = sessionFile(home(), id)
+    const session = readJson(file)
+    if (session?.billing !== billing) writeJson(file, { ...session, billing })
+  }
   if (ids.length) noteAdvisor(ids[0])
   const money = billing === 'payg' ? readMoney({ sessionId: ids, now }) : null
-  const mark = run ? run.state.markPercent ?? DEFAULT_MARK : sessionMark(ids)
+  const mark = sessionMark(ids)
+  const quota = readSessionQuota(ids, now, mark)
+  const driverQuota = run ? readSessionQuota(run.state.driver, now, run.state.markPercent ?? DEFAULT_MARK) : null
+  if (driverQuota) {
+    applyGate(run.paths, run.state, null, now)
+    if (driverQuota.hold && !quota?.hold) lines.push(`LCW: STOP. This run's ${quotaLine(driverQuota)}. Launch nothing new; let running agents finish and pause the run at the mark.`)
+  }
+  if (quota) lines.push(quotaLine(quota), ...(quota.hold ? ['LCW: STOP. External subscription quota holds new work until a fresh allowable reading; never substitute dollar spend or raise the mark without the user.'] : []))
   if (money) lines.push(...paygLines(cli, money))
   else lines.push(`This session has a usage mark, run or no run: ${mark}% of the week${mark === DEFAULT_MARK ? ' unless the user raises it' : ', as the user set it'}. When they say "run up to N%", run: ${cli} mark N. When they say to finish regardless of the limit, run: ${cli} mark 100. It holds for this session only. When a hook tells you the session is at its mark, stop and tell the user; never raise the mark without their explicit words.`)
   lines.push(`If the user says "set up LCW": run node ${root}/scripts/setup.mjs install (it puts LCW's status rows and the no-AI-attribution settings in place, and lets the advisor and spend banners ask again) and say what was set. If they ask to uninstall LCW: run node ${root}/scripts/setup.mjs uninstall, say what it put back, then tell them to run /plugin uninstall lcw@lcw to remove the plugin itself.`)
@@ -119,7 +135,7 @@ try {
       `Next step: ${next || 'see the ledger'}.`,
       !paused ? `Load the lcw:lcw skill and carry on (run "${cli} status" first).`
         : byYou ? `The user paused it, so it stays paused until they say carry on: do not resume it yourself. Load the lcw:lcw skill when they do.`
-          : `Load the lcw:lcw skill. It resumes once the limit has reset or the user raises the mark: check "${cli} usage"; if it still says at the mark, the run stays paused and you end your turn. Otherwise run "${cli} resume" and carry on.`,
+          : `Load the lcw:lcw skill. It resumes only when a current reading permits work or the user raises the mark: check "${cli} usage"; if it still says at the mark, the run stays paused and you end your turn. Otherwise run "${cli} resume" and carry on.`,
     )
   } else if (listRuns(runsDir(home(), repoKey(mainCheckout(cwd)))).length) {
     lines.push(`This repository has past LCW runs: "${cli} runs" lists them.`)

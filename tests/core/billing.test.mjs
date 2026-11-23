@@ -36,6 +36,11 @@ test('a weekly figure of 0 still makes a subscription, whatever the kind', () =>
   assert.equal(settle('payg', { weekly: 0, replied: true }), 'subscription')
 })
 
+test('selected quota remains subscription-backed without a weekly reading', () => {
+  assert.equal(settle('payg', { quotaSelected: true, replied: true }), 'subscription')
+  assert.equal(settle('unclear', { quotaSelected: true }), 'subscription')
+})
+
 test('unclear settles to payg only on a reply without a weekly figure', () => {
   assert.equal(settle('unclear', { replied: true }), 'payg')
   assert.equal(settle('unclear', { replied: false }), 'unclear')

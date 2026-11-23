@@ -12,6 +12,7 @@ import { settle } from '../lib/billing.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import { diffOf } from './lib/diff.mjs'
 import { workOf } from '../lib/banner.mjs'
+import { noteQuotaSession, readSessionQuota, quotaUsage } from './lib/quota-session.mjs'
 
 const WEEK_MS = 168 * 3600 * 1000
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -104,10 +105,13 @@ function settleBilling(inp, ids, now) {
   const was = ids.map((i) => readJson(sessionFile(home(), i))?.billing).find((b) => typeof b === 'string') ?? 'unclear'
   const cost = num(inp.cost?.total_cost_usd)
   const weekly = inp.rate_limits?.seven_day
-  const billing = settle(was, { weekly: weekly && typeof weekly === 'object' ? weekly : null, replied: cost > 0 })
-  if (billing !== was) setBilling(id, billing)
-  if (billing === 'subscription') dropSpend(id)
-  else if (cost !== null) recordSpend(id, cost, now)
+  const quotaSelected = !!readSessionQuota(ids, now, sessionMark(ids))
+  const billing = settle(was, { weekly: weekly && typeof weekly === 'object' ? weekly : null, replied: cost > 0, quotaSelected })
+  for (const alias of ids) {
+    if (readJson(sessionFile(home(), alias))?.billing !== billing && billing !== 'unclear') setBilling(alias, billing)
+    if (billing === 'subscription') dropSpend(alias)
+  }
+  if (billing !== 'subscription' && cost !== null) recordSpend(id, cost, now)
 }
 
 function plainRow(input) {
@@ -123,6 +127,7 @@ export async function main({ margin = 5 } = {}) {
     const now = clock()
     let run = null
     const ids = sessionIds(inp)
+    try { noteQuotaSession(ids) } catch {}
     try { settleBilling(inp, ids, now) } catch {}
     for (const id of ids.length ? ids : [undefined]) {
       try { run = findRun({ sessionId: id, cwd: inp?.cwd || inp?.workspace?.current_dir }) } catch {}
@@ -130,8 +135,11 @@ export async function main({ margin = 5 } = {}) {
     }
     // The mark is the session's own, run or no run; a run carries its driving session's.
     let mark = DEFAULT_MARK
-    try { mark = run?.state.markPercent ?? sessionMark(ids) } catch {}
+    try { mark = sessionMark(ids) } catch {}
+    const quota = readSessionQuota(ids, now, mark)
+    const driverQuota = run ? readSessionQuota(run.state.driver, now, run.state.markPercent ?? DEFAULT_MARK) : null
     mapped = mapInput(inp, now, mark)
+    if (quota) mapped.input.quota = quota
     // Claude Code hands each session the figure it saw at its own last reply, so two bars can differ. The newest
     // one any session has reported is kept in usage.json, and that is what every bar and mascot shows: nothing
     // once the week it was read in is over.
@@ -139,7 +147,7 @@ export async function main({ margin = 5 } = {}) {
     const pct = num(inp.context_window?.used_percentage), win = num(inp.context_window?.context_window_size)
     if (pct !== null && win) for (const id of ids) try { writeJson(contextFile(home(), id), { tokens: Math.round(pct / 100 * win), window: win, at: now }) } catch {}
     let usage = readJson(usageFile(home()))
-    if (mapped.usage) {
+    if (mapped.usage && !quota) {
       try {
         usage = mergeUsage(usage, mapped.usage)
         writeJson(usageFile(home()), usage)
@@ -147,6 +155,7 @@ export async function main({ margin = 5 } = {}) {
     }
     // On pay-per-token billing the 7-day spend is what the mark is held against, and that needs no weekly figure.
     // The run is gated by its driving session's view, which is this session's own when it is the driver.
+    if (quota) usage = quotaUsage(quota, now)
     let money = null
     try { money = readMoney({ sessionId: ids, now, state: run?.state }) } catch {}
     if (money) mapped.input.money = money
@@ -154,8 +163,7 @@ export async function main({ margin = 5 } = {}) {
       try {
         const driver = run.state.driver
         const driverMoney = !driver || ids.includes(driver) ? money : readMoney({ sessionId: driver, now, state: run.state })
-        if (driverMoney) applyGate(run.paths, run.state, usage, now, driverMoney)
-        else if (mapped.usage) applyGate(run.paths, run.state, usage, now)
+        applyGate(run.paths, run.state, readJson(usageFile(home())), now, driverMoney)
       } catch {}
     }
     // While the session's run has its worktree, that is where the work is: the bar names the run's branch and
@@ -190,7 +198,7 @@ export async function main({ margin = 5 } = {}) {
       const activity = ids.map((id) => readJson(activityFile(home(), id))).filter(Boolean).sort((a, b) => b.at - a.at)[0] ?? null
       // Points of the week left before the session's usage mark; unknown once the week it was read in is over.
       const markLeft = live ? mark - week.percentUsed : null
-      const share = run ? (await import('../lib/card.mjs')).weekShare(run.state, week) : null
+      const share = run && !driverQuota ? (await import('../lib/card.mjs')).weekShare(run.state, readJson(usageFile(home()))?.sevenDay) : null
       const mood = moodOf({ now, transcriptAt, activity, contextPercent: mapped.input.contextPercent, markLeft, run: runFacts(run, ids, now, share), money, hour: new Date(now).getHours() })
       const creature = mascotRows({ now, seed: ids[0], mood })
       const cells = creature[0].length + GAP
@@ -205,7 +213,8 @@ export async function main({ margin = 5 } = {}) {
       if (now - alive > 15000) {
         const { buildView, renderCard } = await import('../lib/card.mjs')
         const gate = readJson(run.paths.gate)
-        const view = buildView({ state: run.state, agents: run.state.agents ?? [], usage: readJson(usageFile(home())), gate, money, now, ui: { expanded: {}, moreOpen: false } })
+        const cardMoney = readMoney({ sessionId: run.state.driver ?? ids, now, state: run.state })
+        const view = buildView({ state: run.state, agents: run.state.agents ?? [], usage: driverQuota ? quotaUsage(driverQuota, now) : readJson(usageFile(home())), gate, money: cardMoney, quota: driverQuota, now, ui: { expanded: {}, moreOpen: false } })
         rows = rows.concat(renderCard(view, { width, theme }))
       }
     }

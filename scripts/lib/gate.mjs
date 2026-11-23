@@ -1,11 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { usageFile, sessionFile } from '../../lib/key.mjs'
 import { gateExpired } from '../../lib/usage.mjs'
 import { thresholds } from '../../lib/theme.mjs'
 import { next0800 } from '../../lib/spend.mjs'
 import { home, readJson, writeJson } from './store.mjs'
 import { readMoney } from './money.mjs'
+import { readSessionQuota } from './quota-session.mjs'
 
 export const DEFAULT_MARK = thresholds.usageMarkPercent
 export const readUsage = () => readJson(usageFile(home()))
@@ -64,6 +66,9 @@ export function atMark(mark, usage, now = Date.now(), money = null) {
  * is under it: the run waits for its 08:00 try, which the mod makes.
  */
 export function applyGate(paths, state, usage, now = Date.now(), money = null) {
+  const quota = readSessionQuota(state.driver, now, state.markPercent ?? DEFAULT_MARK)
+  if (quota) return applyQuotaGate(paths, state, now)
+  if (readJson(paths.gate)?.unit === 'quota') fs.rmSync(paths.gate, { force: true })
   const on = atMark(state.markPercent ?? DEFAULT_MARK, usage, now, money)
   if (on && state.status === 'paused' && state.pausedReason === 'human') return false // the human paused it; resume evaluates the mark again
   const has = fs.existsSync(paths.gate)
@@ -79,14 +84,73 @@ export function applyGate(paths, state, usage, now = Date.now(), money = null) {
   return on
 }
 
-/**
- * For the launch gate: the gate file exists and the usage figure and reset time still back it. A dollar gate
- * holds only while the machine's 7-day spend is at or over the driving session's mark, at any hour; for a
- * session no longer billed per token it falls back to the week's figure.
- */
+const gateOwner = /^[1-9]\d*-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/
+
+function reapGateLock(lock, owner = null) {
+  try {
+    if (!fs.lstatSync(lock).isDirectory()) return
+    const names = fs.readdirSync(lock)
+    if (!owner && !names.length) { fs.rmdirSync(lock); return }
+    const marker = owner ?? names[0]
+    if (!gateOwner.test(marker) || names.length > 1 || (names.length && names[0] !== marker)) return
+    try { process.kill(Number(marker.split('-')[0]), 0); return } catch (e) { if (e.code !== 'ESRCH') return }
+    if (names.length) {
+      if (!fs.lstatSync(`${lock}/${marker}`).isFile()) return
+      fs.unlinkSync(`${lock}/${marker}`)
+    }
+    fs.rmdirSync(lock)
+  } catch {}
+}
+
+function applyQuotaGate(paths, state, now) {
+  if (state.status === 'paused' && state.pausedReason === 'human') return readSessionQuota(state.driver, now, state.markPercent ?? DEFAULT_MARK)?.hold ?? true
+  const lock = `${paths.gate}.lock`
+  const marker = `${process.pid}-${randomUUID()}`
+  const prepared = `${lock}.${marker}`
+  try {
+    for (const entry of fs.readdirSync(path.dirname(lock), { withFileTypes: true })) {
+      const prefix = `${path.basename(lock)}.`
+      const owner = entry.name.slice(prefix.length)
+      if (entry.isDirectory() && entry.name.startsWith(prefix) && gateOwner.test(owner)) reapGateLock(path.join(path.dirname(lock), entry.name), owner)
+    }
+    fs.mkdirSync(prepared, { mode: 0o700 })
+    fs.writeFileSync(`${prepared}/${marker}`, '', { flag: 'wx', mode: 0o600 })
+    try { fs.renameSync(prepared, lock) } catch (e) {
+      if (!['EEXIST', 'ENOTEMPTY'].includes(e.code)) throw e
+      reapGateLock(lock)
+      fs.renameSync(prepared, lock)
+    }
+    let on = true
+    try {
+      // Re-read after claiming the gate so an older success cannot replace a newer hold.
+      const quota = readSessionQuota(state.driver, now, state.markPercent ?? DEFAULT_MARK)
+      if (!quota) return false
+      on = quota.hold
+      const previous = readJson(paths.gate)
+      const evidence = { sourceId: quota.sourceId, revision: quota.revision, requestId: quota.requestId ?? null, accountKey: quota.accountKey ?? null, resetsAt: quota.resetsAt ?? null, observedAt: quota.observedAt ?? null }
+      if (quota.hold) {
+        const gate = { reason: 'mark', unit: 'quota', ...evidence, status: quota.status, blocked: !!quota.blocked, code: quota.code ?? null, markPercent: state.markPercent ?? DEFAULT_MARK, usedPercent: quota.percentUsed ?? null }
+        const { at, holdId, recoveredBy, ...old } = previous ?? {}
+        if (recoveredBy || JSON.stringify(old) !== JSON.stringify(gate)) writeJson(paths.gate, { ...gate, holdId: randomUUID(), at: now })
+      } else if (previous?.unit === 'quota' && JSON.stringify(previous.recoveredBy) !== JSON.stringify(evidence)) {
+        writeJson(paths.gate, { ...previous, recoveredBy: evidence })
+      }
+    } finally { fs.renameSync(lock, prepared) }
+    return on
+  } catch { return true }
+  finally {
+    try { fs.unlinkSync(`${prepared}/${marker}`) } catch {}
+    try { fs.rmdirSync(prepared) } catch {}
+  }
+}
+
 export function gateHolds(paths, state, now = Date.now()) {
+  const quota = readSessionQuota(state.driver, now, state.markPercent ?? DEFAULT_MARK)
+  if (quota) return applyGate(paths, state, null, now)
+  const money = state.driver ? readMoney({ sessionId: state.driver, now, state }) : null
+  if (atMark(state.markPercent ?? DEFAULT_MARK, readUsage(), now, money)) return true
   const gate = readJson(paths.gate)
-  if (!gate) return false
+  if (!gate || gate.unit === 'quota') return false
   if (gateExpired(gate, now)) return false
   if (gate.unit === 'usd') {
     const money = state.driver ? readMoney({ sessionId: state.driver, now, state }) : null

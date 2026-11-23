@@ -8,6 +8,7 @@ import * as gate from '../../scripts/lib/gate.mjs'
 
 process.env.TZ = 'Europe/Dublin'
 process.env.LCW_AUTH_STATUS_JSON = 'fail' // the sign-in is stubbed: no test runs the real `claude auth status`
+for (const key of ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_OAUTH_TOKEN']) delete process.env[key]
 
 const gateHook = (t, input, session = 's1') => run(GATE_HOOK, [], { home: t.home, cwd: t.repo, input: typeof input === 'string' ? input : JSON.stringify(input) })
 const future = () => new Date(Date.now() + 86400000).toISOString()
@@ -153,7 +154,7 @@ test('a new session in the worktree of a run another open session drives neither
     assert.equal(fs.existsSync(`${t.home}/sessions/second.json`), false)
     // /clear: a new session id in the driver's own Claude Code process carries on
     assert.match(start('cleared', { CLAUDE_PID: String(claude.pid) }).out, /Unfinished LCW run: \d{8}-busy/)
-  } finally { claude.kill() }
+  } finally { claude.ref(); claude.kill() }
   await new Promise((resolve) => (claude.exitCode !== null || claude.signalCode !== null ? resolve() : claude.once('exit', resolve)))
   // once the driver's Claude Code has closed, a session in the worktree carries the run on
   assert.match(start('later').out, /Unfinished LCW run: \d{8}-busy/)

@@ -5,6 +5,7 @@ import { sessionFile, spendFile, spendDir, capFile, runsDir, runPaths, repoKey }
 import { moneyFrom, recordReading, spendFileCounts, readingOf } from '../../lib/spend.mjs'
 import { home, readJson, writeJson } from './store.mjs'
 import { readSetting, readReading } from './spend-command.mjs'
+import { sessionBilling } from './quota-session.mjs'
 
 /** The stated weekly cap ({usd, at}), or null when none is stated and $4,000 is assumed. */
 export function readCap() {
@@ -19,6 +20,7 @@ export function writeCap(usd, now) {
 
 /** Folds a cost reading into the session's spend record; writes only when the record changed. */
 export function recordSpend(sessionId, rawCost, now) {
+  if (sessionBilling(readJson(sessionFile(home(), sessionId))) === 'subscription') return null
   const file = spendFile(home(), sessionId)
   const rec = readJson(file)
   const next = recordReading(rec, rawCost, now)
@@ -46,7 +48,7 @@ export function spendRecords(now) {
   let names = []
   try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.json')) } catch {}
   const mtime = (n) => { try { return fs.statSync(`${dir}/${n}`).mtimeMs } catch { return 0 } }
-  return names.filter((n) => spendFileCounts(mtime(n), now)).map((n) => readJson(`${dir}/${n}`)).filter(Boolean)
+  return names.filter((n) => spendFileCounts(mtime(n), now) && sessionBilling(readJson(sessionFile(home(), n.slice(0, -5)))) !== 'subscription').map((n) => readJson(`${dir}/${n}`)).filter(Boolean)
 }
 
 /**
@@ -59,7 +61,8 @@ export function spendRecords(now) {
 export function readMoney({ sessionId, now, state = null }) {
   const ids = [].concat(sessionId ?? [])
   const sessions = ids.map((id) => readJson(sessionFile(home(), id)) ?? {})
-  if (sessions.find((s) => typeof s.billing === 'string')?.billing !== 'payg') return null
+  if (sessions.some((s) => s.quotaSelection && sessionBilling(s) === 'subscription')) return null
+  if (sessionBilling(sessions.find((s) => typeof s.billing === 'string' || s.quotaSelection)) !== 'payg') return null
   const session = sessions.find((s) => typeof s.markUsd === 'number' || typeof s.markPercent === 'number') ?? null
   const own = ids.map((id) => readJson(spendFile(home(), id))).find((rec) => typeof rec?.max === 'number')
   const reading = readingOf(readSetting(home()), readReading(home()))
