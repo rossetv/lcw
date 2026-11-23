@@ -15,3 +15,10 @@ test('a stage move keeps a paused run paused', () => {
   assert.equal(s.pausedReason, 'mark')
   assert.ok(s.pausedAt)
 })
+
+test('a value that is itself a flag is reported as a missing value', () => {
+  const t = started('flags')
+  const r = t.cli('checkpoint', '--keep', '--session', 'x')
+  assert.equal(r.code, 1)
+  assert.match(r.err + r.out, /--keep needs a value/)
+})

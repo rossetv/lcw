@@ -86,7 +86,8 @@ for (let i = 0; i < (spendWords || quotaWords ? 0 : argv.length); i++) {
   const [, name, joined] = /^--([a-z]+)(?:[=\s]\s*([\s\S]*))?$/.exec(a) ?? []
   if (name && switches.includes(name) && joined === undefined) flags[name] = true
   else if (name && (name === 'session' || allowed.includes(name))) {
-    if (joined === undefined && i + 1 >= argv.length) refuse(`${a} needs a value`)
+    const next = /^--([a-z]+)$/.exec(argv[i + 1] ?? '')?.[1]
+    if (joined === undefined && (i + 1 >= argv.length || (next && (next === 'session' || allowed.includes(next) || switches.includes(next))))) refuse(`${a} needs a value`)
     flags[name] = joined === undefined ? argv[++i] : joined.trim()
   } else if (a === '-h' || a === '--help') help()
   else {
