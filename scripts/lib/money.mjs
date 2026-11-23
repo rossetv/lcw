@@ -30,6 +30,8 @@ export function recordSpend(sessionId, rawCost, now) {
   if (billingFor(sessionsFor(sessionId)) === 'subscription') return null
   const file = spendFile(home(), sessionId)
   const rec = readJson(file)
+  // A file that exists but does not parse is caught mid-write by another writer: starting afresh would overwrite its spend.
+  if (rec === null && fs.existsSync(file)) return null
   const next = recordReading(rec, rawCost, now)
   if (next && next !== rec) writeJson(file, next)
   return next
