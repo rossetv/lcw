@@ -1030,3 +1030,39 @@ test("an agent's effort stays whole and in its column, with no token figure or w
     assert.ok(chip.length === 3 && chip.every(([at, e]) => e && at === chip[0][0]), width + ': ' + JSON.stringify(chip));
   }
 });
+
+const framedRows = (i, width) => strip(toAnsi(renderCard(buildView(i), { width, frame: true }), 'dark', width)).split('\n');
+
+test('the charter row keeps the line being asked at any width, and cuts the lines not reached yet after a "…"', () => {
+  for (const charter of [0, 1, 2]) {
+    const i = inputsOf('01-charter-with-you');
+    i.state.sweep = { ...i.state.sweep, charter };
+    const asked = ['goals', 'non-goals', 'anti-goals'][charter];
+    for (const width of [80, 100, 120]) {
+      const row = framedRows(i, width).find(l => l.includes('charter  '));
+      assert.ok(row.includes('› ' + asked) && row.includes('1 question open'), width + ': ' + row);
+    }
+  }
+  const i = inputsOf('01-charter-with-you');
+  i.state.sweep = { ...i.state.sweep, charter: 1 };
+  const row = framedRows(i, 80).find(l => l.includes('charter  '));
+  assert.match(row, /› non-goals.*…\s+1 question open/, row);
+});
+
+test("an agent row's effort is whole or absent when the card is narrow", () => {
+  for (const width of [60, 64, 68]) {
+    const rows = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), width).filter(l => l.includes('→'));
+    assert.ok(rows.length);
+    for (const l of rows) {
+      // What stands left of the sparkline ends in a whole model or a whole effort, never a word cut short.
+      const before = l.slice(0, l.search(/[▁-█]/)).trimEnd();
+      assert.match(before, /(?:\d\.\d|low|medium|high|xhigh|max)$/, width + ': ' + l);
+    }
+  }
+});
+
+test('a cut on the edge of a span leaves no dangling dot and says it cut', () => {
+  const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), 80).find(l => l.includes('areas '));
+  assert.ok(row.includes('…') && !/·\s+23 findings/.test(row), row);
+  assert.match(row, /…\s+23 findings so far/, row);
+});
