@@ -18,6 +18,8 @@ export interface Banner {
   note?: string
   /** The question box: the question it puts. */
   questionId?: string
+  /** The answer box drawing an ask's options: that ask's number. */
+  askN?: number
   /** The option drawn filled as the one recommended: its id, or null for none. Absent on a box whose first option is the one filled. */
   recommended?: string | null
 }

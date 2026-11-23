@@ -1176,10 +1176,10 @@ export const register: Register = (on) => {
         const state = Number.isFinite(S.totals.tokens) ? { ...run.state, totals: { ...run.state.totals, agents: S.totals.agents, tokens: S.totals.tokens } } : run.state
         const view = buildView({ state, agents: S.agents, usage: run.usage, gate: run.gate, money: run.money, quota: run.quota, now, ui: S.ui })
         const tick = isAnimating(run.state) ? Math.floor((now - S.shownSince) / 100) : undefined
-        // The mark box offers the raises and the answer box shows the asks, so the card does not say them again,
+        // The mark box offers the raises and the answer box shows asks (an ask with options alone), so the card does not say them again,
         // unless the box waits for room.
         const draw = (maxRows: number, boxed: boolean) => {
-          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, hideMarkHint: boxed && shown?.kind === 'mark', askInBox: boxed && shown?.kind === 'answer' }
+          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, hideMarkHint: boxed && shown?.kind === 'mark', asksInBox: boxed && shown?.kind === 'answer' ? (shown.askN === undefined ? view.asks.map((a: any) => a.n) : [shown.askN]) : undefined }
           return renderCard(view, opts)
         }
         const boxed = drawn.length > 0 && (shown?.kind === 'mark' || shown?.kind === 'answer')
