@@ -14,6 +14,8 @@ import { gateExpired } from '../lib/usage.mjs'
 import { weekOf, weekShare } from '../lib/card.mjs'
 import { moneyFrom, runSpend, markUsdOf, machineSpend, readingOf, SPEND_COMMAND_FAILS, DEFAULT_CAP_USD } from '../lib/spend.mjs'
 import { runCommand, readSetting, writeSetting, clearSetting, readReading, recordResult, claimWindow } from './lib/spend-command.mjs'
+import { configureQuota, disableQuota, readQuotaState } from './lib/quota-command.mjs'
+import { QUOTA_SOURCE_ID, activeQuota, evaluateQuota, quotaOff } from '../lib/quota.mjs'
 import { dollars, ageText } from '../lib/format.mjs'
 import { isOpenWave } from '../lib/banner.mjs'
 
@@ -44,7 +46,7 @@ const HUNT_COUNTS = ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'd
 const flags = {}
 const args = []
 const argv = process.argv.slice(2)
-const COMMANDS = 'start status stage set task req ask answer question approval ledger checkpoint mark cap spend-command usage pause resume stop finish worktree pictures runs where take abandon awake hunt wave merge'
+const COMMANDS = 'start status stage set task req ask answer question approval ledger checkpoint mark cap spend-command quota-command usage pause resume stop finish worktree pictures runs where take abandon awake hunt wave merge'
 const USAGE = `lcw commands: ${COMMANDS}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
 In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked, charter.md written, no wave queued and every open wave built (in Review, back in Build from it, or in Ship); a round entered with a wave short of Ship is an early one, which status shows and which cannot end the sweep; with waves open it makes .claude/worktrees/<name>-latest, detached, holding every open wave's work (the newest wave's tip alone if they conflict), which status prints as latest work while the round runs. worktree makes only the branch lcw/<name>; the session stays in the main checkout and each wave gets its own worktree.
@@ -56,6 +58,7 @@ take <runId> makes this session take over a run of this repository that no sessi
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
 flags: --session <id> (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --wave; approval --meaning; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
+quota-command <endpoint> <command line> sets an external weekly subscription source for sessions whose ANTHROPIC_BASE_URL matches that endpoint; quota-command alone inspects it, quota-command off disables it. Quote the command as one argument for shell syntax; a final --session <id> is not part of it. Keep credentials out of command text. Setup requires a successful v:1 quota JSON reading within 30 seconds; failed setup leaves the prior setting intact. Refreshes are shared every 5 minutes; failed, refused or expired readings hold new work, never supply dollar estimates. The source is account-wide, not this machine's spend.
 question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] puts a short question to the person in LCW's box, in a sweep; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
 checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
@@ -65,14 +68,17 @@ const SEE_HELP = 'Nothing was changed. "lcw help" prints every command.'
 const help = () => { console.log(USAGE); process.exit(0) }
 const allowed = COMMAND_FLAGS[argv[0]] || []
 const switches = SWITCHES[argv[0]] || []
-// after spend-command every word is the command line, even one that starts with "-"; only a final --session <id> pair is not
+// Shell commands preserve their words and flags; only a final --session <id> pair is not part of them.
 let spendWords = null
-if (argv[0] === 'spend-command') {
-  spendWords = argv.slice(1)
-  if (spendWords.length >= 2 && spendWords.at(-2) === '--session') { flags.session = spendWords.at(-1); spendWords = spendWords.slice(0, -2) }
-  if (spendWords.length === 1 && (spendWords[0] === '-h' || spendWords[0] === '--help')) help()
+let quotaWords = null
+if (argv[0] === 'spend-command' || argv[0] === 'quota-command') {
+  let words = argv.slice(1)
+  if (words.length >= 2 && words.at(-2) === '--session') { flags.session = words.at(-1); words = words.slice(0, -2) }
+  if (words.length === 1 && (words[0] === '-h' || words[0] === '--help')) help()
+  if (argv[0] === 'quota-command') quotaWords = words
+  else spendWords = words
 }
-for (let i = 0; i < (spendWords ? 0 : argv.length); i++) {
+for (let i = 0; i < (spendWords || quotaWords ? 0 : argv.length); i++) {
   const a = argv[i]
   if (!a.startsWith('-')) { args.push(a); continue }
   // a flag may come with its value in the same word, as --wave=2, or as "--wave 2" from a shell variable that was not split
@@ -89,7 +95,7 @@ for (let i = 0; i < (spendWords ? 0 : argv.length); i++) {
     refuse(`Unknown flag or argument starting with "-": ${a}.${COMMANDS.split(' ').includes(argv[0]) ? ` lcw ${argv[0]} takes ${own.join(', ')}.` : ''}${text} ${SEE_HELP}`)
   }
 }
-const [command, ...rest] = spendWords ? ['spend-command', ...spendWords] : args
+const [command, ...rest] = quotaWords ? ['quota-command', ...quotaWords] : spendWords ? ['spend-command', ...spendWords] : args
 if (command === 'help') help()
 if (argv[0] !== command && argv.length) refuse(`The command must come first, as in "lcw status --session <id>". ${SEE_HELP}`)
 const sessionId = flags.session || process.env.CLAUDE_CODE_SESSION_ID || null
@@ -654,6 +660,27 @@ const commands = {
     recordResult(home(), line, result, at)
     claimWindow(home(), at)
     out(`Spend command set. It says ${dollars(result.usd)} for the last 7 days; LCW now takes the figure from it.`)
+  },
+
+  async 'quota-command'() {
+    if (rest.length === 1 && rest[0] === 'off') {
+      const result = await disableQuota(home())
+      if (!result.ok) fail(`Not disabled: ${result.code}.`)
+      return out('External quota command off. Default session selection restored.')
+    }
+    if (!rest.length) {
+      const state = readQuotaState(home())
+      if (!state || quotaOff(state)) return out('No external quota command set.')
+      const view = evaluateQuota({ sourceId: QUOTA_SOURCE_ID }, state, now())
+      const label = activeQuota(state) ? `External quota for ${state.endpoint}` : 'External quota'
+      return out(view.status === 'ok'
+        ? `${label}: ${view.percentUsed}% used; resets ${view.resetsAt}${view.blocked ? '; provider blocked' : ''}.`
+        : `${label}: ${view.status} (${view.code}); new work held.`)
+    }
+    if (rest.length < 2 || rest[0] === 'off') fail('Usage: lcw quota-command <endpoint> <command line>, quota-command, or quota-command off.')
+    const result = await configureQuota(home(), rest[0], rest.slice(1).join(' '), { now })
+    if (!result.ok) fail(`Not set: ${result.code}. The prior quota setting stays as it was.`)
+    out(`External quota command set: ${result.result.weekly.percentUsed}% used${result.result.blocked ? '; provider blocked' : ''}.`)
   },
 
   usage() {
