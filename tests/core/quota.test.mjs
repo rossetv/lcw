@@ -33,6 +33,15 @@ test('missing or noncanonical endpoint bindings hold without borrowing global ca
   }
 })
 
+test('reset times with microsecond or nanosecond fractions are accepted and cut to milliseconds', () => {
+  for (const resetsAt of ['2026-01-02T12:00:00.123456+00:00', '2026-01-02T13:00:00.123456789+01:00']) {
+    const r = parseQuotaResult(JSON.stringify({ ...ok, weekly: { percentUsed: 1, resetsAt } }), at)
+    assert.equal(r.status, 'ok')
+    assert.equal(r.weekly.resetsAt, '2026-01-02T12:00:00.123Z')
+  }
+  assert.equal(parseQuotaResult(JSON.stringify({ ...ok, weekly: { percentUsed: 1, resetsAt: '2026-01-02T12:00:00.1234567890Z' } }), at).status, 'unavailable')
+})
+
 test('wire validation accepts only complete bounded successes and allowlisted failures', () => {
   assert.deepEqual(parseQuotaResult(JSON.stringify({ ...ok, secret: 'discard' }), at), ok)
   assert.equal(parseQuotaResult(JSON.stringify({ ...ok, weekly: { percentUsed: 1, resetsAt: '2026-01-02T13:00:00+01:00' } }), at).weekly.resetsAt, ok.weekly.resetsAt)
