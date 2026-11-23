@@ -118,7 +118,9 @@ export const spendFailingFact = (reading) => (reading ? { fails: reading.fails, 
  */
 export function statusLineFact(setting, lcwHome) {
   const command = typeof setting?.command === 'string' ? setting.command.trim() : ''
-  return command ? { command, mine: command === `node ${lcwHome}/bin/statusline.mjs` } : null
+  const shim = `${lcwHome}/bin/statusline.mjs`
+  // setup quotes a path the shell would split; installs made before it did hold the bare path
+  return command ? { command, mine: command === `node ${shim}` || command === `node '${shim.replace(/'/g, `'\\''`)}'` } : null
 }
 
 /** The next step the run last recorded: its ledger's last checkpoint line, or null. */

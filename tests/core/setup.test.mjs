@@ -35,6 +35,29 @@ test('setup keeps the settings file\'s mode', () => {
   }
 })
 
+test('the status line runs from a home with a space in its path, and a plain path is written as before', () => {
+  const home = tmp('my home') + '/.lcw', settings = tmp('s') + '/settings.json'
+  assert.equal(setup(home, settings, 'install').code, 0)
+  const { command } = read(settings).statusLine
+  const input = JSON.stringify({ model: { display_name: 'Opus 5' }, cwd: tmp('cwd') })
+  const r = spawnSync('sh', ['-c', command], { input, encoding: 'utf8', env: { ...process.env, LCW_HOME: home, COLUMNS: '100' } })
+  assert.equal(r.status, 0, r.stderr)
+  assert.ok(r.stdout.trim(), 'it printed the rows')
+  assert.match(setup(home, settings, 'status').out, /statusLine: LCW/)
+
+  const plain = tmp('home'), other = tmp('s') + '/settings.json'
+  setup(plain, other, 'install')
+  assert.equal(read(other).statusLine.command, `node ${plain}/bin/statusline.mjs`)
+})
+
+test('a status line installed before paths were quoted is still LCW\'s own, and uninstall takes it out', () => {
+  const home = tmp('my home') + '/.lcw', settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ statusLine: { type: 'command', command: `node ${home}/bin/statusline.mjs`, refreshInterval: 1, padding: 0 } }))
+  assert.match(setup(home, settings, 'status').out, /statusLine: LCW/)
+  setup(home, settings, 'uninstall')
+  assert.equal(read(settings).statusLine, undefined)
+})
+
 test('uninstall removes the agent depth only when install set it', () => {
   const home = tmp('home'), settings = tmp('s') + '/settings.json'
   fs.writeFileSync(settings, JSON.stringify({ theme: 'dark' }))

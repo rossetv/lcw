@@ -177,6 +177,13 @@ test("the status line is LCW's only when it is setup's shim; any other command i
   assert.deepEqual(statusLineFact({ command: 'starship statusline' }, '/lcw'), { command: 'starship statusline', mine: false })
 })
 
+test("the status line is LCW's with its path quoted or bare, so a home with a space in it is still known", () => {
+  for (const command of [`node '/a b/.lcw/bin/statusline.mjs'`, 'node /a b/.lcw/bin/statusline.mjs']) assert.equal(statusLineFact({ command }, '/a b/.lcw').mine, true, command)
+  assert.equal(statusLineFact({ command: `node '/lcw/bin/statusline.mjs'` }, '/lcw').mine, true)
+  assert.equal(statusLineFact({ command: `node '/it'\\''s/bin/statusline.mjs'` }, "/it's").mine, true)
+  assert.equal(statusLineFact({ command: `node '/other/bin/statusline.mjs'` }, '/lcw').mine, false)
+})
+
 test('the run as the boxes read it: its name, its open asks oldest first, none once finished, and tasks only when there are some', () => {
   const state = { id: 'r1', name: 'export-csv', status: 'running', stage: 'Build', asks: [{ n: 3, text: 'b' }, { n: 1, text: 'a' }],
     tasks: [{ status: 'done' }, { status: 'running' }, { status: 'todo' }, { status: 'parked' }] }

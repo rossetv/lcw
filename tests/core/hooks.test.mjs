@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
+import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
 import * as gate from '../../scripts/lib/gate.mjs'
@@ -193,6 +194,19 @@ test('a new session in the worktree of a run another open session drives neither
   await new Promise((resolve) => (claude.exitCode !== null || claude.signalCode !== null ? resolve() : claude.once('exit', resolve)))
   // once the driver's Claude Code has closed, a session in the worktree carries the run on
   assert.match(start('later').out, /Unfinished LCW run: \d{8}-busy/)
+})
+
+test('session start gives a command line that runs from a plugin folder with a space in its path', () => {
+  const plugin = tmp('plug in')
+  for (const dir of ['scripts', 'lib']) fs.cpSync(`${path.dirname(path.dirname(START_HOOK))}/${dir}`, `${plugin}/${dir}`, { recursive: true })
+  const home = tmp('home')
+  const repo = makeRepo()
+  const out = run(`${plugin}/scripts/hook-session-start.mjs`, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }) }).out
+  const cli = /^LCW command line: (.+) \(add --session/m.exec(out)[1]
+  assert.ok(gate.lcwOnly(`${cli} mark 80`), cli)
+  const r = spawnSync('sh', ['-c', `${cli} runs`], { cwd: repo, encoding: 'utf8', env: { ...process.env, LCW_HOME: home } })
+  assert.equal(r.status, 0, r.stderr)
+  assert.match(out, /"set up LCW": run node '[^']+\/scripts\/setup\.mjs' install/)
 })
 
 test('session-start hook survives bad input', () => {

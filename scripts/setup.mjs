@@ -28,7 +28,9 @@ const { main } = await import(\`\${root}/scripts/statusline.mjs\`)
 // Under the padding setup writes beside this command, Claude Code shows COLUMNS - 4 cells of each row.
 await main({ margin: 4 })
 `
-const command = `node ${shim}`
+const quoted = (p) => `'${p.replace(/'/g, `'\\''`)}'`
+// a path with a space or a quote in it is quoted for the shell; a plain one stays bare, as installs before this wrote it
+const command = `node ${/^[\w@%+=:,./-]+$/.test(shim) ? shim : quoted(shim)}`
 
 function load() {
   if (!fs.existsSync(settingsPath)) return {}
@@ -72,7 +74,7 @@ function save(settings) {
   }
 }
 
-const mine = (sl) => sl?.command === command
+const mine = (sl) => [`node ${shim}`, `node ${quoted(shim)}`].includes(sl?.command)
 
 /** Turns on the advisor a run consults at every stage; leaves a choice the human already made. */
 function setAdvisor(s) {
