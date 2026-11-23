@@ -458,4 +458,8 @@ test('an ask without options keeps the box it always had', () => {
   const b = bannerFor({ run: asking([{ n: 1, text: 'Which format?', at: 1 }, CHOICE].map((a, i) => ({ ...a, n: i + 1 }))), now: 0 })
   assert.deepEqual(b.options, [['now', 'Answer now'], ['later', 'Later']])
   assert.equal(b.choices, undefined)
+
+test("the box of an ask's options names the run, as the plain answer box does", () => {
+  assert.match(bannerFor({ run: asking([CHOICE]), now: 0 }).tag, /export-csv needs your answer/)
+})
 })
