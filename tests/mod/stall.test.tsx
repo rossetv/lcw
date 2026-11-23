@@ -14,7 +14,7 @@ const worker = (over: object = {}) => ({
 
 // The world beneath the mod: a run in memory, the agents it lists, the prompts it submits, and a clock that jumps.
 // Each timer fires once per jump, so fifteen minutes cost one step, where replaying every period would cost thousands.
-function engine(on: any, status: string, agents: { list: unknown[] }) {
+function engine(on: any, status: string, agents: { list: unknown[] }, drops = 0) {
   const files: Record<string, string> = { ...BIND, [RUN + '/state.json']: state(status), [RUN + '/mod-alive']: String(NOW) }
   const prompts: string[] = []
   let now = NOW
@@ -33,7 +33,11 @@ function engine(on: any, status: string, agents: { list: unknown[] }) {
   on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
   on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
   on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }))
-  on('prompt.submit', (_: any, e: any) => { prompts.push(e.text); return { text: e.text } })
+  on('prompt.submit', (_: any, e: any) => {
+    if (drops > 0) { drops--; return { drop: 'a Stop stands' } }
+    prompts.push(e.text)
+    return { text: e.text }
+  })
   on('agent.list', () => ({ value: agents.list }))
   on('config.list', () => ({ value: [] }))
   on('ui.invalidate', () => ({ value: undefined }))
@@ -145,4 +149,31 @@ test('an agent still at work after an hour is checked on once, and not again aft
   await w.pass(1)
   await w.pass(1)
   expect(w.prompts.length).toBe(1)
+})
+
+test('an hour notice the engine drops is sent later, once', async ($, on) => {
+  const agents = { list: [worker()] as unknown[] }
+  const w = engine(on, 'running', agents, 1)
+  await start($)
+  for (let i = 1; i <= 7; i++) {
+    agents.list = [worker({ tokenCount: 10 + i })]
+    await w.pass(10)
+  }
+  expect(w.prompts.length).toBe(1)
+  expect(w.prompts[0]).toMatch(/a check, not a fault/)
+  for (let i = 8; i <= 12; i++) {
+    agents.list = [worker({ tokenCount: 10 + i })]
+    await w.pass(10)
+  }
+  expect(w.prompts.length).toBe(1)
+})
+
+test('a stall notice the engine drops does not count towards the three', async ($, on) => {
+  const w = engine(on, 'running', { list: [worker()] }, 1)
+  await start($)
+  await w.pass(16)
+  expect(w.prompts.length).toBe(0)
+  for (let i = 0; i < 6; i++) await w.pass(6)
+  expect(w.prompts.length).toBe(3)
+  expect(w.prompts[2]).toMatch(/third and last/)
 })

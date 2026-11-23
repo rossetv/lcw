@@ -99,6 +99,8 @@ const S = {
   repliedAt: 0,
   // The main session's turn ended on an API error that clears on its own: the tries to carry it on (carryFailed).
   carry: null as Carry | null,
+  // A prompt that carries the run on (the reopen, the resume after a checkpoint) and has not been sent yet: see owe.
+  owed: null as { runDir: string; text: string } | null,
 }
 
 const totalsFile = (runDir: string) => `${runDir}/totals.json`
@@ -151,9 +153,46 @@ async function readMoney($: EngineInterface, session: any, state: any, gate: any
   return gate?.unit === 'usd' ? { ...money, retryAt: gate.retryAt, retried: !!gate.retried } : money
 }
 
-// Deferred, as the checkpoint's prompt is: a prompt submitted from inside session.start may not land.
+// Whether a prompt was sent: one the engine or a hook drops (a Stop stands, a host limit reached) was not.
+const submit = ($: EngineInterface, prompt: { text: string }) =>
+  $.prompt.submit(prompt).then((r) => !r?.drop).catch(() => false)
+
+// Deferred: a prompt submitted from inside session.start may not land.
 const submitSoon = ($: EngineInterface, text: string) =>
-  void $.clock.after(700, () => void $.prompt.submit({ text }).catch(() => {}))
+  new Promise<boolean>((resolve) => void $.clock.after(700, () => void submit($, { text }).then(resolve)))
+
+// How long after a prompt that was not sent it is tried again.
+const RETRY_MS = 30000
+const retryLater = ($: EngineInterface, fn: () => void) => void $.clock.after(RETRY_MS, fn)
+
+// A prompt that carries the run on, tried again until sent while this session drives the run; the person's own takes over.
+function owe($: EngineInterface, runDir: string, text: string, wait = 700) {
+  const owed = { runDir, text }
+  S.owed = owed
+  $.clock.after(wait, () => void (async () => {
+    if (S.owed !== owed) return
+    if (S.run?.runDir !== runDir) { S.owed = null; return }
+    const sent = await submit($, { text })
+    if (S.owed !== owed) return
+    if (sent) S.owed = null
+    else owe($, runDir, text, RETRY_MS)
+  })())
+}
+
+// Notices that were not sent are taken off the record, where no later poll has changed it, so they fall due again.
+function unsay(stall: { due: { id: string }[]; nudged: Nudged }, was: Nudged, long: { id: string }[]) {
+  const nudged = { ...S.nudged }
+  for (const a of stall.due) {
+    const before = was[a.id]
+    if (nudged[a.id] !== stall.nudged[a.id]) continue
+    if (before) nudged[a.id] = before
+    else delete nudged[a.id]
+  }
+  const told = { ...S.told }
+  for (const a of long) delete told[a.id]
+  S.nudged = nudged
+  S.told = told
+}
 
 async function refresh($: EngineInterface) {
   const now = await $.clock.now()
@@ -184,12 +223,13 @@ async function refresh($: EngineInterface) {
   if (firstSight) {
     await $.fs.write(run.paths.modAlive, String(now)).catch(() => {})
     // Within ten seconds of start: the session-start hook that binds a resumed session can run after us.
-    if (now - S.startedAt <= 10000 && run.state.id !== S.taken && reopenDue(run.state, run.gate, aliveAt, now)) submitSoon($, reopenPrompt($.plugin.root))
+    if (now - S.startedAt <= 10000 && run.state.id !== S.taken && reopenDue(run.state, run.gate, aliveAt, now)) owe($, run.runDir, reopenPrompt($.plugin.root))
   }
   if (!wakeDue(run.gate, now, S.wokeFor, run.session?.billing)) return
   const gate = run.gate
+  const woke = gate.unit === 'usd' ? gate.retryAt : gate.resetsAt
   // Set before anything is awaited: refreshes overlap, and this try is made once.
-  S.wokeFor = gate.unit === 'usd' ? gate.retryAt : gate.resetsAt
+  S.wokeFor = woke
   // At 08:00 a run still at its dollar mark stays paused and tries again the next morning.
   const later = gate.unit === 'usd' && wakeable(run.state) ? retryGate(gate, run.money, now) : null
   if (later) {
@@ -198,10 +238,17 @@ async function refresh($: EngineInterface) {
     run.money = { ...run.money, retryAt: later.retryAt, retried: true }
     return
   }
-  await $.process.run(['rm', '-f', run.paths.gate]).catch(() => {})
-  run.gate = null
-  if (run.money) run.money = { ...run.money, retryAt: undefined, retried: undefined }
-  if (wakeable(run.state)) submitSoon($, gate.unit === 'usd' ? usdWakePrompt($.plugin.root, run.money?.markUsd ?? null) : wakePrompt($.plugin.root))
+  if (!wakeable(run.state)) {
+    await $.process.run(['rm', '-f', run.paths.gate]).catch(() => {})
+    run.gate = null
+    if (run.money) run.money = { ...run.money, retryAt: undefined, retried: undefined }
+    return
+  }
+  // The gate stays until the wake has been sent: one that was not is made again later.
+  void submitSoon($, gate.unit === 'usd' ? usdWakePrompt($.plugin.root, run.money?.markUsd ?? null) : wakePrompt($.plugin.root)).then(async (sent) => {
+    if (sent) await $.process.run(['rm', '-f', run.paths.gate]).catch(() => {})
+    else retryLater($, () => { if (S.wokeFor === woke) S.wokeFor = null })
+  })
 }
 
 async function pollAgents($: EngineInterface) {
@@ -223,12 +270,14 @@ async function pollAgents($: EngineInterface) {
   // An agent that has stalled, or been long at work, is the orchestrator's to look at: tell the main loop, which acts
   // once it is idle. Who was told of long work is kept through a pause, so nobody is told twice.
   if (nudgeable(run.state)) {
+    const was = S.nudged
     const stall = stallNudges(S.agents, S.nudged, now)
     S.nudged = stall.nudged
     const long = longNudges(S.agents, S.told)
     S.told = long.told
     const due = [...stall.due, ...long.due]
-    if (due.length) submitSoon($, stallPrompt(due, S.agents))
+    // Recorded before it is sent, since the next poll may come first; taken off the record later if it was not sent.
+    if (due.length) void submitSoon($, stallPrompt(due, S.agents)).then((sent) => sent || retryLater($, () => unsay(stall, was, long.due)))
   } else S.nudged = {}
   const totals = addTotals(S.totals, list, run.state.createdAt ?? 0)
   if (totals.agents !== S.totals.agents || totals.tokens !== S.totals.tokens) S.totalsChanged = true
@@ -436,8 +485,7 @@ async function carryOn($: EngineInterface) {
   S.carry = step.carry ?? null
   if (!step.send) return
   const sent = S.carry
-  // A result carrying drop is a prompt a hook or the engine refused.
-  if (!(await $.prompt.submit({ text: carryPrompt(c.kind, step.send) }).then((r) => !(r as any)?.drop).catch(() => false)) && S.carry === sent) {
+  if (!(await submit($, { text: carryPrompt(c.kind, step.send) })) && S.carry === sent) {
     S.carry = carryFailed(sent, c.kind, await $.clock.now())
   }
 }
@@ -473,7 +521,7 @@ async function weekly($: EngineInterface, now: number) {
   if (!S.weeklyText || !weeklyIdle({ ...idle, turnRunning: S.turnRunning, driving: !!S.run }) || (await draft($)).trim()) return
   const text = S.weeklyText
   S.weeklyText = ''
-  if (!(await $.prompt.submit({ text }).then(() => true).catch(() => false))) S.weeklyText = text
+  if (!(await submit($, { text }))) S.weeklyText = text
 }
 
 // LCW's status rows and attribution off, by themselves, on a watched session's first draw.
@@ -517,8 +565,7 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
     last = r
   }
   if (plan.prompt) {
-    const sent = await $.prompt.submit(plan.prompt).then(() => true).catch(() => false)
-    if (!sent) return $.ui.toast(plan.promptFailed ?? 'Clear the prompt or wait for the turn to end, then press it again.')
+    if (!(await submit($, plan.prompt))) return $.ui.toast(plan.promptFailed ?? 'Clear the prompt or wait for the turn to end, then press it again.')
   }
   if (plan.notices) {
     const file = noticesFile(await lcwHome($))
@@ -588,7 +635,7 @@ async function checkpoint($: EngineInterface) {
     const done = await $.session.compact({ instructions: compactInstructions(run.state, run.runDir, step) })
     if (done?.skip) return
     await $.fs.write(run.paths.checkpoint, '')
-    await $.prompt.submit({ text: resumePrompt($.plugin.root, step) })
+    owe($, run.runDir, resumePrompt($.plugin.root, step), 0)
   })().catch(() => {}).finally(() => { S.compacting = false }))
 }
 
@@ -632,6 +679,7 @@ export const register: Register = (on) => {
     const result = await next(e)
     // A cleared or another session has no reply to carry on.
     S.carry = null
+    S.owed = null
     S.atPrompt = e.isInteractive === true
     S.interactive = S.atPrompt || e.surface != null || (await $.session.surfaces().catch(() => [])).length > 0
     await start($).catch(() => {})
@@ -676,6 +724,7 @@ export const register: Register = (on) => {
       if (!e.command) S.repliedAt = await $.clock.now().catch(() => S.repliedAt)
       // What the person sends takes over from any carry-on.
       S.carry = null
+      S.owed = null
       void readBanner($).catch(() => {})
     }
     return result
