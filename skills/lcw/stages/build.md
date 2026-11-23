@@ -14,7 +14,7 @@ Workers share the run's worktree, and a milestone's tasks own separate files; th
 A worker never saw the brainstorm, so its brief is all it knows of the intent. Give it:
 
 - what to build and why, in the words of the requirements it serves and anything from the brainstorm that bears on it;
-- what done means, and its own test command from plan.md, the only tests it runs. Never write a whole-suite command or "all suites pass" into a worker's brief, even where the repository's own instructions list the suites as checks: Review runs them;
+- what done means, and its own test command from plan.md, the only tests it runs. Never write a whole-suite command or "all suites pass" into a worker's brief, even where the repository's own instructions list the suites as checks: Review runs them. The one exception is a task whose own command plan.md gives as a suite, because the repository's runner can run nothing smaller;
 - the files it owns, its tests included, as paths relative to the run's worktree (never the worktree's absolute path: in a real run two workers mistyped it and wrote their files elsewhere);
 - its task id, the full `lcw` command line and the commit convention from plan.md, because a worker commits its own files and marks its own task done;
 - the path of spec.md for reference.
@@ -66,7 +66,7 @@ lcw stage Review
 lcw checkpoint "Review: read stages/review.md and launch the round's reviewers, one for each group of at most four requirements"
 ```
 
-and do as it says (SKILL.md, Compaction).
+and do as it says (SKILL.md, Compaction). Back in Review after a round's fixes, the checkpoint says instead: `"Review round <n>: read stages/review.md and send each fix back to its reviewer, as the ledger names them"`.
 
 ## In a sweep
 
@@ -94,4 +94,4 @@ Every milestone of a wave gets the same check as a Build's, but the fix tasks it
 
 **The last milestone's check runs with the review.** In a wave you drive yourself, the last milestone (the only one, in most waves) does not wait for its check before Review: the check and the review's first round read the same commits, so they run side by side. When its tasks are all done, parked or dropped and every earlier milestone's check is clean, record where it ends as under Milestones, then leave for Review as the next paragraph says, without launching its check here: stages/review.md launches it with round 1's reviewers, and its fixes are that round's. An earlier milestone of the wave keeps its check and its fix check as under Milestones, while the next one builds, and so does every milestone an extra orchestrator drives.
 
-When the wave is done, which is when every task is done, parked or dropped and every check that runs in Build is clean, take in the wave before, `lcw wave take --wave <n>`, as stages/review.md says (when it refuses, run the take-in it names first, once every worker of that wave has reported), since `lcw stage Review` refuses until it has; then `lcw stage Review --wave <n>`. The wave is now built: see whether the next queued wave may start (stages/plan.md, step 1) and start it if so. With none queued and every open wave built, the next round's hunt starts now, alongside this wave's review (stages/hunt.md). Then checkpoint as Done says, naming each open wave: `lcw checkpoint "wave <n>: Review, read stages/review.md and launch its reviewers, ...; wave <n+1>: Plan, read stages/plan.md and plan it"`.
+When the wave is done, which is when every task is done, parked or dropped and every check that runs in Build is clean, take in the wave before, `lcw wave take --wave <n>`, as stages/review.md says (when it refuses, run the take-in it names first, once every worker of that wave has reported), since `lcw stage Review` refuses until it has; then `lcw stage Review --wave <n>`. The wave is now built: see whether the next queued wave may start (stages/plan.md, step 1) and start it if so. With none queued, every open wave built, and the last round's fixes all in waves, the next round's hunt starts now, alongside this wave's review (stages/hunt.md). No round starts while one is still being hunted or sorted, nor after one that sorted nothing to fix, an early one's follow-up aside. Then checkpoint as Done says, naming each open wave: `lcw checkpoint "wave <n>: Review, read stages/review.md and launch its reviewers, ...; wave <n+1>: Plan, read stages/plan.md and plan it"`.
