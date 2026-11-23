@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { tmp, makeRepo, git, lcw, readJson } from './helpers.mjs'
+import { spawn } from 'node:child_process'
+import { tmp, makeRepo, git, lcw, readJson, CLI } from './helpers.mjs'
 
 /** A repo with a GitHub origin, a home and a started sweep. */
 function sweep(name = 'tidy') {
@@ -56,7 +57,8 @@ function commit(wt, file, text) {
 /**
  * A gh on PATH that writes each call's arguments to a log. GH_STATE is what each pr view shows in turn, comma separated,
  * the last one again once they run out (open, then merged, by default); GH_DRAFT and GH_BASE are the rest of what it shows,
- * and the repository's default branch is main. GH_FAIL is the subcommand that fails, GH_API_ERROR what a failing api call says.
+ * and the repository's default branch is main. GH_FAIL is the subcommand that fails, GH_API_ERROR what a failing api call says,
+ * GH_SLEEP how many seconds pr merge takes.
  */
 function fakeGh(more = {}) {
   const bin = tmp('bin')
@@ -66,6 +68,7 @@ echo "$*" >> "${log}"
 case "$*" in *--delete-branch*) echo "gh must not delete the branch" >&2; exit 1;; esac
 if [ -n "$GH_UNDO_FAIL" ] && echo "$*" | grep -q -- --undo; then echo "cannot undo" >&2; exit 1; fi
 if [ "$1 $2" = "$GH_FAIL" ]; then echo "GraphQL: not mergeable" >&2; exit 1; fi
+if [ "$1 $2" = "pr merge" ] && [ -n "$GH_SLEEP" ]; then sleep "$GH_SLEEP"; fi
 if [ "$1 $2" = "pr view" ]; then
   states="\${GH_STATE:-OPEN,MERGED}"
   state=$(echo "$states" | cut -d, -f"$(grep -c '^pr view' "${log}")")
@@ -731,6 +734,47 @@ test('merge is refused out of order, under another choice, and for a wave with n
   const u = shippedWaves('stacked')
   assert.equal(lcw(['merge', '1'], { ...u.o, env: gh.env }).code, 1, 'stacked')
   assert.deepEqual(gh.calls(), [])
+})
+
+/** Starts lcw merge 1 in the background; once gh is in its pr merge, resolves to { done }, what the merge ends with. */
+async function slowMerge(t, gh) {
+  const p = spawn('node', [CLI, 'merge', '1'], { cwd: t.o.cwd, env: { ...process.env, ...gh.env, LCW_HOME: t.o.home, CLAUDE_CODE_SESSION_ID: t.o.session } })
+  let out = ''
+  p.stdout.on('data', (d) => { out += d })
+  const done = new Promise((res) => p.on('close', (code) => res({ code, out })))
+  while (!gh.calls().some((c) => c.startsWith('pr merge'))) await new Promise((r) => setTimeout(r, 20))
+  return { done }
+}
+
+test('a command that waits on a slow lcw merge does not lose its change, however long the merge holds the lock', async () => {
+  const t = shippedWaves()
+  const gh = fakeGh({ GH_SLEEP: '1' })
+  const { done: merging } = await slowMerge(t, gh)
+  // a lock this old was once taken from its holder while the holder still ran
+  const old = new Date(Date.now() - 60000)
+  fs.utimesSync(`${t.dir}/lock`, old, old)
+  const q = t.cli('question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it')
+  assert.equal(q.code, 0, q.out)
+  const m = await merging
+  assert.equal(m.code, 0, m.out)
+  assert.deepEqual([t.state().sweep.waves[0].merged, t.state().questions.map((x) => x.id)], [true, ['Q1']])
+})
+
+test('a command whose lock was taken from it as hung saves nothing over the newer state, and says to run it again', async () => {
+  const t = shippedWaves()
+  const gh = fakeGh({ GH_SLEEP: '1' })
+  const { done: merging } = await slowMerge(t, gh)
+  await new Promise((r) => setTimeout(r, 200))
+  const q = lcw(['question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it'], { ...t.o, env: { LCW_LOCK_HUNG_MS: '100' } })
+  assert.equal(q.code, 0, q.out)
+  const m = await merging
+  assert.equal(m.code, 1, m.out)
+  assert.match(m.out, /nothing was saved to the run\. Run this command again/)
+  assert.deepEqual([t.state().sweep.waves[0].merged, t.state().questions.map((x) => x.id)], [false, ['Q1']])
+  assert.ok(!fs.existsSync(`${t.dir}/lock`))
+  const again = lcw(['merge', '1'], { ...t.o, env: fakeGh({ GH_STATE: 'MERGED' }).env })
+  assert.equal(again.code, 0, again.out)
+  assert.deepEqual([t.state().sweep.waves[0].merged, t.state().questions.map((x) => x.id)], [true, ['Q1']])
 })
 
 test('a failing gh merge is reported and records nothing', () => {

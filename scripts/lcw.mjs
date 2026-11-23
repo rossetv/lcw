@@ -105,12 +105,13 @@ const weekLine = (usage) => (usage?.sevenDay ? `week: ${usage.sevenDay.percentUs
  * stops being 'running' (pauses, goes back to the person, finishes or stops) lets the computer sleep again.
  */
 function change(run, note, fn, wave) {
+  mustHoldLock()
   const was = run.state.status
   fn(run.state)
   const s = run.state
   if (s.status === 'running' && was !== 'running') s.runningSince = new Date(now()).toISOString()
   if (s.status !== 'running') releaseHold(run.dir)
-  saveState(run.paths, s)
+  save(run.paths, s)
   appendLedger(run.paths, note, wave === undefined ? ledgerWave(s) : wave)
 }
 
@@ -458,7 +459,7 @@ const commands = {
     if (wave) mustRun(wave)
     // no ledger line: set is called often and would drown the ledger
     pairs.forEach(([k, v]) => setDotted(wave && ofWave(k) ? wave : run.state, k, v))
-    saveState(run.paths, run.state)
+    save(run.paths, run.state)
     out(`set ${pairs.map(([k]) => k).join(', ')}`)
   },
 
@@ -880,7 +881,7 @@ const commands = {
     const line = given.map(([k, n]) => `${k} ${n}`).join(', ')
     // progress is reported often and would drown the ledger; the sorting is noted
     if (sorted) change(run, `hunt, round ${run.state.sweep.round}: ${line}`, apply)
-    else { apply(run.state); saveState(run.paths, run.state) }
+    else { apply(run.state); save(run.paths, run.state) }
     out(`hunt: ${line}`)
   },
 
@@ -1510,21 +1511,66 @@ function adopt(run) {
     const money = readMoney({ sessionId, now: now() })
     appendLedger(run.paths, `another session took over the run: its own usage mark applies, ${money ? moneyMark(money) : `${mark}%`}`, ledgerWave(s))
   }
-  saveState(run.paths, s)
+  save(run.paths, s)
+}
+
+// the lock's limits are LCW_LOCK_WAIT_MS and LCW_LOCK_HUNG_MS when they are set, so tests need not wait on the clock
+const msFrom = (name, ms) => (Number(process.env[name]) > 0 ? Number(process.env[name]) : ms)
+// how long a call waits for the lock before it gives up
+const LOCK_WAIT_MS = msFrom('LCW_LOCK_WAIT_MS', 8000)
+// a holder that still runs is never robbed for being slow, only once it has held the lock this long, far past any real command
+const LOCK_HUNG_MS = msFrom('LCW_LOCK_HUNG_MS', 10 * 60000)
+// a lock with no holder on record was taken by an older lcw, which itself takes one this old
+const LOCK_UNOWNED_MS = 30000
+const holderOf = (lock) => readJson(`${lock}/holder.json`)
+let lockHeld = null // { lock, token } while this call holds a run's lock
+
+function lockStale(lock) {
+  const h = holderOf(lock)
+  if (!h) return Date.now() - fs.statSync(lock).mtimeMs > LOCK_UNOWNED_MS
+  return !alive(h.pid) || !(Date.now() - h.at < LOCK_HUNG_MS)
+}
+
+/** Fails before anything is saved when another call has taken this call's lock, so a stale copy never overwrites its change. */
+function mustHoldLock() {
+  if (lockHeld && holderOf(lockHeld.lock)?.token !== lockHeld.token) fail('Another lcw call took the run lock while this one ran, so nothing was saved to the run. Run this command again.')
+}
+
+/** Changes the run's state through this alone, so a call whose lock was taken saves nothing. */
+function save(paths, s) {
+  mustHoldLock()
+  saveState(paths, s)
 }
 
 function withLock(dir, fn) {
   const lock = `${dir}/lock`
-  const until = Date.now() + 8000
+  const token = `${process.pid}-${Math.random().toString(36).slice(2)}`
+  const until = Date.now() + LOCK_WAIT_MS
   for (;;) {
     try { fs.mkdirSync(lock); break } catch (e) {
       if (e.code !== 'EEXIST') throw e
-      try { if (Date.now() - fs.statSync(lock).mtimeMs > 30000) { fs.rmdirSync(lock); continue } } catch {}
+      try {
+        if (lockStale(lock)) {
+          // moved aside in one step, so no call sees it half removed; a fresh lock moved aside by a race fails its holder's save
+          const aside = `${lock}.${token}.stale`
+          fs.renameSync(lock, aside)
+          fs.rmSync(aside, { recursive: true, force: true })
+          continue
+        }
+      } catch {}
       if (Date.now() > until) fail('Another lcw call holds the run lock; try again.')
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20 + Math.random() * 30)
     }
   }
-  try { fn() } finally { try { fs.rmdirSync(lock) } catch {} }
+  try {
+    writeJson(`${lock}/holder.json`, { pid: process.pid, token, at: Date.now() })
+    lockHeld = { lock, token }
+    fn()
+  } finally {
+    // a lock taken from this call is the new holder's, and stays
+    if (holderOf(lock)?.token === token || !lockHeld) try { fs.rmSync(lock, { recursive: true, force: true }) } catch {}
+    lockHeld = null
+  }
 }
 
 try {
@@ -1535,7 +1581,7 @@ try {
   if (run) withLock(run.dir, () => {
     run.state = loadState(run.paths)
     if (byId) checkClaim(run) // before anything is saved, which would make the run look shown
-    if (moveOldWave(run.state)) saveState(run.paths, run.state)
+    if (moveOldWave(run.state)) save(run.paths, run.state)
     Object.assign(run.state, weekOf(run.state, readUsage()?.sevenDay))
     if (command !== 'abandon') adopt(run)
     held = run

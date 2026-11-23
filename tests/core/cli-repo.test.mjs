@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { fnv1a32hex } from '../../lib/key.mjs'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { tmp, makeRepo, git, lcw, readJson, started, CLI } from './helpers.mjs'
 
 test('worktree: branch, folder, exclude, place pointer', () => {
@@ -124,6 +124,37 @@ test('a stale lock is taken over', () => {
   const old = new Date(Date.now() - 60000)
   fs.utimesSync(`${t.dir}/lock`, old, old)
   assert.equal(t.cli('task', 'add', 'T1', 'x').code, 0)
+})
+
+/** A run's lock held by pid since `ago` ms, its folder dated a minute back. */
+function heldLock(t, pid, ago) {
+  fs.mkdirSync(`${t.dir}/lock`)
+  fs.writeFileSync(`${t.dir}/lock/holder.json`, JSON.stringify({ pid, token: 'other', at: Date.now() - ago }))
+  const old = new Date(Date.now() - 60000)
+  fs.utimesSync(`${t.dir}/lock`, old, old)
+}
+
+test('a lock whose holder still runs is not taken for being slow', () => {
+  const t = started()
+  heldLock(t, process.pid, 60000)
+  const r = lcw(['task', 'add', 'T1', 'x'], { ...t.o, env: { LCW_LOCK_WAIT_MS: '300' } })
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /holds the run lock/)
+  assert.deepEqual(t.state().tasks, [])
+  assert.equal(readJson(`${t.dir}/lock/holder.json`).token, 'other')
+})
+
+test('a lock whose holder has gone is taken at once, and one held past the long limit is taken from a live holder', () => {
+  const t = started()
+  const gone = spawnSync(process.execPath, ['-e', '']).pid
+  heldLock(t, gone, 0)
+  const r = lcw(['task', 'add', 'T1', 'x'], { ...t.o, env: { LCW_LOCK_WAIT_MS: '300' } })
+  assert.equal(r.code, 0, r.out)
+  assert.ok(!fs.existsSync(`${t.dir}/lock`))
+  heldLock(t, process.pid, 2000)
+  const hung = lcw(['task', 'add', 'T2', 'x'], { ...t.o, env: { LCW_LOCK_WAIT_MS: '300', LCW_LOCK_HUNG_MS: '1000' } })
+  assert.equal(hung.code, 0, hung.out)
+  assert.deepEqual(t.state().tasks.map((x) => x.id), ['T1', 'T2'])
 })
 
 test('pictures go to one commit on a ref outside every branch, and the change is untouched', () => {
