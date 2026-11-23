@@ -23,6 +23,13 @@ test('a value that is itself a flag is reported as a missing value', () => {
   assert.match(r.err + r.out, /--keep needs a value/)
 })
 
+test('a value that is a flag in its --name=value form is reported as a missing value', () => {
+  const t = started('flags')
+  const r = t.cli('checkpoint', '--keep', '--session=s1')
+  assert.equal(r.code, 1)
+  assert.match(r.err + r.out, /--keep needs a value/)
+})
+
 test('two starts with the same name at the same instant get two runs', async () => {
   const home = tmp('home')
   const repo = makeRepo()
