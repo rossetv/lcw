@@ -75,6 +75,12 @@ if [ "$1 $2" = "pr view" ]; then
   [ -n "$state" ] || state=$(echo "$states" | awk -F, '{print $NF}')
   echo "{\\"state\\":\\"$state\\",\\"isDraft\\":\${GH_DRAFT:-true},\\"baseRefName\\":\\"\${GH_BASE:-main}\\"}"
 fi
+if [ "$1 $2" = "pr checks" ]; then
+  out=$(printf '%s' "$GH_CHECKS" | cut -d'|' -f"$(grep -c '^pr checks' "${log}")")
+  [ -n "$out" ] || out=$(printf '%s' "$GH_CHECKS" | awk -F'|' '{print $NF}')
+  echo "$out"
+  case "$out" in *pending*) exit 8;; *fail*) exit 1;; esac
+fi
 if [ "$1 $2" = "repo view" ]; then echo '{"defaultBranchRef":{"name":"main"}}'; fi
 if [ "$1" = "api" ] && [ -n "$GH_API_ERROR" ]; then echo "$GH_API_ERROR" >&2; exit 1; fi
 exit 0
@@ -629,6 +635,37 @@ test('merge readies a draft, merges it with a merge commit on the GitHub remote,
   assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1 merged/)
   assert.equal(lcw(['merge', '1'], { ...t.o, env: gh.env }).code, 1, 'merged already')
   assert.equal(gh.calls().length, 6)
+})
+
+const checks = (...buckets) => JSON.stringify(buckets.map((bucket, i) => ({ name: `job${i}`, bucket })))
+
+test('merge --wait waits while a check is pending and merges once they pass', () => {
+  const t = shippedWaves()
+  const gh = fakeGh({ GH_CHECKS: [checks('pass', 'pending'), checks('pass', 'skipping')].join('|'), LCW_CHECKS_POLL_SECONDS: '0.05' })
+  const r = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: gh.env })
+  assert.equal(r.code, 0, r.out)
+  assert.equal(gh.calls().filter((c) => c.startsWith('pr checks')).length, 2)
+  assert.ok(gh.calls().includes('pr merge 12 -R acme/widgets --merge'), gh.calls().join('\n'))
+  assert.equal(t.state().sweep.waves[0].merged, true)
+})
+
+test('merge --wait merges nothing when a check failed or every check was skipped', () => {
+  for (const [list, said] of [[checks('pass', 'fail'), /did not pass: job1/], [checks('skipping'), /all skipped/]]) {
+    const t = shippedWaves()
+    const gh = fakeGh({ GH_CHECKS: list })
+    const r = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: gh.env })
+    assert.equal(r.code, 1, r.out)
+    assert.match(r.out, said)
+    assert.ok(!gh.calls().some((c) => c.startsWith('pr merge') || c.startsWith('pr ready')), gh.calls().join('\n'))
+    assert.equal(t.state().sweep.waves[0].merged, false)
+  }
+})
+
+test('merge --wait takes 1 to 60 minutes', () => {
+  const t = shippedWaves()
+  const gh = fakeGh({ GH_CHECKS: checks('pass') })
+  for (const m of ['0', '61', 'soon']) assert.equal(lcw(['merge', '1', '--wait', m], { ...t.o, env: gh.env }).code, 1, m)
+  assert.deepEqual(gh.calls(), [])
 })
 
 test('a pull request the merge only queued is not recorded and keeps its branch, and a later merge records it once GitHub shows it merged', () => {
@@ -1234,6 +1271,19 @@ test('a question is added with its choices, picked once, answered in words or us
   assert.equal(t.cli('question', 'Q2', 'pick', 'other').code, 1, 'their own words come through answer')
   t.cli('question', 'Q2', 'answer', '60 days')
   assert.deepEqual([t.state().questions[1].status, t.state().questions[1].words], ['answered', '60 days'])
+})
+
+test('an answered question not yet used is named by wave start and status until it is used', () => {
+  const t = hunting()
+  t.cli('question', 'add', 'Q1', '--text', 'Whole words only?', '--a', 'Yes: fix it', '--b', 'No: leave it', '--recommend', 'a')
+  t.cli('question', 'Q1', 'pick', 'a')
+  t.cli('wave', 'add', '1')
+  const started = t.start()
+  assert.equal(started.code, 0, started.out)
+  assert.match(started.out, /answered and not used yet[^\n]*\n  Q1 \[answered: a, Yes\] Whole words only\?/)
+  assert.match(t.cli('status').out, /answered and not used yet/)
+  t.cli('question', 'Q1', 'used')
+  assert.doesNotMatch(t.cli('status').out, /answered and not used yet/)
 })
 
 test('a question used with an answer settles one parked item, never below none, and one left parked does not', () => {
