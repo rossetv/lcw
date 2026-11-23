@@ -42,6 +42,7 @@ const keptTold = atom({ plugin: 'lcw', key: 'told' } as const, {}, { shape: KEPT
 const keptNudged = atom({ plugin: 'lcw', key: 'nudged' } as const, {}, { shape: KEPT })
 const keptCompletion = atom({ plugin: 'lcw', key: 'completion' } as const, {}, { shape: KEPT })
 const keptCarry = atom({ plugin: 'lcw', key: 'carry' } as const, null, { shape: KEPT })
+const keptOwed = atom({ plugin: 'lcw', key: 'owed' } as const, null, { shape: KEPT })
 
 // session is the session's file (the binding, its billing and its mark); money is the pay-per-token view, else null.
 type Run = { runDir: string; paths: ReturnType<typeof runPaths>; state: any; gate: any; usage: any; session: any; money: any; quota: QuotaView | null }
@@ -170,11 +171,18 @@ function keepCarry($: EngineInterface) {
   }).catch(() => {})
 }
 
+function keepOwed($: EngineInterface, owed = S.owed) {
+  return $.session.id().then((session) => {
+    const kept = owed && { session, ...owed }
+    if (changed('owed', kept)) return update($, keptOwed, () => kept).catch(unkept('owed'))
+  }).catch(() => {})
+}
+
 // What an earlier copy of this code kept, merged into what this one holds; a read that fails changes nothing.
 async function restore($: EngineInterface) {
   try {
-    const [dismissed, repliedAt, told, nudged, carry, session, completion] = await Promise.all([
-      read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(), read($, keptCompletion),
+    const [dismissed, repliedAt, told, nudged, carry, session, completion, owed] = await Promise.all([
+      read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(), read($, keptCompletion), read($, keptOwed),
     ])
     for (const k of dismissed) S.banner.dismissed.add(k)
     S.repliedAt = Math.max(S.repliedAt, repliedAt)
@@ -182,12 +190,15 @@ async function restore($: EngineInterface) {
     S.nudged = { ...nudged, ...S.nudged }
     S.completion = { ...completion, ...S.completion }
     if (!S.carry && carry?.session === session) S.carry = carry.carry
+    // Owed again: it is sent only if this session still shows that run when it falls due.
+    if (!S.owed && owed?.session === session) owe($, owed.runDir, owed.text)
   } catch {}
   S.restored = true
   keepDismissed($)
   keepReplied($)
   keepNotices($)
   keepCarry($)
+  keepOwed($)
 }
 
 const readJson = ($: EngineInterface, path: string) =>
@@ -305,13 +316,13 @@ const retryLater = ($: EngineInterface, fn: () => void) => void $.clock.after(RE
 function owe($: EngineInterface, runDir: string, text: string, wait = 700) {
   const owed = { runDir, text }
   S.owed = owed
+  keepOwed($)
   $.clock.after(wait, () => void (async () => {
     if (S.owed !== owed) return
-    if (S.run?.runDir !== runDir) { S.owed = null; return }
+    if (S.run?.runDir !== runDir) { S.owed = null; keepOwed($); return }
     const sent = await submit($, { text })
     if (S.owed !== owed) return
-    if (sent) S.owed = null
-    else owe($, runDir, text, RETRY_MS)
+    if (sent) { S.owed = null; keepOwed($) } else owe($, runDir, text, RETRY_MS)
   })())
 }
 
@@ -925,8 +936,11 @@ async function checkpoint($: EngineInterface) {
   $.clock.after(700, () => void (async () => {
     const done = await $.session.compact({ instructions: compactInstructions(run.state, run.runDir, step) })
     if (done?.skip) return
+    const text = resumePrompt($.plugin.root, step)
+    // Kept before the step leaves its file, so a reload in between still sends it.
+    await keepOwed($, { runDir: run.runDir, text })
     await $.fs.write(run.paths.checkpoint, '')
-    owe($, run.runDir, resumePrompt($.plugin.root, step), 0)
+    owe($, run.runDir, text, 0)
   })().catch(() => {}).finally(() => { S.compacting = false }))
 }
 
@@ -1037,6 +1051,7 @@ export const register: Register = (on) => {
       // What the person sends takes over from any carry-on.
       if (S.carry) setCarry($, null)
       S.owed = null
+      keepOwed($)
       S.completionReadyAt = 0
       void readBanner($).catch(() => {})
     }

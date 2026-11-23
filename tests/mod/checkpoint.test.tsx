@@ -112,6 +112,19 @@ test('a resume the engine drops after the compaction is sent later, with no seco
   expect(w.resumes().length).toBe(1)
 })
 
+test('a resume not yet sent when the mod reloads is sent by the reloaded mod, once', async ($, on) => {
+  const w = engine(on, files({ [RUN + '/checkpoint']: STEP }), { drops: 1 })
+  await start($)
+  await turnEnds($)
+  await w.clock.advance(1000)
+  expect(w.resumes().length).toBe(0)
+  await start($)
+  await w.clock.advance(120000)
+  expect(w.compacts.length).toBe(1)
+  expect(w.resumes().length).toBe(1)
+  expect(w.resumes()[0]).toContain(STEP)
+})
+
 test('two agents that finish at the same moment both count in the run\'s totals', async ($, on) => {
   const w = engine(on, files({ [RUN + '/totals.json']: JSON.stringify({ agents: 0, tokens: 0, seen: {}, used: { main: 0, agents: 0 } }) }), { slowWrites: true })
   await start($)
