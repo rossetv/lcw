@@ -214,25 +214,34 @@ async function lcwHome($: EngineInterface) {
   return S.home
 }
 
-async function readSession($: EngineInterface, id: string) {
+// The canonical row a session's own row points at, when it may be used: not a stranger's, and not one whose owner is
+// another Claude Code still running. Null otherwise.
+async function lentAnchor($: EngineInterface, id: string, session: any) {
   const home = await lcwHome($)
-  const session = await readJson($, sessionFile(home, id))
   const canonical = session?.sessionCanonicalId
-  if (typeof canonical !== 'string' || !/^[\w.-]{1,256}$/.test(canonical) || /^\.+$/.test(canonical) || canonical === id) return session
+  if (typeof canonical !== 'string' || !/^[\w.-]{1,256}$/.test(canonical) || /^\.+$/.test(canonical) || canonical === id) return null
   const anchor = await readJson($, sessionFile(home, canonical))
-  if (anchor?.sessionCanonicalId !== canonical) return session
+  if (anchor?.sessionCanonicalId !== canonical) return null
   const pid = Number(session?.claudePid) || Number(await $.env.get('CLAUDE_PID'))
   if (Number.isInteger(anchor.claudePid) && anchor.claudePid > 1 && anchor.claudePid !== pid) {
     const key = id + ':' + canonical + ':' + anchor.claudePid
     const now = await $.clock.now()
-    if ((S.aliasBlockedUntil.get(key) ?? 0) > now) return session
+    if ((S.aliasBlockedUntil.get(key) ?? 0) > now) return null
     // ps is not available on every host; an unknown owner never lends its mark.
     const r = await $.process.run(['ps', '-p', String(anchor.claudePid), '-o', 'pid='], { timeoutMs: 1000 }).catch(() => null)
     if (r?.exitCode !== 1 || String(r.stdout ?? '').trim() || String(r.stderr ?? '').trim()) {
       S.aliasBlockedUntil.set(key, now + 5000)
-      return session
+      return null
     }
   }
+  return anchor
+}
+
+async function readSession($: EngineInterface, id: string) {
+  const home = await lcwHome($)
+  const session = await readJson($, sessionFile(home, id))
+  const anchor = await lentAnchor($, id, session)
+  if (!anchor) return session
   return {
     ...session, markPercent: anchor.markPercent, markUsd: anchor.markUsd,
     billing: typeof anchor.billing === 'string' || anchor.quotaSelection ? anchor.billing : session?.billing,
@@ -535,10 +544,9 @@ async function measureSpend($: EngineInterface, e: { cost?: { usd: number } }, r
   const step = measureStep(control, rec, { weekly: quota ? null : reading, cost: e.cost?.usd, quota }, now)
   if ((step.changed || control?.billing !== session?.billing) && session !== undefined) await $.fs.write(sessionFile(home, id), JSON.stringify({ ...session, billing: step.billing }))
   // The canonical row is the one readers take first, so the billing settled here must reach it too.
-  const canonical = session?.sessionCanonicalId
-  if (step.billing !== 'unclear' && typeof canonical === 'string' && canonical !== id && /^[\w.-]{1,256}$/.test(canonical) && !/^\.+$/.test(canonical)) {
-    const anchor = await readParsed($, sessionFile(home, canonical))
-    if (anchor?.sessionCanonicalId === canonical && anchor.billing !== step.billing) await $.fs.write(sessionFile(home, canonical), JSON.stringify({ ...anchor, billing: step.billing }))
+  if (step.billing !== 'unclear' && session) {
+    const anchor = await lentAnchor($, id, session)
+    if (anchor && anchor.billing !== step.billing) await $.fs.write(sessionFile(home, anchor.sessionCanonicalId), JSON.stringify({ ...anchor, billing: step.billing }))
   }
   if (step.drop) await $.process.run(['rm', '-f', spent]).catch(() => {})
   // A record caught mid-write is left for the next reading rather than started again from this one.
