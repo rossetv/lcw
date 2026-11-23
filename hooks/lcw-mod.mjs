@@ -107,17 +107,18 @@ export const nudgeable = (state) => !!state && !['finished', 'stopped', 'paused'
  * tokens have not moved for stalledMs (the card's own threshold), or when it has been held that long. It is named
  * when it gets there, then again every againMs while it stays there, three times in all: by then the orchestrator
  * has been told enough. why says which: 'still' or 'held'.
- * nudged: {id: {at, times}} from the previous poll; the returned one holds only agents that are still stalled.
+ * nudged: {id: {at, times, tokens}} from the previous poll; the returned one holds only agents still listed whose
+ * tokens have not moved since, so a record outlives a restart of the agents' clocks (a reload of the mod).
  */
 export function stallNudges(agents, nudged, now, stalledMs = TH.agentStalledAfterMinutes * 6e4, againMs = TH.agentQuietAfterMinutes * 6e4) {
   const due = []
   const next = {}
   for (const a of agents ?? []) {
     const why = a.quietMs >= stalledMs ? 'still' : a.heldMs >= stalledMs ? 'held' : null
-    if (!why) continue
-    const last = nudged?.[a.id]
-    if (!last) { next[a.id] = { at: now, times: 1 }; due.push({ ...a, times: 1, why }) }
-    else if (last.times < 3 && now - last.at >= againMs) { next[a.id] = { at: now, times: last.times + 1 }; due.push({ ...a, times: last.times + 1, why }) }
+    const last = nudged?.[a.id]?.tokens === a.tokens ? nudged[a.id] : undefined
+    if (!why) { if (last) next[a.id] = last; continue }
+    if (!last) { next[a.id] = { at: now, times: 1, tokens: a.tokens }; due.push({ ...a, times: 1, why }) }
+    else if (last.times < 3 && now - last.at >= againMs) { next[a.id] = { at: now, times: last.times + 1, tokens: a.tokens }; due.push({ ...a, times: last.times + 1, why }) }
     else next[a.id] = last
   }
   return { due, nudged: next }

@@ -46,7 +46,7 @@ export function resumePrompt(root: string, step: string): string
 export function wakePrompt(root: string): string
 export function reopenPrompt(root: string): string
 export function quietCounts(agents: readonly CardAgent[] | undefined, quietMs?: number, stalledMs?: number): { quiet: number; stalled: number }
-export type Nudged = Record<string, { at: number; times: number }>
+export type Nudged = Record<string, { at: number; times: number; tokens?: number }>
 export function nudgeable(state: any): boolean
 export function stallNudges(agents: readonly CardAgent[] | undefined, nudged: Nudged | undefined, now: number, stalledMs?: number, againMs?: number):
   { due: (CardAgent & { times: number; why: 'still' | 'held' })[]; nudged: Nudged }

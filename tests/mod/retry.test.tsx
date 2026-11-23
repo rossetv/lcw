@@ -8,7 +8,8 @@ const RUN = '/lcw/repos/r/runs/x'
 
 // The world beneath the mod: files in memory, the prompt box, the prompts it submits, and a clock that jumps.
 // Each timer fires once per jump, so a wait of many minutes costs one step.
-function engine(on: any, opts: { run?: string; shape?: string; reason?: string | null; drop?: string } = {}) {
+function engine(on: any, opts: { run?: string; shape?: string; reason?: string | null; drop?: string; kept?: Record<string, any> } = {}) {
+  const kept = opts.kept ?? {}
   const files: Record<string, string> = {}
   if (opts.run) {
     files['/lcw/sessions/s1.json'] = JSON.stringify({ runDir: RUN })
@@ -44,6 +45,9 @@ function engine(on: any, opts: { run?: string; shape?: string; reason?: string |
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
   on('ui.invalidate', () => ({ value: undefined }))
+  // $.state as a reload of the mod's code finds it: what the test put there, and what the mod writes.
+  on('state.get', (_: any, e: any) => ({ value: { value: kept[e.key], version: e.key in kept ? 1 : 0 } }))
+  on('state.set', (_: any, e: any) => { kept[e.key] = e.value; return { value: { isSet: true, version: 2 } } })
   const pass = async (minutes: number) => {
     now += minutes * MIN
     for (let i = 0; i < 2; i++) {
@@ -53,7 +57,7 @@ function engine(on: any, opts: { run?: string; shape?: string; reason?: string |
       await new Promise((r) => setTimeout(r, 20))
     }
   }
-  return { pass, prompts, box }
+  return { pass, prompts, box, kept }
 }
 
 const start = ($: any) => $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -269,4 +273,30 @@ test('the engine order of events, turn start, then the error, then the turn endi
   await w.pass(1.1)
   expect(w.prompts).toHaveLength(1)
   expect(w.prompts[0]).toMatch(/try 1\b/)
+})
+
+test('a carry-on is kept where a reload of the mod finds it', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  await fail($)
+  await w.pass(0)
+  expect(w.kept.carry?.value?.carry?.kind).toBe('server_error')
+  expect(w.kept.carry?.value?.session).toBe('s1')
+})
+
+test('a carry-on pending before a reload of the mod is still made after it', async ($, on) => {
+  const carry = { firstAt: NOW, kind: 'server_error', tries: 0, dueAt: NOW + MIN }
+  const w = engine(on, { kept: { carry: { shape: 'kept-1', value: { session: 's1', carry } } } })
+  await start($)
+  await w.pass(2)
+  expect(w.prompts.length).toBe(1)
+  expect(w.prompts[0]).toMatch(/try 1/)
+})
+
+test("another session's carry-on is not made", async ($, on) => {
+  const carry = { firstAt: NOW, kind: 'server_error', tries: 0, dueAt: NOW + MIN }
+  const w = engine(on, { kept: { carry: { shape: 'kept-1', value: { session: 's0', carry } } } })
+  await start($)
+  await w.pass(2)
+  expect(w.prompts.length).toBe(0)
 })

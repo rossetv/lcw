@@ -15,7 +15,8 @@ const approving = (approval: object = { go: ['Go (a)', 'Go (b)'], meaning: 'buil
   [RUN + '/state.json']: JSON.stringify({ id: 'r1', name: 'phone-rows', status: 'with-you', stage: 'Brainstorm', stageSince: NOW - 60000, tasks: [], asks: [], approval, ...over }),
 })
 
-function engine(on: any, files: Record<string, string>, opts: { draft?: string; fills?: boolean } = {}) {
+function engine(on: any, files: Record<string, string>, opts: { draft?: string; fills?: boolean; kept?: Record<string, any> } = {}) {
+  const kept = opts.kept ?? {}
   const clock = mock.clock(on, { now: NOW })
   const prompts: string[] = []
   const filled: string[] = []
@@ -42,7 +43,10 @@ function engine(on: any, files: Record<string, string>, opts: { draft?: string; 
   on('ui.toast', (_: any, e: any) => { toasts.push(e.text); return { value: undefined } })
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
-  return { clock, prompts, filled, toasts }
+  // $.state as a reload of the mod's code finds it: what the test put there, and what the mod writes.
+  on('state.get', (_: any, e: any) => ({ value: { value: kept[e.key], version: e.key in kept ? 1 : 0 } }))
+  on('state.set', (_: any, e: any) => { kept[e.key] = e.value; return { value: { isSet: true, version: 2 } } })
+  return { clock, prompts, filled, toasts, kept }
 }
 
 const start = ($: any) => $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -123,6 +127,14 @@ test('a slash command from the person leaves the box showing', async ($, on) => 
   await w.clock.advance(2000)
   const band = await $.ui.mount(BAND)
   expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeDefined()
+  await band.unmount()
+})
+
+test('a reply sent before a reload of the mod keeps the box away after it', async ($, on) => {
+  engine(on, approving(), { kept: { repliedAt: { shape: 'kept-1', value: NOW - 500 } } })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeUndefined()
   await band.unmount()
 })
 

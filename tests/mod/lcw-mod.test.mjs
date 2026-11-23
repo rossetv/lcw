@@ -344,11 +344,20 @@ test('the orchestrator is told when an agent stalls, then twice more, five minut
 test('an agent that moves again, or ends, is forgotten, and is reported afresh if it stalls again', () => {
   let r = stallNudges([stalling('a', 15)], {}, NOW)
   assert.equal(r.due.length, 1)
-  r = stallNudges([stalling('a', 0)], r.nudged, NOW + MIN)
+  r = stallNudges([stalling('a', 0, { tokens: 1200 })], r.nudged, NOW + MIN)
   assert.deepEqual(r.nudged, {})
-  r = stallNudges([stalling('a', 15)], r.nudged, NOW + 16 * MIN)
+  r = stallNudges([stalling('a', 15, { tokens: 1200 })], r.nudged, NOW + 16 * MIN)
   assert.deepEqual(r.due.map((a) => a.times), [1])
   assert.deepEqual(stallNudges([], r.nudged, NOW + 17 * MIN).nudged, {})
+})
+
+test('an agent whose clock starts over without its tokens moving keeps its record, so three notices stay three', () => {
+  let r = stallNudges([stalling('a', 15)], { a: { at: NOW - 20 * MIN, times: 3, tokens: 1000 } }, NOW)
+  assert.deepEqual(r.due, [])
+  r = stallNudges([stalling('a', 0)], r.nudged, NOW + MIN)
+  assert.equal(r.nudged.a.times, 3)
+  r = stallNudges([stalling('a', 15)], r.nudged, NOW + 16 * MIN)
+  assert.deepEqual(r.due, [])
 })
 
 test('an agent that only waits on a shell or a child is never reported', () => {

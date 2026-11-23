@@ -5,7 +5,7 @@ const BAND = {
   props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 20, bodyColumns: 100, scroll: { offset: 0, bodyRows: 19 }, view: {} },
 } as const
 
-function engine(on: any, files: Record<string, string>, settings: Record<string, unknown> = {}) {
+function engine(on: any, files: Record<string, string>, settings: Record<string, unknown> = {}, kept: Record<string, any> = {}) {
   const writes: Record<string, string> = {}
   const runs: string[][] = []
   const prompts: string[] = []
@@ -28,7 +28,10 @@ function engine(on: any, files: Record<string, string>, settings: Record<string,
   on('process.run', (_: any, e: any) => { runs.push([...e.argv]); return { value: { exitCode: 0, stdout: '', stderr: '' } } })
   on('prompt.submit', (_: any, e: any) => { prompts.push(e.text); return { text: e.text } })
   on('ui.toast', () => ({ value: undefined }))
-  return { writes, runs, prompts }
+  // $.state as a reload of the mod's code finds it: what the test put there, and what the mod writes.
+  on('state.get', (_: any, e: any) => ({ value: { value: kept[e.key], version: e.key in kept ? 1 : 0 } }))
+  on('state.set', (_: any, e: any) => { kept[e.key] = e.value; return { value: { isSet: true, version: 2 } } })
+  return { writes, runs, prompts, kept }
 }
 
 const payg = { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'payg' }) }
@@ -43,6 +46,23 @@ test('with no advisor set, the advisor banner is drawn with no run, and Not now 
   const again = await $.ui.mount(BAND)
   expect(await again.find({ type: 'Text', text: /advisor/ })).toBeUndefined()
   await again.unmount()
+})
+
+test('Not now is kept where a reload of the mod finds it', async ($, on) => {
+  const w = engine(on, {})
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:advisor:later' })
+  await band.unmount()
+  expect(w.kept.dismissed?.value).toEqual(['advisor'])
+})
+
+test('a box dismissed before a reload of the mod stays away after it', async ($, on) => {
+  engine(on, {}, {}, { dismissed: { shape: 'kept-1', value: ['advisor'] } })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /advisor/ })).toBeUndefined()
+  await band.unmount()
 })
 
 test('Fix it runs setup to turn the advisor on', async ($, on) => {

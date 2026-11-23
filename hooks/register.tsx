@@ -1,3 +1,4 @@
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import {
@@ -29,6 +30,14 @@ const CARD_ROOM = 10
 const PERSON = ['composer', 'bridge', 'sdk']
 // How long the band is drawn without buttons after its box changed: see the ui.render hook.
 const UNFOCUS_MS = 300
+
+// What a reload of this code must not start over; a new tag makes a reload read what older code kept as absent.
+const KEPT = 'kept-1'
+const keptDismissed = atom({ plugin: 'lcw', key: 'dismissed' } as const, [], { shape: KEPT })
+const keptReplied = atom({ plugin: 'lcw', key: 'repliedAt' } as const, 0, { shape: KEPT })
+const keptTold = atom({ plugin: 'lcw', key: 'told' } as const, {}, { shape: KEPT })
+const keptNudged = atom({ plugin: 'lcw', key: 'nudged' } as const, {}, { shape: KEPT })
+const keptCarry = atom({ plugin: 'lcw', key: 'carry' } as const, null, { shape: KEPT })
 
 // session is the session's file (the binding, its billing and its mark); money is the pay-per-token view, else null.
 type Run = { runDir: string; paths: ReturnType<typeof runPaths>; state: any; gate: any; usage: any; session: any; money: any }
@@ -101,9 +110,70 @@ const S = {
   carry: null as Carry | null,
   // A prompt that carries the run on (the reopen, the resume after a checkpoint) and has not been sent yet: see owe.
   owed: null as { runDir: string; text: string } | null,
+  // What an earlier copy of this code kept has been read: nothing is written over it before then.
+  restored: false,
 }
 
 const totalsFile = (runDir: string) => `${runDir}/totals.json`
+
+// What each kept value was last written as, so it is written only when it changed.
+const keptAs: Record<string, string> = {}
+function changed(name: string, value: unknown) {
+  if (!S.restored) return false
+  const text = JSON.stringify(value)
+  if (keptAs[name] === text) return false
+  keptAs[name] = text
+  return true
+}
+const unkept = (name: string) => () => { delete keptAs[name] }
+
+function keepDismissed($: EngineInterface) {
+  const dismissed = [...S.banner.dismissed]
+  if (changed('dismissed', dismissed)) void update($, keptDismissed, () => dismissed).catch(unkept('dismissed'))
+}
+
+function keepReplied($: EngineInterface) {
+  const at = S.repliedAt
+  if (changed('repliedAt', at)) void update($, keptReplied, () => at).catch(unkept('repliedAt'))
+}
+
+function keepNotices($: EngineInterface) {
+  const { told, nudged } = S
+  if (changed('told', told)) void update($, keptTold, () => told).catch(unkept('told'))
+  if (changed('nudged', nudged)) void update($, keptNudged, () => nudged).catch(unkept('nudged'))
+}
+
+function setCarry($: EngineInterface, carry: Carry | null) {
+  S.carry = carry
+  keepCarry($)
+}
+
+function keepCarry($: EngineInterface) {
+  const carry = S.carry
+  void $.session.id().then((session) => {
+    const kept = carry && { session, carry }
+    if (changed('carry', kept)) return update($, keptCarry, () => kept).catch(unkept('carry'))
+  }).catch(() => {})
+}
+
+// What an earlier copy of this code kept, merged into what this one holds; a read that fails changes nothing.
+async function restore($: EngineInterface) {
+  try {
+    const [dismissed, repliedAt, told, nudged, carry, session] = await Promise.all([
+      read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(),
+    ])
+    for (const k of dismissed) S.banner.dismissed.add(k)
+    S.repliedAt = Math.max(S.repliedAt, repliedAt)
+    S.told = { ...told, ...S.told }
+    S.nudged = { ...nudged, ...S.nudged }
+    if (!S.carry && carry?.session === session) S.carry = carry.carry
+  } catch {}
+  S.restored = true
+  keepDismissed($)
+  keepReplied($)
+  keepNotices($)
+  keepCarry($)
+}
 
 const readJson = ($: EngineInterface, path: string) =>
   $.fs.read(path).then((text) => JSON.parse(text)).catch(() => null)
@@ -180,7 +250,7 @@ function owe($: EngineInterface, runDir: string, text: string, wait = 700) {
 }
 
 // Notices that were not sent are taken off the record, where no later poll has changed it, so they fall due again.
-function unsay(stall: { due: { id: string }[]; nudged: Nudged }, was: Nudged, long: { id: string }[]) {
+function unsay($: EngineInterface, stall: { due: { id: string }[]; nudged: Nudged }, was: Nudged, long: { id: string }[]) {
   const nudged = { ...S.nudged }
   for (const a of stall.due) {
     const before = was[a.id]
@@ -192,6 +262,7 @@ function unsay(stall: { due: { id: string }[]; nudged: Nudged }, was: Nudged, lo
   for (const a of long) delete told[a.id]
   S.nudged = nudged
   S.told = told
+  keepNotices($)
 }
 
 async function refresh($: EngineInterface) {
@@ -217,6 +288,7 @@ async function refresh($: EngineInterface) {
     S.seen = {}
     S.nudged = {}
     S.told = {}
+    keepNotices($)
     S.hideRows = false
     return
   }
@@ -277,8 +349,9 @@ async function pollAgents($: EngineInterface) {
     S.told = long.told
     const due = [...stall.due, ...long.due]
     // Recorded before it is sent, since the next poll may come first; taken off the record later if it was not sent.
-    if (due.length) void submitSoon($, stallPrompt(due, S.agents)).then((sent) => sent || retryLater($, () => unsay(stall, was, long.due)))
+    if (due.length) void submitSoon($, stallPrompt(due, S.agents)).then((sent) => sent || retryLater($, () => unsay($, stall, was, long.due)))
   } else S.nudged = {}
+  keepNotices($)
   const totals = addTotals(S.totals, list, run.state.createdAt ?? 0)
   if (totals.agents !== S.totals.agents || totals.tokens !== S.totals.tokens) S.totalsChanged = true
   S.totals = totals
@@ -482,11 +555,11 @@ async function carryOn($: EngineInterface) {
   if (S.carry !== c) return
   const paused = S.run?.state?.status === 'paused'
   const step = carryDue(c, now, typed || paused || S.turnRunning)
-  S.carry = step.carry ?? null
+  setCarry($, step.carry ?? null)
   if (!step.send) return
   const sent = S.carry
   if (!(await submit($, { text: carryPrompt(c.kind, step.send) })) && S.carry === sent) {
-    S.carry = carryFailed(sent, c.kind, await $.clock.now())
+    setCarry($, carryFailed(sent, c.kind, await $.clock.now()))
   }
 }
 
@@ -577,7 +650,10 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
     S.dirty = true
     return
   }
-  if (plan.dismiss) for (const k of dismissKeys(banner)) S.banner.dismissed.add(k)
+  if (plan.dismiss) {
+    for (const k of dismissKeys(banner)) S.banner.dismissed.add(k)
+    keepDismissed($)
+  }
   S.banner.shown = null
   S.dirty = true
   const toast = plan.toast === 'output' ? said(last) : plan.toast
@@ -680,6 +756,8 @@ export const register: Register = (on) => {
     // A cleared or another session has no reply to carry on.
     S.carry = null
     S.owed = null
+    // session.start fires again when this code is reloaded.
+    await restore($)
     S.atPrompt = e.isInteractive === true
     S.interactive = S.atPrompt || e.surface != null || (await $.session.surfaces().catch(() => [])).length > 0
     await start($).catch(() => {})
@@ -709,7 +787,7 @@ export const register: Register = (on) => {
     const result = await next(e)
     if (!e.agentId) { S.turnRunning = false; S.turnEndedAt = await $.clock.now().catch(() => S.turnEndedAt) }
     // A main turn that did not end in error has carried the session on; one that did was judged by classic.StopFailure.
-    if (!e.agentId && e.reason !== 'error') S.carry = null
+    if (!e.agentId && e.reason !== 'error' && S.carry) setCarry($, null)
     await countTurn($, e).catch(() => {})
     if (!e.agentId && !e.isAborted) await checkpoint($).catch(() => {})
     return result
@@ -721,9 +799,9 @@ export const register: Register = (on) => {
     const kind = (e as any).origin?.kind
     if (!e.isMeta && (!kind || PERSON.includes(kind)) && !(result as any)?.drop) {
       // A slash command is no answer to the approval box; only a prompt is.
-      if (!e.command) S.repliedAt = await $.clock.now().catch(() => S.repliedAt)
+      if (!e.command) { S.repliedAt = await $.clock.now().catch(() => S.repliedAt); keepReplied($) }
       // What the person sends takes over from any carry-on.
-      S.carry = null
+      if (S.carry) setCarry($, null)
       S.owed = null
       void readBanner($).catch(() => {})
     }
@@ -732,7 +810,7 @@ export const register: Register = (on) => {
 
   // A built-in command that runs locally may raise no prompt.submit; the person's run of one still takes over from a carry-on.
   on('command.run', async ($, e, next) => {
-    if (PERSON.includes((e as any).origin?.kind)) S.carry = null
+    if (PERSON.includes((e as any).origin?.kind) && S.carry) setCarry($, null)
     return next(e)
   })
 
@@ -740,7 +818,7 @@ export const register: Register = (on) => {
   // error is its orchestrator's to deal with.
   on('classic.StopFailure', async ($, e, next) => {
     const result = await next(e)
-    try { if (!e.agent_id) S.carry = carryFailed(S.carry, e.error, await $.clock.now()) } catch {}
+    try { if (!e.agent_id) setCarry($, carryFailed(S.carry, e.error, await $.clock.now())) } catch {}
     return result
   })
 
