@@ -138,9 +138,15 @@ Where the spec and the brainstorm, or the charter, leave something open that is 
 
 Go to the human in three cases: something they agreed in the brainstorm or the charter cannot be done as agreed, and you cannot get past it yourself (a thing that turns out impossible, so the intent itself has to change, or that cannot be built without what only they can give, such as a credential, an account or a payment); an X or Y you cannot settle from their intent; and a risky, hard-to-undo step, before you take it. In a sweep, a finding only the human can decide is parked, not asked; one a short answer would settle is also put to them in LCW's box (`lcw question`, stages/hunt.md), and nothing waits on the answer. A prompt from them that starts "Your call on Q82:" is their own answer to that question: record it at once, `lcw question Q82 answer "<their words>"`, and carry on; the next wave's Plan acts on it.
 
-**Say what you recommend.** Whenever you ask the human anything, in the conversation, in a dialog or in LCW's box, say which answer you recommend and why in a line. In a dialog the recommended option comes first, marked "(Recommended)". In LCW's box the pink button is the one you recommend: `lcw question add` takes `--recommend <a|b|c>`, and `lcw approval` with several Go labels takes `--recommend <n>`.
+**Say what you recommend.** Whenever you ask the human anything, in the conversation, in a dialog or in LCW's box, say which answer you recommend and why in a line. In a dialog the recommended option comes first, marked "(Recommended)". In LCW's box the pink button is the one you recommend: `lcw question add` and `lcw ask` with options take `--recommend <a|b|c>`, and `lcw approval` with several Go labels takes `--recommend <n>`.
 
-Then use `lcw ask "<the question, why it is theirs, and the ways out you see with your recommendation>" --waiting <number of tasks waiting>`, say it in the conversation too, and carry on with everything that does not depend on it. In a sweep, an ask about one wave adds `--wave <n>`: that wave waits, and the other waves carry on. Several asks are numbered, oldest first, and the human answers by number in plain words; record each with `lcw answer <n> "<answer>"`. If the answer changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements as above.
+Then use `lcw ask "<the question, why it is theirs, and the ways out you see with your recommendation>" --waiting <number of tasks waiting>`, say it in the conversation too, and carry on with everything that does not depend on it. In a sweep, an ask about one wave adds `--wave <n>`: that wave waits, and the other waves carry on. When the ask is a choice, give the ways out as options, which LCW's box draws as buttons beside Other… and Later, with your pick in `--recommend` and why in the question:
+
+```
+lcw ask "GitHub refuses the push to origin: the token cannot write. I recommend the fork, which needs nothing from you." --a "origin: I push once you give the token write access" --b "fork: I push to your fork and open the pull request from it" --recommend b --waiting 3
+```
+
+Several asks are numbered, oldest first, and the human answers by number in plain words; record each with `lcw answer <n> "<answer>"`. A press on an option is recorded by LCW, which then tells you the answer: act on it without recording it again. If the answer changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements as above.
 
 ## What the human can say at any time
 

@@ -395,3 +395,40 @@ test('a 0.4 wave with no stage reads the run-level stage and lists', () => {
   assert.equal(w.tasks.length, 1)
   assert.equal(w.requirements.length, 1)
 })
+
+const choosing = (asks) => ({ now: NOW, run: runFact({ id: 'r1', name: 'export-csv', status: 'running', stage: 'Build', asks }) })
+const REMOTE = { n: 2, text: 'Which remote?', at: NOW, recommend: 'b', options: [{ key: 'a', label: 'origin', meaning: 'once the token can write' }, { key: 'b', label: 'fork', meaning: 'push to your fork' }] }
+
+test("an ask's option records the answer with its words and tells the run; Other puts the ask's number in the prompt", () => {
+  const plan = press(choosing([REMOTE]), 'b')
+  assert.deepEqual(plan.steps.map((s) => s.argv.slice(2)), [['answer', '2', 'fork: push to your fork', '--session', 's1']])
+  assert.match(plan.owe, /ask 2/)
+  assert.match(plan.owe, /fork: push to your fork/)
+  assert.equal(plan.dismiss, undefined, 'the next open ask shows once this one is answered')
+  assert.deepEqual(press(choosing([REMOTE]), 'other'), { fill: 2, dismiss: true })
+})
+
+test("an ask's option drawn before the ask changed is not acted on, though the new ask's option has the same label", () => {
+  const drawn = bannerFor(choosing([REMOTE]))
+  const next = bannerFor(choosing([{ ...REMOTE, n: 3, text: 'And the tag?' }]))
+  assert.equal(sameBox(drawn, next, 'b'), false)
+  assert.equal(sameBox(drawn, bannerFor(choosing([REMOTE])), 'b'), true)
+})
+
+test("Later on a question shown before an ask brings up the ask's buttons, and the question comes back once the ask is answered", () => {
+  const sweep = (asks) => ({ now: NOW, run: runFact({ id: 'r1', name: 'export-csv', shape: 'sweep', status: 'running', stage: 'Build', asks,
+    questions: [{ id: 'Q1', text: 'Keep the 409?', why: 'w', status: 'open', recommend: 'a', options: [{ key: 'a', label: 'Keep', meaning: 'm' }, { key: 'b', label: 'Change', meaning: 'n' }] }] }) })
+  const dismissed = new Set()
+  const pressOn = (facts, option) => {
+    const box = bannerFor({ ...facts, dismissed })
+    const plan = pressPlan(box, option, facts, CTX)
+    if (plan?.dismiss) for (const k of dismissKeys(box)) dismissed.add(k)
+    return { box, plan }
+  }
+  const asked = sweep([REMOTE])
+  assert.equal(pressOn(asked, 'later').box.kind, 'question')
+  const { box, plan } = pressOn(asked, 'b')
+  assert.equal(box.kind, 'answer')
+  assert.deepEqual(argvs(plan), ['answer 2 fork: push to your fork --session s1'])
+  assert.equal(bannerFor({ ...sweep([]), dismissed })?.kind, 'question')
+})

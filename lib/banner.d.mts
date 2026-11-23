@@ -14,10 +14,14 @@ export interface Banner {
   options: [string, string][]
   /** The approval box: its own tag, its replies in a column (ids of options, and what each means), and a note at the foot. */
   tag?: string
+  /** A name the tag takes after its first "· ", as much of it as the top row has room for. */
+  tagName?: string
   choices?: { ids: string[]; meaning: string }[]
   note?: string
   /** The question box: the question it puts. */
   questionId?: string
+  /** The answer box drawing an ask's options: that ask's number. */
+  askN?: number
   /** The option drawn filled as the one recommended: its id, or null for none. Absent on a box whose first option is the one filled. */
   recommended?: string | null
 }

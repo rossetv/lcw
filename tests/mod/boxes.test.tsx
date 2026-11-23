@@ -288,6 +288,79 @@ test('where Answer now cannot fill the prompt, the box says to type the answer t
   await band.unmount()
 })
 
+test('under the answer box the card does not repeat the question; once put off, the card has it again', async ($, on) => {
+  const w = engine(on, asking([{ n: 1, text: 'Which export format should the report use?', waiting: 2 }]))
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /needs you/ })).toBeDefined()
+  // one row says it, the box's: a row is a Text, and so is each of its spans
+  expect((await band.findAll({ type: 'Text', text: /^│.*Which export format/ })).length).toBe(1)
+  await band.press({ key: 'banner:answer:later' })
+  await w.clock.advance(2000)
+  expect(await band.find({ type: 'Text', text: /Which export format/ })).toBeDefined()
+  await band.unmount()
+})
+
+const REMOTE = { n: 1, text: 'Which remote?', recommend: 'b', options: [{ key: 'a', label: 'origin', meaning: 'once the token can write' }, { key: 'b', label: 'fork', meaning: 'push to your fork' }] }
+
+test("an ask's option pressed records the answer and tells the run, with no prompt to type", async ($, on) => {
+  const w = engine(on, asking([REMOTE]))
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:answer:b' })
+  await w.clock.advance(100)
+  expect(lcwCalls(w.runs, 'answer')).toEqual(['answer 1 fork: push to your fork --session s1'])
+  expect(w.prompts.map((p) => p.text).join(' ')).toMatch(/answered ask 1 .*fork: push to your fork/)
+  expect(w.filled).toEqual([])
+  await band.unmount()
+})
+
+test("Later on a sweep's question shown before an ask brings up the ask's buttons", async ($, on) => {
+  const question = { id: 'Q1', text: 'Keep the 409?', why: 'w', status: 'open', recommend: 'a', options: [{ key: 'a', label: 'Keep', meaning: 'm' }, { key: 'b', label: 'Change', meaning: 'n' }] }
+  const w = engine(on, bound({ shape: 'sweep', questions: [question], asks: [{ ...REMOTE, at: NOW - HOUR }] }))
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:question:later' })
+  await w.clock.advance(1000)
+  expect(await band.find({ type: 'Button', key: 'banner:answer:b' })).toBeDefined()
+  await band.unmount()
+})
+
+test("an answer pressed whose prompt the engine refuses still reaches the run, sent again later", async ($, on) => {
+  const w = engine(on, asking([REMOTE]), { submitFails: 1 })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:answer:b' })
+  await w.clock.advance(40000)
+  expect(lcwCalls(w.runs, 'answer')).toEqual(['answer 1 fork: push to your fork --session s1'])
+  expect(w.prompts.filter((p) => /answered ask 1/.test(p.text)).length).toBe(1)
+  await band.unmount()
+})
+
+test('an answer pressed while a reopen prompt still waits to be sent reaches the run with it', async ($, on) => {
+  const w = engine(on, { ...asking([REMOTE]), [RUN + '/mod-alive']: String(NOW - 60000) }, { drops: 1 })
+  await start($)
+  await w.clock.advance(5000)
+  expect(w.prompts.length).toBe(0)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:answer:b' })
+  await w.clock.advance(40000)
+  const all = w.prompts.map((p) => p.text).join('\n')
+  expect(all).toMatch(/reopened/)
+  expect(all).toMatch(/answered ask 1/)
+  await band.unmount()
+})
+
+test("an ask's Other puts its number in the prompt, as Answer now does", async ($, on) => {
+  const w = engine(on, asking([REMOTE]))
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:answer:other' })
+  expect(w.filled).toEqual(['1: '])
+  expect(lcwCalls(w.runs, 'answer')).toEqual([])
+  await band.unmount()
+})
+
 const leftHalfway = (over: object = {}) => ({
   '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }),
   [OLD + '/state.json']: JSON.stringify({ id: 'r2', name: 'old-run', title: 'adding a CSV export', status: 'running', stage: 'Build', tasks: [], asks: [], ...over }),

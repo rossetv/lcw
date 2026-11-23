@@ -41,6 +41,7 @@ export type Plan = {
   notices?: Record<string, string>
   prompt?: { text: string; asUser?: true }
   promptFailed?: string
+  owe?: string
   fill?: number
   fillText?: string
   proxyQuotaChoice?: { endpoint: string; choice: string }

@@ -434,3 +434,44 @@ test('the usage mark box fills no button, since a raise is the person\'s own cho
 test('a box of LCW\'s own keeps its first option filled', () => {
   assert.deepEqual(filled(bannerRows({ kind: 'update', key: 'k', title: 't', lines: [], bullets: [], options: [['now', 'Update now'], ['later', 'Not now']] }, 92)), ['banner:update:now'])
 })
+
+test('an open question shows before an open ask, so its options are not hidden behind the answer box', () => {
+  const run = runFact({ id: 'r', name: 'r', shape: 'sweep', stage: 'Build', status: 'running', asks: [{ n: 1, text: 'Push where?', at: 1 }], questions: [{ ...QUESTION, recommend: 'a' }] }, false)
+  assert.equal(bannerFor({ run, now: 0 })?.kind, 'question')
+})
+
+const asking = (asks) => runFact({ id: 'r', name: 'export-csv', stage: 'Build', status: 'running', asks }, false)
+const CHOICE = { n: 1, text: 'GitHub refuses the push. Which remote?', at: 1, recommend: 'b', options: [{ key: 'a', label: 'origin', meaning: 'retry once you give the token write access' }, { key: 'b', label: 'fork', meaning: 'push to your fork instead' }] }
+
+test("an ask with options draws them as buttons, Claude's pick filled, with Other and Later", () => {
+  const b = bannerFor({ run: asking([CHOICE]), now: 0 })
+  assert.equal(b.kind, 'answer')
+  const ids = bannerRows(b, 92).flat().filter((s) => s.id).map((s) => s.id)
+  assert.deepEqual(ids, ['banner:answer:a', 'banner:answer:b', 'banner:answer:other', 'banner:answer:later'])
+  assert.deepEqual(filled(bannerRows(b, 92)), ['banner:answer:b'])
+  assert.match(bannerRows(b, 92).flat().map((s) => s.t).join(''), /Which remote\?/)
+  assert.deepEqual(filled(bannerRows({ ...b, choices: undefined, lines: [] }, 92, true)), ['banner:answer:b'], 'in the short form too')
+})
+
+test('an ask without options keeps the box it always had', () => {
+  const b = bannerFor({ run: asking([{ n: 1, text: 'Which format?', at: 1 }, CHOICE].map((a, i) => ({ ...a, n: i + 1 }))), now: 0 })
+  assert.deepEqual(b.options, [['now', 'Answer now'], ['later', 'Later']])
+  assert.equal(b.choices, undefined)
+})
+
+test("the box of an ask's options names the run, as the plain answer box does", () => {
+  assert.match(bannerRows(bannerFor({ run: asking([CHOICE]), now: 0 }), 92)[0].map((s) => s.t).join(''), /◆ LCW · export-csv needs your answer/)
+})
+
+test("the top row of an ask's options box is never wider than the box, whatever the run's name", () => {
+  for (const name of ['demo', 'plugin-and-status-bar-bugs-and-a-good-deal-more']) {
+    const b = bannerFor({ run: runFact({ id: 'r', name, stage: 'Build', status: 'running', asks: [CHOICE] }, false), now: 0 })
+    for (let width = 32; width <= 100; width++) {
+      for (const overCard of [false, true]) {
+        const rows = bannerRows(b, width, overCard)
+        if (!rows.length) continue
+        assert.equal(len(rows[0].map((s) => s.t).join('')), len(rows[1].map((s) => s.t).join('')), `${name} at ${width}`)
+      }
+    }
+  }
+})
