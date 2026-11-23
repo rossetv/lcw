@@ -58,3 +58,15 @@ test('a quota file holding only the id of an interrupted setup reads as no comma
   assert.equal(r.status, 0)
   assert.match(r.stdout, /No external quota command set\./)
 })
+
+test('a quota file that names an endpoint but is not usable still says new work is held', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-quota-'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const home = path.join(dir, '.lcw')
+  fs.mkdirSync(home)
+  fs.writeFileSync(path.join(home, 'quota-command.json'), JSON.stringify({ endpoint: 'http://localhost:8080/v1', setupRequestId: 'abc' }))
+  const env = { ...process.env, HOME: dir, LCW_HOME: home, LCW_NOW: String(at) }
+  const r = spawnSync(process.execPath, [cli, 'quota-command'], { env, encoding: 'utf8', timeout: 5000 })
+  assert.equal(r.status, 0)
+  assert.match(r.stdout, /http:\/\/localhost:8080\/v1.*new work held/)
+})

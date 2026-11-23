@@ -15,7 +15,7 @@ import { weekOf, weekShare } from '../lib/card.mjs'
 import { moneyFrom, runSpend, markUsdOf, machineSpend, readingOf, SPEND_COMMAND_FAILS, DEFAULT_CAP_USD } from '../lib/spend.mjs'
 import { runCommand, readSetting, writeSetting, clearSetting, readReading, recordResult, claimWindow } from './lib/spend-command.mjs'
 import { configureQuota, disableQuota, readQuotaState } from './lib/quota-command.mjs'
-import { QUOTA_SOURCE_ID, activeQuota, evaluateQuota, quotaOff } from '../lib/quota.mjs'
+import { QUOTA_SOURCE_ID, evaluateQuota, quotaOff } from '../lib/quota.mjs'
 import { dollars, ageText } from '../lib/format.mjs'
 import { isOpenWave } from '../lib/banner.mjs'
 import { noteQuotaSession, readSessionQuota, quotaUsage, quotaLine, sessionBilling } from './lib/quota-session.mjs'
@@ -703,9 +703,9 @@ const commands = {
     }
     if (!rest.length) {
       const state = readQuotaState(home())
-      if (!state || quotaOff(state) || !activeQuota(state)) return out('No external quota command set.')
+      if (!state || quotaOff(state) || !(state.endpoint || state.command)) return out('No external quota command set.')
       const view = evaluateQuota({ sourceId: QUOTA_SOURCE_ID, endpoint: state.endpoint }, state, now(), sessionMark(sessionId))
-      const label = `External quota for ${state.endpoint}`
+      const label = `External quota for ${state.endpoint ?? 'an unset endpoint'}`
       return out(view.status === 'ok'
         ? `${label}: ${view.percentUsed}% used; resets ${view.resetsAt}${view.blocked ? '; provider blocked' : ''}.`
         : `${label}: ${view.status} (${view.code}); new work held.`)
