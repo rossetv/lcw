@@ -207,7 +207,7 @@ test('a dismissal hides that occurrence only; a new occurrence brings the box ba
   assert.equal(kindOf({ ...S.A1, update: { ...S.A1.update, available: { ...S.A1.update.available, version: '0.1.5' } }, dismissed: new Set(['update:' + update.key]) }), 'update', 'a newer version')
 })
 
-test('a sample of each approved box has the buttons the plan names, the first filled', () => {
+test('a sample of each approved box has the buttons the plan names, the first filled, and none on the usage mark box', () => {
   const want = {
     A1: ['now', 'later'], A2: ['ok'], B: ['ok'], D1: ['r90', 'r100', 'wait'], D1usd: ['r90', 'r100', 'wait'], K: ['r90', 'r100', 'wait'],
     K92: ['r100', 'wait'], E: ['fix', 'off', 'later'], F: ['resume', 'abandon', 'later'], H: ['ok', 'learn'], J: ['now', 'later'],
@@ -218,8 +218,8 @@ test('a sample of each approved box has the buttons the plan names, the first fi
     const b = bannerFor(S[name])
     const buttons = bannerRows(b, 96).flat().filter((s) => s.id)
     assert.deepEqual(buttons.map((s) => s.id), options.map((o) => 'banner:' + b.kind + ':' + o), name)
-    assert.equal(buttons[0].bg, 'Fable', name)
-    for (const s of buttons.slice(1)) assert.notEqual(s.bg, 'Fable', name)
+    if (b.kind !== 'mark') assert.equal(buttons[0].bg, 'Fable', name)
+    for (const s of buttons.slice(b.kind === 'mark' ? 0 : 1)) assert.notEqual(s.bg, 'Fable', name)
   }
 })
 
@@ -405,6 +405,16 @@ test('the approval box fills the Go label Claude recommends, and a lone Go', () 
   assert.deepEqual(filled(bannerRows(box({ go: ['Go (a)', 'Go (b)'], meaning: 'm', at: 1 }), 92, true)), [], 'asked before it named one')
   assert.deepEqual(filled(bannerRows(box({ go: [], meaning: '', at: 1 }), 92, true)), ['banner:approve:go1'])
   assert.deepEqual(filled(bannerRows(box({ go: ['Go (a)', 'Go (b)'], meaning: 'm', at: 1, recommend: 2 }), 92, true, true)), ['banner:approve:go2'], 'in the tight form too')
+})
+
+test('the usage mark box fills no button, since a raise is the person\'s own choice', () => {
+  for (const facts of [S.K, S.D1, S.D1usd]) {
+    const b = bannerFor(facts)
+    assert.equal(b.kind, 'mark')
+    assert.ok(bannerRows(b, 96).flat().some((s) => s.id), 'its buttons are drawn')
+    assert.deepEqual(filled(bannerRows(b, 96)), [])
+    assert.deepEqual(filled(bannerRows(b, 60, true)), [])
+  }
 })
 
 test('a box of LCW\'s own keeps its first option filled', () => {
