@@ -44,7 +44,10 @@ try {
     if (money && !ids.some((id) => readJson(sessionFile(home(), id))?.toldPayg)) {
       writeJson(file, { ...session, toldPayg: true })
       const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-      texts.push('LCW: this session turned out to be billed per token.', ...paygLines(`node ${root}/scripts/lcw.mjs`, money))
+      // one shell word, so a plugin folder with a space or a quote in its path still runs
+      const script = `${root}/scripts/lcw.mjs`
+      const cli = `node ${/^[\w@%+=:,./-]+$/.test(script) ? script : `'${script.replace(/'/g, `'\\''`)}'`}`
+      texts.push('LCW: this session turned out to be billed per token.', ...paygLines(cli, money))
     }
     if (heldQuota && !lcwCall) {
       texts.push(`LCW: STOP. ${quotaLine(heldQuota)}. ${run ? 'Launch nothing new: let running agents finish, record the state, then run lcw pause mark.' : 'Stop work and tell the user.'} A reset alone is not permission: wait for a fresh allowable reading. Explaining LCW (lcw:learn) may continue. Never raise the mark without the user.`)

@@ -5,7 +5,7 @@ import { MAX_AGE_MS } from '../lib/quota.mjs'
 import { thresholds as TH } from '../lib/theme.mjs'
 import { recordReading, next0800 } from '../lib/spend.mjs'
 import { settle } from '../lib/billing.mjs'
-import { dollars, tokens as tokenCount } from '../lib/format.mjs'
+import { clip, dollars, len, tokens as tokenCount } from '../lib/format.mjs'
 
 const LIVE = ['pending', 'running', 'waiting']
 const TEN_MINUTES = 10 * 60 * 1000
@@ -32,7 +32,7 @@ export const SPARK_CELLS = 8
 
 /**
  * Normalises $.agent.list() for the card and tracks when each agent's tokens last moved.
- * An agent that is not running (waiting on a shell or a child, or pending) is never quiet.
+ * An agent that is not running (waiting on a shell or a child, or pending), or that has a live agent of its own, is never quiet.
  * An agent is held when its turn has ended and it is still listed with no live agent of its own: background work it
  * started, such as a command that never ended, keeps it there. heldMs is how long that has lasted, and listedMs how
  * long the agent has been listed in one go.
@@ -49,7 +49,7 @@ export function trackAgents(list, seen, now) {
     if (!LIVE.includes(a.status)) continue
     const tokens = agentTokens(a)
     const prev = seen?.[a.id]
-    const since = !prev || prev.tokens !== tokens || a.status !== 'running' ? now : prev.since
+    const since = !prev || prev.tokens !== tokens || a.status !== 'running' || parents.has(a.id) ? now : prev.since
     const moved = !!prev && prev.tokens !== tokens
     let spark = prev?.spark ?? [], from = prev?.from ?? now, base = prev?.base ?? tokens
     // A span is closed with what was gained in it; spans the mod missed (it was not polling) count as empty.
@@ -108,17 +108,18 @@ export const nudgeable = (state) => !!state && !['finished', 'stopped', 'paused'
  * tokens have not moved for stalledMs (the card's own threshold), or when it has been held that long. It is named
  * when it gets there, then again every againMs while it stays there, three times in all: by then the orchestrator
  * has been told enough. why says which: 'still' or 'held'.
- * nudged: {id: {at, times}} from the previous poll; the returned one holds only agents that are still stalled.
+ * nudged: {id: {at, times, tokens}} from the previous poll; the returned one holds only agents still listed whose
+ * tokens have not moved since, so a record outlives a restart of the agents' clocks (a reload of the mod).
  */
 export function stallNudges(agents, nudged, now, stalledMs = TH.agentStalledAfterMinutes * 6e4, againMs = TH.agentQuietAfterMinutes * 6e4) {
   const due = []
   const next = {}
   for (const a of agents ?? []) {
     const why = a.quietMs >= stalledMs ? 'still' : a.heldMs >= stalledMs ? 'held' : null
-    if (!why) continue
-    const last = nudged?.[a.id]
-    if (!last) { next[a.id] = { at: now, times: 1 }; due.push({ ...a, times: 1, why }) }
-    else if (last.times < 3 && now - last.at >= againMs) { next[a.id] = { at: now, times: last.times + 1 }; due.push({ ...a, times: last.times + 1, why }) }
+    const last = nudged?.[a.id]?.tokens === a.tokens ? nudged[a.id] : undefined
+    if (!why) { if (last) next[a.id] = last; continue }
+    if (!last) { next[a.id] = { at: now, times: 1, tokens: a.tokens }; due.push({ ...a, times: 1, why }) }
+    else if (last.times < 3 && now - last.at >= againMs) { next[a.id] = { at: now, times: last.times + 1, tokens: a.tokens }; due.push({ ...a, times: last.times + 1, why }) }
     else next[a.id] = last
   }
   return { due, nudged: next }
@@ -215,7 +216,7 @@ export function buttons(row) {
   return out
 }
 
-const cells = (spans) => [...spans.map((s) => String(s.t ?? '')).join('')].length
+const cells = (spans) => len(spans.map((s) => String(s.t ?? '')).join(''))
 
 /**
  * Splits a row as lib/paint.mjs does: the span with r: true starts the group pushed to the right
@@ -229,10 +230,9 @@ export function layout(row, cols) {
   const short = cells(left) + cells(right) + 2 - cols
   const d = left.findLastIndex((s) => /^view:/.test(s.id ?? ''))
   if (short > 0 && d >= 0) {
-    const t = [...String(left[d].t ?? '')]
-    const pad = t.length - t.join('').trimEnd().length
-    const keep = t.length - short
-    const shorter = short <= pad ? t.slice(0, keep).join('') : t.slice(0, Math.max(0, keep - 1)).join('') + '…'
+    const t = String(left[d].t ?? '')
+    const pad = t.length - t.trimEnd().length
+    const shorter = short <= pad ? t.slice(0, t.length - short) : clip(t, Math.max(1, len(t) - short))
     left = left.map((s, j) => (j === d ? { ...s, t: shorter } : s))
   }
   return { left, gap: Math.max(2, cols - cells(left) - cells(right)), right }
@@ -310,6 +310,18 @@ export function quotaWakeEvidence(gate, quota, now) {
   }
 }
 
+/** Whether a native usage gate can gain a known reset; dollar and external gates keep their own evidence. */
+export function replacesGate(current, next) {
+  if (!next) return false
+  if (!current) return true
+  const known = (g) => Number.isFinite(Date.parse(g?.resetsAt ?? ''))
+  return !['usd', 'quota'].includes(current.unit) && !['usd', 'quota'].includes(next.unit) && !known(current) && known(next)
+}
+
+/**
+ * True once a gate's reset time has passed and this reset has not been handled yet. A dollar gate is due at its
+ * retryAt, and at once in a session settled as a subscription, where a dollar mark never holds.
+ */
 export function wakeDue(gate, now, wokeFor, billing, quota) {
   if (gate?.unit === 'quota') {
     const proof = quotaWakeEvidence(gate, quota, now)

@@ -33,7 +33,7 @@ That depends on what the picture is for:
 | a document in the repository | an SVG file beside the document, as the `lcw:docs` skill says |
 | the pull request | SVG files pushed with `lcw pictures`, as the `lcw:pull-request` skill says |
 
-For the brainstorm, first find out whether you have the Artifact tool. It may be a tool you call directly, or one you reach from inside a script; there, list the tools you have and look for it. If it exists, the picture is published as an artifact. That is the rule: a local page being quicker to make is not a reason to break it.
+For the brainstorm, first find out whether you have the Artifact tool. It may be a tool you call directly, one listed among the tools to load first (load it with ToolSearch, `select:Artifact`), or one you reach from inside a script; there, list the tools you have and look for it. If it exists, the picture is published as an artifact. That is the rule: a local page being quicker to make is not a reason to break it.
 
 Before you write either kind, load the skills your client lists for designing artifacts, for diagrams and for charts, where it lists any. They are the reference for how a picture should look, for a local page as much as for an artifact; where they and this file differ, they win. Only their rules about publishing do not apply to a local page.
 

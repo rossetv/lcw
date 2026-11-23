@@ -106,6 +106,15 @@ test('usage reports a reset and leaves the expired gate; resume and mark remove 
   assert.ok(!fs.existsSync(`${t.dir}/gate`))
 })
 
+test('usage with an expired gate on disk says at the mark when the new week is already there', () => {
+  const t = started('again')
+  fs.writeFileSync(`${t.dir}/gate`, JSON.stringify({ reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt: new Date(Date.now() - 1000).toISOString(), at: 1 }))
+  fs.writeFileSync(`${t.home}/usage.json`, JSON.stringify({ at: 1, sevenDay: { percentUsed: 90, resetsAt: new Date(Date.now() + 86400000).toISOString() }, source: 'statusline' }))
+  const r = t.cli('usage')
+  assert.match(r.out, /mark: 75%\nat the mark/)
+  assert.doesNotMatch(r.out, /the limit has reset/)
+})
+
 test('no gate is written for a run the human paused; resume lets it be evaluated', () => {
   const t = started()
   fs.writeFileSync(`${t.home}/usage.json`, JSON.stringify({ at: 1, sevenDay: { percentUsed: 90, resetsAt: new Date(Date.now() + 1e8).toISOString() }, source: 'statusline' }))

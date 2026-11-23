@@ -1,3 +1,4 @@
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import {
@@ -13,7 +14,7 @@ import { activeQuota, CLAIM_MS, evaluateQuota, quotaOff, REFRESH_MS } from '../l
 import type { QuotaView } from '../lib/quota.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep,
-  longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, resumePrompt, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
+  longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
   wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity,
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
@@ -31,6 +32,14 @@ const CARD_ROOM = 10
 const PERSON = ['composer', 'bridge', 'sdk']
 // How long the band is drawn without buttons after its box changed: see the ui.render hook.
 const UNFOCUS_MS = 300
+
+// What a reload of this code must not start over; a new tag makes a reload read what older code kept as absent.
+const KEPT = 'kept-1'
+const keptDismissed = atom({ plugin: 'lcw', key: 'dismissed' } as const, [], { shape: KEPT })
+const keptReplied = atom({ plugin: 'lcw', key: 'repliedAt' } as const, 0, { shape: KEPT })
+const keptTold = atom({ plugin: 'lcw', key: 'told' } as const, {}, { shape: KEPT })
+const keptNudged = atom({ plugin: 'lcw', key: 'nudged' } as const, {}, { shape: KEPT })
+const keptCarry = atom({ plugin: 'lcw', key: 'carry' } as const, null, { shape: KEPT })
 
 // session is the session's file (the binding, its billing and its mark); money is the pay-per-token view, else null.
 type Run = { runDir: string; paths: ReturnType<typeof runPaths>; state: any; gate: any; usage: any; session: any; money: any; quota: QuotaView | null }
@@ -62,6 +71,8 @@ const S = {
   aliasBlockedUntil: new Map<string, number>(),
   startedAt: 0,
   reopenChecked: false,
+  // The id of the run a Resume press on the unfinished-run box takes over: no reopened session's, so no reopen prompt.
+  taken: '',
   // The banner pinned above the card until the person picks an option; dismissed is Not now, for this session
   // ('kind:key', or the bare kind of the three old boxes); answerFill the asks Answer now could not put in the prompt.
   banner: { shown: null as Banner | null, dismissed: new Set<string>(), answerFill: '' },
@@ -104,9 +115,72 @@ const S = {
   repliedAt: 0,
   // The main session's turn ended on an API error that clears on its own: the tries to carry it on (carryFailed).
   carry: null as Carry | null,
+  // A prompt that carries the run on (the reopen, the resume after a checkpoint) and has not been sent yet: see owe.
+  owed: null as { runDir: string; text: string } | null,
+  // What an earlier copy of this code kept has been read: nothing is written over it before then.
+  restored: false,
 }
 
 const totalsFile = (runDir: string) => `${runDir}/totals.json`
+
+// What each kept value was last written as, so it is written only when it changed.
+const keptAs: Record<string, string> = {}
+function changed(name: string, value: unknown) {
+  if (!S.restored) return false
+  const text = JSON.stringify(value)
+  if (keptAs[name] === text) return false
+  keptAs[name] = text
+  return true
+}
+const unkept = (name: string) => () => { delete keptAs[name] }
+
+function keepDismissed($: EngineInterface) {
+  const dismissed = [...S.banner.dismissed]
+  if (changed('dismissed', dismissed)) void update($, keptDismissed, () => dismissed).catch(unkept('dismissed'))
+}
+
+function keepReplied($: EngineInterface) {
+  const at = S.repliedAt
+  if (changed('repliedAt', at)) void update($, keptReplied, () => at).catch(unkept('repliedAt'))
+}
+
+function keepNotices($: EngineInterface) {
+  const { told, nudged } = S
+  if (changed('told', told)) void update($, keptTold, () => told).catch(unkept('told'))
+  if (changed('nudged', nudged)) void update($, keptNudged, () => nudged).catch(unkept('nudged'))
+}
+
+function setCarry($: EngineInterface, carry: Carry | null) {
+  S.carry = carry
+  keepCarry($)
+}
+
+function keepCarry($: EngineInterface) {
+  const carry = S.carry
+  void $.session.id().then((session) => {
+    const kept = carry && { session, carry }
+    if (changed('carry', kept)) return update($, keptCarry, () => kept).catch(unkept('carry'))
+  }).catch(() => {})
+}
+
+// What an earlier copy of this code kept, merged into what this one holds; a read that fails changes nothing.
+async function restore($: EngineInterface) {
+  try {
+    const [dismissed, repliedAt, told, nudged, carry, session] = await Promise.all([
+      read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(),
+    ])
+    for (const k of dismissed) S.banner.dismissed.add(k)
+    S.repliedAt = Math.max(S.repliedAt, repliedAt)
+    S.told = { ...told, ...S.told }
+    S.nudged = { ...nudged, ...S.nudged }
+    if (!S.carry && carry?.session === session) S.carry = carry.carry
+  } catch {}
+  S.restored = true
+  keepDismissed($)
+  keepReplied($)
+  keepNotices($)
+  keepCarry($)
+}
 
 const readJson = ($: EngineInterface, path: string) =>
   $.fs.read(path).then((text) => JSON.parse(text)).catch(() => null)
@@ -207,9 +281,47 @@ async function readMoney($: EngineInterface, session: any, state: any, gate: any
   return gate?.unit === 'usd' ? { ...money, retryAt: gate.retryAt, retried: !!gate.retried } : money
 }
 
-// Deferred, as the checkpoint's prompt is: a prompt submitted from inside session.start may not land.
+// Whether a prompt was sent: one the engine or a hook drops (a Stop stands, a host limit reached) was not.
+const submit = ($: EngineInterface, prompt: { text: string }) =>
+  $.prompt.submit(prompt).then((r) => !r?.drop).catch(() => false)
+
+// Deferred: a prompt submitted from inside session.start may not land.
 const submitSoon = ($: EngineInterface, text: string) =>
-  void $.clock.after(700, () => void $.prompt.submit({ text }).catch(() => {}))
+  new Promise<boolean>((resolve) => void $.clock.after(700, () => void submit($, { text }).then(resolve)))
+
+// How long after a prompt that was not sent it is tried again.
+const RETRY_MS = 30000
+const retryLater = ($: EngineInterface, fn: () => void) => void $.clock.after(RETRY_MS, fn)
+
+// A prompt that carries the run on, tried again until sent while this session drives the run; the person's own takes over.
+function owe($: EngineInterface, runDir: string, text: string, wait = 700) {
+  const owed = { runDir, text }
+  S.owed = owed
+  $.clock.after(wait, () => void (async () => {
+    if (S.owed !== owed) return
+    if (S.run?.runDir !== runDir) { S.owed = null; return }
+    const sent = await submit($, { text })
+    if (S.owed !== owed) return
+    if (sent) S.owed = null
+    else owe($, runDir, text, RETRY_MS)
+  })())
+}
+
+// Notices that were not sent are taken off the record, where no later poll has changed it, so they fall due again.
+function unsay($: EngineInterface, stall: { due: { id: string }[]; nudged: Nudged }, was: Nudged, long: { id: string }[]) {
+  const nudged = { ...S.nudged }
+  for (const a of stall.due) {
+    const before = was[a.id]
+    if (nudged[a.id] !== stall.nudged[a.id]) continue
+    if (before) nudged[a.id] = before
+    else delete nudged[a.id]
+  }
+  const told = { ...S.told }
+  for (const a of long) delete told[a.id]
+  S.nudged = nudged
+  S.told = told
+  keepNotices($)
+}
 
 async function reconcileGate($: EngineInterface, run: Run, action: 'sync' | 'retry' | 'ack') {
   const now = await $.clock.now()
@@ -259,12 +371,11 @@ async function recoverQuota($: EngineInterface, run: Run, now: number) {
       const why = current.quota ? 'a fresh subscription quota reading allows work below your mark'
         : current.gate.unit === 'quota' ? 'external quota was disabled; the default source allows work below your mark'
         : current.gate.unit === 'usd' ? 'the 7-day spend is back under your mark' : 'the weekly usage limit has reset'
-      S.quotaRetry = { key, at: at + 5000 }
+      S.quotaRetry = { key, at: at + (current.quota || current.gate.unit === 'quota' ? 5000 : RETRY_MS) }
       const text = !current.quota && current.gate.unit !== 'quota'
         ? current.gate.unit === 'usd' ? usdWakePrompt($.plugin.root, current.money?.markUsd ?? null) : wakePrompt($.plugin.root)
         : `LCW: ${why}. Run \`node "${$.plugin.root}/scripts/lcw.mjs" resume\`, then \`node "${$.plugin.root}/scripts/lcw.mjs" status\`, and carry on from the ledger.`
-      const sent = await $.prompt.submit({ text })
-      if ((sent as any)?.drop) return
+      if (!(await submit($, { text }))) return
       S.wokeFor = key
       await $.fs.write(ackFile, JSON.stringify(fresh))
       await reconcileGate($, current, 'ack')
@@ -297,13 +408,14 @@ async function refresh($: EngineInterface) {
     S.seen = {}
     S.nudged = {}
     S.told = {}
+    keepNotices($)
     S.hideRows = false
     return
   }
   if (firstSight) {
     await $.fs.write(run.paths.modAlive, String(now)).catch(() => {})
     // Within ten seconds of start: the session-start hook that binds a resumed session can run after us.
-    if (now - S.startedAt <= 10000 && !run.quota?.hold && reopenDue(run.state, run.gate, aliveAt, now)) submitSoon($, reopenPrompt($.plugin.root))
+    if (now - S.startedAt <= 10000 && run.state.id !== S.taken && !run.quota?.hold && reopenDue(run.state, run.gate, aliveAt, now)) owe($, run.runDir, reopenPrompt($.plugin.root))
   }
   if (run.gate?.unit === 'usd' && !run.quota && wakeable(run.state) && run.money?.atMark && wakeDue(run.gate, now, null, quotaBilling(run.session, null))) {
     await reconcileGate($, run, 'retry')
@@ -331,13 +443,16 @@ async function pollAgents($: EngineInterface) {
   // An agent that has stalled, or been long at work, is the orchestrator's to look at: tell the main loop, which acts
   // once it is idle. Who was told of long work is kept through a pause, so nobody is told twice.
   if (nudgeable(run.state)) {
+    const was = S.nudged
     const stall = stallNudges(S.agents, S.nudged, now)
     S.nudged = stall.nudged
     const long = longNudges(S.agents, S.told)
     S.told = long.told
     const due = [...stall.due, ...long.due]
-    if (due.length) submitSoon($, stallPrompt(due, S.agents))
+    // Recorded before it is sent, since the next poll may come first; taken off the record later if it was not sent.
+    if (due.length) void submitSoon($, stallPrompt(due, S.agents)).then((sent) => sent || retryLater($, () => unsay($, stall, was, long.due)))
   } else S.nudged = {}
+  keepNotices($)
   const totals = addTotals(S.totals, list, run.state.createdAt ?? 0)
   if (totals.agents !== S.totals.agents || totals.tokens !== S.totals.tokens) S.totalsChanged = true
   S.totals = totals
@@ -544,12 +659,11 @@ async function carryOn($: EngineInterface) {
   if (S.carry !== c) return
   const paused = S.run?.state?.status === 'paused'
   const step = carryDue(c, now, typed || paused || S.turnRunning)
-  S.carry = step.carry ?? null
+  setCarry($, step.carry ?? null)
   if (!step.send) return
   const sent = S.carry
-  // A result carrying drop is a prompt a hook or the engine refused.
-  if (!(await $.prompt.submit({ text: carryPrompt(c.kind, step.send) }).then((r) => !(r as any)?.drop).catch(() => false)) && S.carry === sent) {
-    S.carry = carryFailed(sent, c.kind, await $.clock.now())
+  if (!(await submit($, { text: carryPrompt(c.kind, step.send) })) && S.carry === sent) {
+    setCarry($, carryFailed(sent, c.kind, await $.clock.now()))
   }
 }
 
@@ -584,7 +698,7 @@ async function weekly($: EngineInterface, now: number) {
   if (!S.weeklyText || !weeklyIdle({ ...idle, turnRunning: S.turnRunning, driving: !!S.run }) || (await draft($)).trim()) return
   const text = S.weeklyText
   S.weeklyText = ''
-  if (!(await $.prompt.submit({ text }).then(() => true).catch(() => false))) S.weeklyText = text
+  if (!(await submit($, { text }))) S.weeklyText = text
 }
 
 // LCW's status rows and attribution off, by themselves, on a watched session's first draw.
@@ -628,8 +742,7 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
     last = r
   }
   if (plan.prompt) {
-    const sent = await $.prompt.submit(plan.prompt).then(() => true).catch(() => false)
-    if (!sent) return $.ui.toast(plan.promptFailed ?? 'Clear the prompt or wait for the turn to end, then press it again.')
+    if (!(await submit($, plan.prompt))) return $.ui.toast(plan.promptFailed ?? 'Clear the prompt or wait for the turn to end, then press it again.')
   }
   if (plan.notices) {
     const file = noticesFile(await lcwHome($))
@@ -641,7 +754,10 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
     S.dirty = true
     return
   }
-  if (plan.dismiss) for (const k of dismissKeys(banner)) S.banner.dismissed.add(k)
+  if (plan.dismiss) {
+    for (const k of dismissKeys(banner)) S.banner.dismissed.add(k)
+    keepDismissed($)
+  }
   S.banner.shown = null
   S.dirty = true
   const toast = plan.toast === 'output' ? said(last) : plan.toast
@@ -668,6 +784,8 @@ async function pressBanner($: EngineInterface, id: string, drawn: Banner | null)
       root: $.plugin.root, sessionId: await $.session.id(), repoKey: S.repoKey ?? undefined,
       cleanupPath: S.repoKey ? cleanupFile(await lcwHome($), S.repoKey) : undefined,
     })
+    // Before its steps run: a refresh may see the run bound before the press has finished.
+    if (kind === 'unfinished' && option === 'resume') S.taken = String(facts.unfinished?.id ?? '')
     if (plan) await carryOut($, fresh!, plan)
   } finally {
     S.pressing = false
@@ -691,12 +809,13 @@ async function checkpoint($: EngineInterface) {
   const step = String((await $.fs.read(run.paths.checkpoint).catch(() => '')) ?? '').trim()
   if (!step || S.compacting) return
   S.compacting = true
-  // The step stays in its file until the compaction has happened: one refused because a turn has started is
-  // tried again when a turn next ends.
+  // The step stays in its file until the compaction has happened: one refused because a turn has started, or
+  // vetoed by a hook, is tried again when a turn next ends.
   $.clock.after(700, () => void (async () => {
-    await $.session.compact({ instructions: compactInstructions(run.state, run.runDir, step) })
+    const done = await $.session.compact({ instructions: compactInstructions(run.state, run.runDir, step) })
+    if (done?.skip) return
     await $.fs.write(run.paths.checkpoint, '')
-    await $.prompt.submit({ text: resumePrompt($.plugin.root, step) })
+    owe($, run.runDir, resumePrompt($.plugin.root, step), 0)
   })().catch(() => {}).finally(() => { S.compacting = false }))
 }
 
@@ -740,6 +859,9 @@ export const register: Register = (on) => {
     const result = await next(e)
     // A cleared or another session has no reply to carry on.
     S.carry = null
+    S.owed = null
+    // session.start fires again when this code is reloaded.
+    await restore($)
     S.atPrompt = e.isInteractive === true
     S.interactive = S.atPrompt || e.surface != null || (await $.session.surfaces().catch(() => [])).length > 0
     await start($).catch(() => {})
@@ -769,7 +891,7 @@ export const register: Register = (on) => {
     const result = await next(e)
     if (!e.agentId) { S.turnRunning = false; S.turnEndedAt = await $.clock.now().catch(() => S.turnEndedAt) }
     // A main turn that did not end in error has carried the session on; one that did was judged by classic.StopFailure.
-    if (!e.agentId && e.reason !== 'error') S.carry = null
+    if (!e.agentId && e.reason !== 'error' && S.carry) setCarry($, null)
     await countTurn($, e).catch(() => {})
     if (!e.agentId && !e.isAborted) await checkpoint($).catch(() => {})
     return result
@@ -781,9 +903,10 @@ export const register: Register = (on) => {
     const kind = (e as any).origin?.kind
     if (!e.isMeta && (!kind || PERSON.includes(kind)) && !(result as any)?.drop) {
       // A slash command is no answer to the approval box; only a prompt is.
-      if (!e.command) S.repliedAt = await $.clock.now().catch(() => S.repliedAt)
+      if (!e.command) { S.repliedAt = await $.clock.now().catch(() => S.repliedAt); keepReplied($) }
       // What the person sends takes over from any carry-on.
-      S.carry = null
+      if (S.carry) setCarry($, null)
+      S.owed = null
       void readBanner($).catch(() => {})
     }
     return result
@@ -791,15 +914,18 @@ export const register: Register = (on) => {
 
   // A built-in command that runs locally may raise no prompt.submit; the person's run of one still takes over from a carry-on.
   on('command.run', async ($, e, next) => {
-    if (PERSON.includes((e as any).origin?.kind)) S.carry = null
+    if (PERSON.includes((e as any).origin?.kind) && S.carry) setCarry($, null)
     return next(e)
   })
 
   // The main session's turn ended on an API error: carried on later if its kind clears on its own. A subagent's
   // error is its orchestrator's to deal with.
+  // The Artifact tool's definition is as large as every other tool's together and seldom used: it waits behind tool search, for the session and its agents.
+  on('tool.describe', { tool: 'Artifact' }, async ($, e, next) => ({ ...(await next(e)), isDeferred: true }))
+
   on('classic.StopFailure', async ($, e, next) => {
     const result = await next(e)
-    try { if (!e.agent_id) S.carry = carryFailed(S.carry, e.error, await $.clock.now()) } catch {}
+    try { if (!e.agent_id) setCarry($, carryFailed(S.carry, e.error, await $.clock.now())) } catch {}
     return result
   })
 
@@ -825,8 +951,8 @@ export const register: Register = (on) => {
         const usage = mergeUsage(await readJson($, file), reading as any)
         await $.fs.write(file, JSON.stringify(usage))
         const run = await readRun($, now)
-        const gate = run && !run.quota && !run.gate ? gateFor(run.state, usage?.sevenDay, now) : null
-        if (run && gate) await reconcileGate($, run, 'sync')
+        const gate = run && !run.quota ? gateFor(run.state, usage?.sevenDay, now) : null
+        if (run && replacesGate(run.gate, gate)) await reconcileGate($, run, 'sync')
       } else if (billing === 'payg') {
         const run = await readRun($, now)
         const money = run && !run.gate ? await readMoney($, run.session, run.state, null, now) : null
@@ -941,7 +1067,8 @@ export const register: Register = (on) => {
           <Box key={'row' + i}>
             {buttons(parts).map((g) => {
               const id = g.id
-              if (id) return <Button key={keyOf(id)} plain onPress={() => press(id)}>{g.spans.map(text)}</Button>
+              // the keyboard lands on the filled button, the recommended one, wherever it stands
+              if (id) return <Button key={keyOf(id)} plain autoFocus={g.spans.some((s) => s.bg === 'Fable') || undefined} onPress={() => press(id)}>{g.spans.map(text)}</Button>
               return g.spans.map((s) => (s.href ? <Link href={s.href} label={String(s.t ?? '')} /> : text(s)))
             })}
           </Box>

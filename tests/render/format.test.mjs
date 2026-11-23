@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tokens, duration, modelName, family, clip, wrap, resetsIn, ageText } from '../../lib/format.mjs';
+import { tokens, duration, modelName, family, len, clip, wrap, resetsIn, ageText } from '../../lib/format.mjs';
+import { glyphs } from '../../lib/theme.mjs';
 
 test('token counts are shortened to k and M, rounding up into the next unit', () => {
   assert.equal(tokens(0), '0');
@@ -62,4 +63,26 @@ test('an age reads in minutes under an hour, hours under 48 of them, else days, 
   assert.equal(ageText(2 * h + 10 * m), '2h');
   assert.equal(ageText(47 * h + 59 * m), '47h');
   assert.equal(ageText(50 * h), '2d');
+});
+
+test('length is in terminal cells, and a cut falls between whole characters as a person sees them', () => {
+  assert.equal(len('アップ'), 6);
+  assert.equal(len('a🧪b'), 4);
+  assert.equal(len('é'), 1);
+  assert.equal(len('👍🏽'), 2);
+  assert.equal(len('👨‍👩‍👧'), 2);
+  assert.equal(len('❤️'), 2);
+  assert.equal(len('🇮🇪'), 2);
+  // The card's own marks stay one cell each.
+  const marks = Object.values(glyphs).join('') + '“”·≈…’─';
+  assert.equal(len(marks), [...marks].length);
+  assert.equal(clip('アップロード', 5), 'アッ…');
+  assert.equal(clip('アップロード', 4), 'ア…');
+  assert.equal(clip('ok 👍🏽 then', 6), 'ok 👍🏽…');
+  assert.equal(clip('ok 👍🏽 then', 5), 'ok …');
+  assert.equal(clip('a👨‍👩‍👧b', 3), 'a…');
+  assert.equal(clip('🇮🇪🇫🇷', 3), '🇮🇪…');
+  // Text with no spaces between its words wraps between its wide characters; a long word of one-cell characters stays whole.
+  assert.deepEqual(wrap('アップロードの再試行 ok', 9), ['アップロ', 'ードの再', '試行 ok']);
+  assert.deepEqual(wrap('see https://example.com/a/long/path', 9), ['see', 'https://example.com/a/long/path']);
 });

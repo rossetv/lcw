@@ -56,6 +56,23 @@ test('while the cap is only assumed, the pace names it', () => {
   assert.equal(right(bar(moneyOf('CapAssumed'))[1]), '$4,000 cap assumed · $2,502 spare');
 });
 
+test('where row 2 is short the pace gives way first, then the cap, and no row is wider than the terminal', () => {
+  const cells = r => left(r).length + (r.some(s => s.r) ? 2 + right(r).length : 0);
+  for (const money of [moneyOf('CapAssumed'), moneyOf('Usual', { spentUsd: 12345, capUsd: 20000 }), moneyOf('CapAssumed', { spentUsd: 12345, capUsd: 20000 })]) {
+    for (let width = 30; width <= 80; width++) {
+      const rows = bar(money, width);
+      rows.forEach((r, i) => assert.ok(cells(r) <= width, width + ', row ' + (i + 1) + ': ' + toPlain([r])));
+      assert.match(rows[1].map(s => s.t).join(''), /▰/);
+    }
+  }
+  const at = (money, width) => right(bar(money, width)[1]);
+  assert.equal(at(moneyOf('CapAssumed'), 56), '$4,000 cap assumed · $2,502 spare');
+  assert.equal(at(moneyOf('CapAssumed'), 50), '$4,000 cap assumed');
+  assert.equal(at(moneyOf('Usual', { spentUsd: 12345, capUsd: 20000 }), 48), 'rolling 7d · $2,502 spare');
+  assert.equal(at(moneyOf('Usual', { spentUsd: 12345, capUsd: 20000 }), 44), 'rolling 7d');
+  assert.equal(bar(moneyOf('CapAssumed'), 30)[2].map(s => s.t).join(''), '$4,000 cap assumed');
+});
+
 test('in a narrow terminal the pace is the third row', () => {
   const rows = bar(moneyOf('Usual'), 42);
   assert.equal(rows.length, 3);

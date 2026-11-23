@@ -13,6 +13,7 @@ const shim = `${lcw}/bin/statusline.mjs`
 const prevFile = `${lcw}/previous-statusline.json`
 const addedDirFile = `${lcw}/added-directory`
 const advisorFile = `${lcw}/set-advisor`
+const depthFile = `${lcw}/set-depth`
 const attributionFile = `${lcw}/previous-attribution.json`
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 let quiet = false // auto prints only its own lines
@@ -27,7 +28,9 @@ const { main } = await import(\`\${root}/scripts/statusline.mjs\`)
 // Under the padding setup writes beside this command, Claude Code shows COLUMNS - 4 cells of each row.
 await main({ margin: 4 })
 `
-const command = `node ${shim}`
+const quoted = (p) => `'${p.replace(/'/g, `'\\''`)}'`
+// a path with a space or a quote in it is quoted for the shell; a plain one stays bare, as installs before this wrote it
+const command = `node ${/^[\w@%+=:,./-]+$/.test(shim) ? shim : quoted(shim)}`
 
 function load() {
   if (!fs.existsSync(settingsPath)) return {}
@@ -36,6 +39,17 @@ function load() {
     if (s && typeof s === 'object' && !Array.isArray(s)) return s
   } catch {}
   fail(`${settingsPath} is not valid JSON; left untouched.`)
+}
+
+/** Writes the settings file whole: through a link to the file it names (a dotfiles manager's), keeping the link and the file's mode. */
+function put(text) {
+  let target = settingsPath, mode
+  try { target = fs.realpathSync(settingsPath); mode = fs.statSync(target).mode & 0o777 } catch {}
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  const tmp = `${target}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, text, { mode: mode ?? 0o666 })
+  if (mode !== undefined) fs.chmodSync(tmp, mode) // the umask narrows a new file's mode
+  fs.renameSync(tmp, target)
 }
 
 /** Backs up, writes, re-reads; restores the backup if the result does not parse. */
@@ -53,14 +67,14 @@ function save(settings) {
       out(`backup: ${backup}`)
     }
   }
-  writeAtomic(settingsPath, JSON.stringify(settings, null, 2) + '\n')
+  put(JSON.stringify(settings, null, 2) + '\n')
   try { JSON.parse(fs.readFileSync(settingsPath, 'utf8')) } catch {
-    if (backup) fs.copyFileSync(backup, settingsPath)
+    if (backup) put(fs.readFileSync(backup, 'utf8'))
     fail('the written settings did not parse; restored the backup.')
   }
 }
 
-const mine = (sl) => sl?.command === command
+const mine = (sl) => [`node ${shim}`, `node ${quoted(shim)}`].includes(sl?.command)
 
 /** Turns on the advisor a run consults at every stage; leaves a choice the human already made. */
 function setAdvisor(s) {
@@ -109,6 +123,7 @@ function setRunSettings(s) {
   s.env = s.env && typeof s.env === 'object' ? s.env : {}
   if (s.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === undefined) {
     s.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH = '5'
+    writeAtomic(depthFile, '5\n')
     out('set env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH to "5"')
     changed = true
   }
@@ -171,11 +186,14 @@ if (cmd === 'install') {
     else { delete s.statusLine; out('removed statusLine') }
   }
   done.push(prevFile) // a saved line the person has since replaced is not kept for a later install
-  if (s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === '5') {
+  if (s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === '5' && fs.existsSync(depthFile)) {
     delete s.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH
     if (!Object.keys(s.env).length) delete s.env
     out('removed env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH')
+  } else if (s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === '5') {
+    out('left env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH at "5": LCW has no record of setting it; remove it yourself if LCW did')
   }
+  done.push(depthFile)
   if (fs.existsSync(addedDirFile) && Array.isArray(s.permissions?.additionalDirectories)) {
     s.permissions.additionalDirectories = s.permissions.additionalDirectories.filter((x) => x !== lcw)
     if (!s.permissions.additionalDirectories.length) delete s.permissions.additionalDirectories

@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { bannerFor, bannerRows, openWaves } from '../../lib/banner.mjs'
+import { len } from '../../lib/format.mjs'
+import { toAnsi } from '../../lib/paint.mjs'
 import * as S from './banner-samples.mjs'
 import { runFact } from '../../hooks/boxes.mjs'
 
@@ -231,6 +233,23 @@ test('every row of every box is as wide as the others and at most 92, from a wid
   }
 })
 
+test('a box whose text has wide characters keeps every row to its width', () => {
+  const wide = 'アップロードの再試行は何回までにしますか？上限を決めてください。'
+  const plain = { kind: 'answer', key: 'k', title: wide, lines: [wide + wide], bullets: [wide + ' ' + wide], options: [['now', 'Answer now'], ['later', 'Later']] }
+  const choices = { ...plain, kind: 'question', bullets: [], tag: ' ◆ LCW ', note: wide, options: [['a', '再試行する'], ['b', 'やめる']], choices: [{ ids: ['a'], meaning: wide + wide }, { ids: ['b'], meaning: wide }] }
+  for (const banner of [plain, choices]) for (const cols of [92, 60, 40]) {
+    const rows = bannerRows(banner, cols)
+    assert.ok(rows.length > 3, 'drawn at ' + cols)
+    assert.deepEqual([...new Set(rows.map((r) => len(r.map((s) => s.t).join(''))))], [cols], banner.kind + ' at ' + cols)
+  }
+})
+
+test('a row with wide characters and a right group is painted to the width given', () => {
+  const row = [{ t: '作業者がテストを書いています' }, { t: '12m', r: true }]
+  const painted = toAnsi([row], 'dark', 40).replace(/\x1b\[[0-9;]*m/g, '')
+  assert.equal(len(painted), 40)
+})
+
 test('over a card the box is as wide as the card, past 92', () => {
   for (const cols of [140, 60]) assert.deepEqual([...new Set(bannerRows(bannerFor(S.D1), cols, true).map(cells))], [cols], 'at ' + cols)
 })
@@ -292,7 +311,7 @@ test('the approval box draws its replies in a column, Go variants on one row, ev
   const rows = bannerRows(b, 74, true)
   const goRow = rows.find((r) => r.some((s) => s.id === 'banner:approve:go1'))
   assert.ok(goRow.some((s) => s.id === 'banner:approve:go2'), 'both Go buttons on one row')
-  assert.deepEqual(goRow.filter((s) => s.id).map((s) => s.bg), ['Fable', 'Fable'])
+  assert.deepEqual(goRow.filter((s) => s.id).map((s) => s.bg), ['hairline', 'hairline'], 'neither is filled until one is named as recommended')
   const ids = rows.flatMap((r) => r.filter((s) => s.id).map((s) => s.id))
   assert.deepEqual(ids, ['banner:approve:go1', 'banner:approve:go2', 'banner:approve:but', 'banner:approve:else'])
   const at = (id) => rows.findIndex((r) => r.some((s) => s.id === id))
@@ -363,4 +382,31 @@ test('a shipped wave waiting on its merge is open, but an empty one with no pull
   const state = (w) => ({ shape: 'sweep', stage: 'Hunt', sweep: { prs: 'merged', waves: [{ n: 1, status: 'shipped', merged: false, ...w }] } })
   assert.deepEqual(openWaves(state({ pr: 4 })).map((w) => w.n), [1])
   assert.deepEqual(openWaves(state({ empty: true })), [])
+})
+
+const sweepWith = (question) => runFact({ id: 'r', name: 'r', shape: 'sweep', stage: 'Build', status: 'running', asks: [], questions: [question] }, false)
+const filled = (rows) => rows.flat().filter((s) => s.id && s.bg === 'Fable').map((s) => s.id)
+const QUESTION = { id: 'Q82', text: 'Keep the 409, or answer a 422?', why: 'a 409 names the owner', status: 'open', options: [{ key: 'a', label: 'Answer 422', meaning: 'a small fix' }, { key: 'b', label: 'Keep the 409', meaning: 'closed as decided' }] }
+
+test('the question box fills the option Claude recommends, wherever it stands, and none when no option was named', () => {
+  const box = (q) => bannerFor({ run: sweepWith(q), now: 0 })
+  assert.deepEqual(filled(bannerRows(box({ ...QUESTION, recommend: 'b' }), 92)), ['banner:question:b'])
+  assert.deepEqual(filled(bannerRows(box({ ...QUESTION, recommend: 'a' }), 92)), ['banner:question:a'])
+  assert.deepEqual(filled(bannerRows(box(QUESTION), 92)), [], 'a question asked before it named one')
+  assert.deepEqual(filled(bannerRows(box({ ...QUESTION, recommend: 'z' }), 92)), [], 'not one of its options')
+  // The form drawn where the full box does not fit keeps the same button filled.
+  assert.deepEqual(filled(bannerRows({ ...box({ ...QUESTION, recommend: 'b' }), choices: undefined, lines: [] }, 92, true)), ['banner:question:b'])
+})
+
+test('the approval box fills the Go label Claude recommends, and a lone Go', () => {
+  const approving = (approval) => runFact({ id: 'r', name: 'r', stage: 'Brainstorm', status: 'with-you', asks: [], approval }, false)
+  const box = (approval) => bannerFor({ run: approving(approval), now: 0 })
+  assert.deepEqual(filled(bannerRows(box({ go: ['Go (a)', 'Go (b)'], meaning: 'm', at: 1, recommend: 2 }), 92, true)), ['banner:approve:go2'])
+  assert.deepEqual(filled(bannerRows(box({ go: ['Go (a)', 'Go (b)'], meaning: 'm', at: 1 }), 92, true)), [], 'asked before it named one')
+  assert.deepEqual(filled(bannerRows(box({ go: [], meaning: '', at: 1 }), 92, true)), ['banner:approve:go1'])
+  assert.deepEqual(filled(bannerRows(box({ go: ['Go (a)', 'Go (b)'], meaning: 'm', at: 1, recommend: 2 }), 92, true, true)), ['banner:approve:go2'], 'in the tight form too')
+})
+
+test('a box of LCW\'s own keeps its first option filled', () => {
+  assert.deepEqual(filled(bannerRows({ kind: 'update', key: 'k', title: 't', lines: [], bullets: [], options: [['now', 'Update now'], ['later', 'Not now']] }, 92)), ['banner:update:now'])
 })

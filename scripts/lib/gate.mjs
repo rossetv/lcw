@@ -91,9 +91,10 @@ function updateDefaultGate(paths, state, usage, now, money, intent) {
   if (on && state.status === 'paused' && state.pausedReason === 'human') return false // the human paused it; resume evaluates the mark again
   const has = fs.existsSync(paths.gate)
   if (has && gateExpired(readJson(paths.gate), now)) return false // the mod wakes the session; only resume and mark remove it
+  const repair = !money && previous && !previous.unit && !Number.isFinite(Date.parse(previous.resetsAt ?? '')) && Date.parse(usage?.sevenDay?.resetsAt ?? '') > now
   if (on && !has && money) {
     writeJson(paths.gate, { reason: 'mark', unit: 'usd', markUsd: money.markUsd, usedUsd: money.spentUsd, retryAt: next0800(now), retried: false, at: now })
-  } else if (on && !has) {
+  } else if (on && (!has || repair)) {
     const w = usage.sevenDay
     writeJson(paths.gate, { reason: 'mark', markPercent: driverMark(state), usedPercent: w.percentUsed, resetsAt: w.resetsAt ?? null, at: now })
   }

@@ -12,9 +12,10 @@ const state = (status: string, pausedReason: string | null = status === 'paused'
 const gate = (resetsAt: number) => JSON.stringify({ reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt: new Date(resetsAt).toISOString(), at: NOW })
 
 // The world beneath the mod: files in memory, a clock that moves only when the test moves it, and the prompts it submits.
-function engine(on: any, files: Record<string, string>, opts: { rmWorks?: boolean; clock?: false } = {}) {
+function engine(on: any, files: Record<string, string>, opts: { rmWorks?: boolean; clock?: false; drops?: number } = {}) {
   const clock = opts.clock === false ? null! : mock.clock(on, { now: NOW })
   const prompts: string[] = []
+  let drops = opts.drops ?? 0
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
@@ -41,7 +42,11 @@ function engine(on: any, files: Record<string, string>, opts: { rmWorks?: boolea
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
   })
   on('session.measure', (_: any, e: any) => ({ changed: e.changed }))
-  on('prompt.submit', (_: any, e: any) => { prompts.push(e.text); return { text: e.text } })
+  on('prompt.submit', (_: any, e: any) => {
+    if (drops > 0) { drops--; return { drop: 'a Stop stands' } }
+    prompts.push(e.text)
+    return { text: e.text }
+  })
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
   on('ui.invalidate', () => ({ value: undefined }))
@@ -58,6 +63,20 @@ test('a gate already expired when the mod starts is removed and wakes the sessio
   expect(w.prompts.length).toBe(1)
   expect(w.prompts[0]).toMatch(/limit has reset.*resume.*status.*ledger/)
   await w.clock.advance(10000)
+  expect(w.prompts.length).toBe(1)
+})
+
+test('a wake the engine drops keeps the gate, and is made again later and sent once', async ($, on) => {
+  const w = engine(on, { ...BIND, [RUN + '/state.json']: state('paused'), [RUN + '/gate']: gate(NOW - DAY) }, { drops: 1 })
+  await start($)
+  await w.clock.advance(5000)
+  expect(RUN + '/gate' in w.files).toBe(true)
+  expect(w.prompts.length).toBe(0)
+  await w.clock.advance(40000)
+  expect(RUN + '/gate' in w.files).toBe(false)
+  expect(w.prompts.length).toBe(1)
+  expect(w.prompts[0]).toMatch(/limit has reset/)
+  await w.clock.advance(60000)
   expect(w.prompts.length).toBe(1)
 })
 
@@ -153,6 +172,27 @@ test('a reopened session with a running run carries on by itself, once', async (
   expect(w.prompts.length).toBe(1)
 })
 
+test('a reopen prompt the engine drops is sent later, once', async ($, on) => {
+  const w = engine(on, { ...BIND, [RUN + '/state.json']: state('running'), [RUN + '/mod-alive']: String(NOW - 60000) }, { drops: 1 })
+  await start($)
+  await w.clock.advance(5000)
+  expect(w.prompts.length).toBe(0)
+  await w.clock.advance(40000)
+  expect(w.prompts.length).toBe(1)
+  expect(w.prompts[0]).toMatch(/reopened/)
+  await w.clock.advance(60000)
+  expect(w.prompts.length).toBe(1)
+})
+
+test('a prompt the person sends takes over from a reopen prompt the engine dropped: it is not sent later', async ($, on) => {
+  const w = engine(on, { ...BIND, [RUN + '/state.json']: state('running'), [RUN + '/mod-alive']: String(NOW - 60000) }, { drops: 1 })
+  await start($)
+  await w.clock.advance(5000)
+  await $.prompt.submit({ text: 'stop there' } as any)
+  await w.clock.advance(60000)
+  expect(w.prompts).toEqual(['stop there'])
+})
+
 test('a binding written a few seconds after start still counts as a reopen', async ($, on) => {
   const w = engine(on, { [RUN + '/state.json']: state('running') })
   await start($)
@@ -226,4 +266,19 @@ test('a figure for a new week replaces the old one', async ($, on) => {
   await $.session.measure(limits(5, '2026-11-25T11:00:00.000Z') as any)
   expect(JSON.parse(w.files['/lcw/usage.json'] ?? '{}').sevenDay.percentUsed).toBe(5)
   expect(RUN + '/gate' in w.files).toBe(false)
+})
+
+test('a gate with no reset time is written again with one when a reading that has it arrives, and then wakes the run', async ($, on) => {
+  const resetsAt = '2026-11-18T12:00:05.000Z'
+  const w = engine(on, {
+    ...BIND, [RUN + '/state.json']: state('paused'),
+    [RUN + '/gate']: JSON.stringify({ reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt: null, at: NOW - DAY }),
+  })
+  await start($)
+  await $.session.measure(limits(82, resetsAt) as any)
+  expect(JSON.parse(w.files[RUN + '/gate'] ?? '{}').resetsAt).toBe(resetsAt)
+  await w.clock.advance(10000)
+  expect(RUN + '/gate' in w.files).toBe(false)
+  expect(w.prompts.length).toBe(1)
+  expect(w.prompts[0]).toMatch(/limit has reset/)
 })

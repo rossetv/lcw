@@ -71,7 +71,7 @@ const SWEEP = {
     "● running · wave 2’s PR #42 merged: it met your charter’s rule                                     ≈ 12% of your week",
     "waves ▰▰▱▱▱▱  2 done · 4 queued                                           round 1 · 54 fixed · 14 parked · 22 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  › Ship",
-    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱  27 done · 1 dropped",
+    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰  27 done · 1 dropped",
   ],
   "12-hunt-round-2-the-queue-ran-dry": [
     "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 5m in Hunt ─╮",
@@ -655,9 +655,11 @@ test('values lcw set stores as they come do not break the card', () => {
   assert.ok(renderCard(buildView({ state: { stage: 'Spec', status: 'running', blindReview: { done: 5 }, name: 'd' }, ...at }), { width: 100, frame: true }).length);
 });
 
-test('parked tasks count in the tasks bar', () => {
+test('parked tasks count in the tasks bar while work is left, which reads finished once nothing is running or left', () => {
   const row = (statuses) => plain(renderCard(buildView({ state: { stage: 'Build', status: 'running', name: 'd', tasks: statuses.map((status, i) => ({ id: 'T' + i, title: 't', status })) }, ...at }), { width: 100, frame: true })).find(t => t.includes('tasks'));
-  assert.match(row(['done', 'done', 'parked']), /▰{16}▱{8}  2 done · 1 parked/);
+  assert.match(row(['done', 'done', 'running', 'parked']), /▰{12}▰{6}▱{6}  2 done · 1 running · 1 parked/);
+  assert.match(row(['done', 'done', 'parked']), /▰{24}  2 done · 1 parked/);
+  assert.match(row(['done', 'done', 'done', 'parked', 'parked', 'dropped']), /▰{24}  3 done · 2 parked · 1 dropped/);
   assert.match(row(['parked', 'parked']), /▱{24}  2 parked/);
 });
 
@@ -775,6 +777,18 @@ test('a wave with every task done and still in Build says its review is next', (
   // A task still to start is work left in Build, so nothing is said of the review yet.
   const left = { ...built, tasks: [...built.tasks, { id: 'T4', title: 'T4', status: 'todo' }] };
   assert.match(laneOf(laneRows(withWave1(left)), 1), / 3 of  4 tasks done +34m$/);
+});
+
+test('a built wave with parked and dropped tasks reads finished and still names the parked ones', () => {
+  const tasks = (statuses) => statuses.map((status, k) => ({ id: 'T' + k, title: 't', status }));
+  const built = { stage: 'Build', round: 0, tasks: tasks(['done', 'done', 'done', 'parked', 'parked', 'dropped']) };
+  assert.match(laneOf(laneRows(withWave1(built)), 1), /^wave 1  ▰{6}  ▰{7}  ▱{8}  ▱{6} {4}3 of  3 tasks done · 2 parked · review next +34m$/);
+  // While work is left the parked ones still count, and are named.
+  const going = { ...built, tasks: tasks(['done', 'done', 'done', 'running', 'parked', 'parked']) };
+  assert.match(laneOf(laneRows(withWave1(going)), 1), / 3 of  6 tasks done · 1 running · 2 parked +34m$/);
+  // With nothing built there is no figure: the parked ones alone.
+  const none = { ...built, tasks: tasks(['parked', 'parked', 'dropped']) };
+  assert.match(laneOf(laneRows(withWave1(none)), 1), /^wave 1  ▰{6}  ▱{7}  ▱{8}  ▱{6} {4}2 parked +34m$/);
 });
 
 test('a wave shipped and waiting on its merge keeps its lane at Ship while the charter merges as it goes', () => {
@@ -912,4 +926,96 @@ test('in a wave\'s review a partly fixed fix counts as reviewed, not as one to g
   const requirements = [{ id: 'F1', name: 'a', status: 'pass' }, { id: 'F2', name: 'b', status: 'partial' }, { id: 'F3', name: 'c', status: 'todo' }];
   const view = buildView({ state: { shape: 'sweep', stage: 'Review', status: 'running', requirements, sweep: { waves: [] } }, now: NOW });
   assert.deepEqual([view.detail.pass, view.detail.toGo, view.detail.total], [2, 1, 3]);
+});
+
+// Cells as a terminal draws them: Chinese, Japanese and Korean characters and emoji take two.
+const cellsOf = t => [...t].reduce((n, c) => n + (/[　-鿿＀-｠\u{1F300}-\u{1FAFF}]/u.test(c) ? 2 : 1), 0);
+const joined = spans => spans.map(s => s.t).join('');
+const rowCells = r => { const k = r.findIndex(s => s.r); return k < 0 ? cellsOf(joined(r)) : cellsOf(joined(r.slice(0, k))) + 2 + cellsOf(joined(r.slice(k))); };
+
+test('wide characters take two cells, so every row keeps to the width and the frame', () => {
+  const state = { name: 'アップロード再試行の修正', stage: 'Build', status: 'running', stageSince: NOW - 6e5, createdAt: NOW - 6e5, health: '作業者がテストを書いています',
+    asks: [{ n: 1, text: 'アップロードの再試行は何回までにしますか？指数バックオフを使いますか？', at: NOW }], tasks: [{ id: 'T1', status: 'running' }] };
+  const agents = [{ id: 'a', description: '再試行ポリシーのテストを書く 🧪', model: 'claude-sonnet-4-5', effort: 'high', tokens: 1000, startTime: NOW, status: 'running' }];
+  for (const [width, frame] of [[60, true], [100, true], [40, false]]) {
+    for (const r of renderCard(buildView({ state, agents, now: NOW }), { width, frame })) {
+      const n = rowCells(r);
+      assert.ok(n <= width, width + ': ' + n + ' cells: ' + joined(r));
+      if (frame && !r.some(s => s.r)) assert.equal(n, width, joined(r));
+    }
+  }
+});
+
+test('outside the lanes the waves row keeps its label and cells, and its counts and totals give way whole', () => {
+  const waves = [1, 2, 3].map(n => ({ n, status: 'shipped', pr: n })).concat([4, 5].map(n => ({ n, status: 'queued' })));
+  const state = { name: 'sweep-x', shape: 'sweep', stage: 'Hunt', status: 'running', createdAt: NOW - 864e5, stageSince: NOW - 6e5,
+    sweep: { round: 2, fixed: 14, parked: 3, dropped: 2, prs: 'stacked', hunt: { fix: 6, park: 1, drop: 2 }, waves } };
+  const row = (width, s = state) => laneRows({ state: s, now: NOW }, width).find(l => l.startsWith('waves'));
+  for (let w = 44; w <= 90; w++) assert.match(row(w), /^waves ▰▰▰▱▱(  3 done( · 2 queued)?)?( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?$/, w + ': ' + row(w));
+  assert.match(row(80), /^waves ▰▰▰▱▱  3 done · 2 queued +round 2 · 14 fixed · 3 parked · 2 dropped$/);
+  // With no wave queued yet the totals give way too.
+  const none = { ...state, sweep: { ...state.sweep, waves: [] } };
+  for (let w = 44; w <= 90; w++) assert.match(row(w, none), /^waves none queued yet( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?$/, w + ': ' + row(w, none));
+});
+
+test('the requirements bar stays twenty cells when one failing of many rounds to a cell of its own', () => {
+  const requirements = [...Array.from({ length: 39 }, (_, k) => ({ id: 'R' + k, name: 'x', status: 'pass' })), { id: 'R39', name: 'retry policy', status: 'failing' }];
+  const row = plain(renderCard(buildView({ state: { name: 'd', stage: 'Review', status: 'running', requirements }, ...at }), { width: 120 })).find(t => t.startsWith('requirements'));
+  assert.match(row, /^requirements ▰{20}  39 pass · 1 failing/);
+  // The failing one keeps a cell of its own in the bar, here and in a wave's lane.
+  const cellsOf = (rows, colour) => rows.flat().filter(s => /^▰+$/.test(s.t) && String(s.c).startsWith(colour)).reduce((n, s) => n + [...s.t].length, 0);
+  const card = renderCard(buildView({ state: { name: 'd', stage: 'Review', status: 'running', requirements }, ...at }), { width: 120 });
+  assert.deepEqual([cellsOf(card, 'ok'), cellsOf(card, 'caution')], [19, 1]);
+  const lane = renderCard(buildView(withWave1({ requirements })), { width: 115 }).filter(r => r.some(s => s.t === 'wave ')).slice(0, 1);
+  assert.equal(cellsOf(lane, 'caution'), 1);
+});
+
+test('a long model name is shortened so row 1 keeps to the width', () => {
+  const input = { ...inputsOf('Main').status, model: 'Sonnet 4.5 (1M context)', effort: 'medium' };
+  for (let width = 30; width <= 80; width++) {
+    const rows = renderStatusRows(input, { width });
+    rows.forEach((r, i) => assert.ok(rowCells(r) <= width, width + ', row ' + (i + 1) + ': ' + toPlain([r])));
+  }
+  assert.match(joined(renderStatusRows(input, { width: 44 })[0]), /^Sonnet 4\.5 \(… · medium {12} 38% of 1M$/);
+  assert.match(joined(renderStatusRows(input, { width: 80 })[0]), /^Sonnet 4\.5 \(1M context\) · medium/);
+});
+
+test('just after the weekly reset the week row gives no pace, until enough of the week has passed for it to mean something', () => {
+  const right = (weekElapsedPercent, weekUsedPercent) => {
+    const r = renderStatusRows({ ...inputsOf('Main').status, weekElapsedPercent, weekUsedPercent }, { width: 126 })[1];
+    return joined(r.slice(r.findIndex(s => s.r)));
+  };
+  assert.equal(right(20 / 60 / 168 * 100, 1), 'resets in 6d');
+  assert.equal(right(4.9, 1), 'resets in 6d');
+  assert.equal(right(5, 1), 'resets in 6d · +80% spare');
+  assert.equal(right(50, 60), 'resets in 3d · -20% short');
+});
+
+test("the lanes' heading keeps its wave cells to the room left, so none is cut while the lanes fit", () => {
+  const queued = Array.from({ length: 20 }, (_, k) => ({ n: 10 + k, status: 'queued' }));
+  const state = { name: 'sweep-x', shape: 'sweep', stage: 'Ship', status: 'running', createdAt: NOW - 3e6, stageSince: NOW - 1e6,
+    sweep: { round: 1, fixed: 3, parked: 1, dropped: 2, prs: 'stacked', waves: [{ n: 1, status: 'shipped', pr: 5 },
+      { n: 2, status: 'running', stage: 'Ship', step: 'merging', stageSince: NOW - 6e5, requirements: [], tasks: [] }, ...queued] } };
+  for (const width of [60, 62, 64, 66]) {
+    const rows = laneRows({ state, now: NOW }, width);
+    assert.match(rows.find(l => l.startsWith('waves ')), /^waves {3}✓ Plan {2}✓ Build {2}✓ Review {2}› Ship {4}▰+▱+$/, width + ': ' + rows.join('\n'));
+    assert.equal(rows.find(l => l.startsWith('waves ')).length, width);
+    assert.match(laneOf(rows, 2), / {4}merging +10m$/);
+  }
+});
+
+test("an agent's effort stays whole and in its column, with no token figure or with a chip of an hour or more", () => {
+  const efforts = (i, width) => strip(toAnsi(renderCard(buildView(i), { width }), 'dark', width)).split('\n')
+    .filter(l => /^ *→/.test(l)).map(l => [l.indexOf(/(medium|low|high|xhigh)\b/.exec(l)?.[0]), /(medium|low|high|xhigh) /.exec(l)?.[1]]);
+  for (const width of [100, 120]) {
+    const noMod = efforts(inputsOf('NoMod'), width);
+    assert.ok(noMod.length && noMod.every(([at, e]) => e && at === noMod[0][0]), width + ': ' + JSON.stringify(noMod));
+    // The dash stands where the token figure would.
+    const row = strip(toAnsi(renderCard(buildView(inputsOf('NoMod')), { width }), 'dark', width)).split('\n').find(l => l.includes('—'));
+    assert.match(row, / {12}— {5}12m$/);
+    const i = inputsOf('RunningA');
+    i.agents = [...i.agents.slice(0, 2), { ...i.agents[0], id: 'old', effort: 'medium', startTime: NOW - 65 * 6e4, quietMs: 20 * 6e4 }];
+    const chip = efforts(i, width);
+    assert.ok(chip.length === 3 && chip.every(([at, e]) => e && at === chip[0][0]), width + ': ' + JSON.stringify(chip));
+  }
 });

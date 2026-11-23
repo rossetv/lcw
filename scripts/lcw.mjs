@@ -28,8 +28,8 @@ const now = () => (Number.isFinite(Number(process.env.LCW_NOW)) && process.env.L
 // flags each command takes (all take a value); --session is accepted everywhere
 const COMMAND_FLAGS = {
   start: ['title', 'shape'], task: ['model', 'effort', 'wave'], req: ['wave'], set: ['wave'], stage: ['wave'], ledger: ['wave'], ask: ['waiting', 'wave'],
-  approval: ['meaning'], finish: ['pr', 'branch'], stop: ['pr'],
-  hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr', 'wave'], checkpoint: ['keep'], question: ['text', 'why', 'a', 'b', 'c'],
+  approval: ['meaning', 'recommend'], finish: ['pr', 'branch'], stop: ['pr'],
+  hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr', 'wave'], checkpoint: ['keep'], question: ['text', 'why', 'a', 'b', 'c', 'recommend'],
 }
 // flags that take no value
 const SWITCHES = { where: ['json'], awake: ['check'], checkpoint: ['compact'] }
@@ -51,16 +51,16 @@ const COMMANDS = 'start status stage set task req ask answer question approval l
 const USAGE = `lcw commands: ${COMMANDS}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
 In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked, charter.md written, no wave queued and every open wave built (in Review, back in Build from it, or in Ship); a round entered with a wave short of Ship is an early one, which status shows and which cannot end the sweep; with waves open it makes .claude/worktrees/<name>-latest, detached, holding every open wave's work (the newest wave's tip alone if they conflict), which status prints as latest work while the round runs. worktree makes only the branch lcw/<name>; the session stays in the main checkout and each wave gets its own worktree.
-hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>), once that wave has reached Review and while fewer than two waves are in Plan, Build or Review (a wave sent back from Ship waits on the same cap); it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, leaving out a wave at merging, whose head is settled; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first; stage Review and the final checks need all of them, and stage Ship from Review needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round, and wave round <r> sets it. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
+hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>), once that wave has reached Review and while fewer than two waves are in Plan, Build or Review (a wave sent back from Ship waits on the same cap); it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, leaving out a wave at merging, whose head is settled; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first; stage Review, stage Ship and the final checks need all of them, and stage Ship, from any stage, needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round, and wave round <r> sets it. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
 --wave <n> names the wave that stage Plan|Build|Review|Ship, task, req, set plan.* or milestone, ledger, ask and wave round|step|take|defer|shipped act on. Without it they act on the open wave whose worktree lcw runs in, else the only open wave; with several open they refuse, but ledger writes the run's ledger only and ask is the run's own, as they are during a hunt. ask --wave marks the wave waiting until its asks are answered. ledger --wave may name a shipped wave, and set takes --wave with any key. A flag and its value may be one word, --wave=<n>.
 req <id> rename "<name>" and req <id> drop change a requirement when what is built changes; in a sweep's running wave req <id> park takes a fix out of the wave for the person, and req <id> partial marks a fix that was built but leaves the charter's done line unmet: it is not counted as fixed. req <id> drop --wave <n> drops a fix a shipped wave parked.
-approval ["<Go label>" ...] [--meaning "<what Go builds>"] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. Asked again, it replaces the last; a new stage clears it.
+approval ["<Go label>" ...] [--meaning "<what Go builds>"] [--recommend <n>] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. With several Go labels, --recommend <n> is needed: the one Claude recommends, which the box draws in pink. Asked again, it replaces the last; a new stage clears it.
 take <runId> makes this session take over a run of this repository that no session has shown for 15 minutes; abandon <runId> stops such a run for good and removes its worktree when nothing in it is uncommitted, keeping its branch.
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
-flags: --session <id> (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --wave; approval --meaning; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; where --json; awake --check
+flags: --session <id> (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --wave; approval --meaning --recommend; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
 quota-command <endpoint> <command line> sets an external weekly subscription source for sessions whose ANTHROPIC_BASE_URL matches that endpoint; quota-command alone inspects it, quota-command off disables it. Quote the command as one argument for shell syntax; a final --session <id> is not part of it. Keep credentials out of command text. Setup requires a successful v:1 quota JSON reading within 30 seconds; failed setup leaves the prior setting intact. Refreshes are shared every 5 minutes; failed, refused or expired readings hold new work, never supply dollar estimates. The source is account-wide, not this machine's spend.
-question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] puts a short question to the person in LCW's box, in a sweep; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
+question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> puts a short question to the person in LCW's box, in a sweep, the recommended option drawn in pink; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
 checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
 const refuse = (msg) => { console.log(msg); process.exit(1) }
@@ -112,12 +112,13 @@ const weekLine = (usage) => (usage?.sevenDay ? `week: ${usage.sevenDay.percentUs
  * stops being 'running' (pauses, goes back to the person, finishes or stops) lets the computer sleep again.
  */
 function change(run, note, fn, wave) {
+  mustHoldLock()
   const was = run.state.status
   fn(run.state)
   const s = run.state
   if (s.status === 'running' && was !== 'running') s.runningSince = new Date(now()).toISOString()
   if (s.status !== 'running') releaseHold(run.dir)
-  saveState(run.paths, s)
+  save(run.paths, s)
   appendLedger(run.paths, note, wave === undefined ? ledgerWave(s) : wave)
 }
 
@@ -236,7 +237,7 @@ const QUESTION_KEYS = ['a', 'b', 'c']
 /** "  Q82 [answered: a, Answer 422] Trade the friendly 409 for a generic 422?" */
 function questionLine(q) {
   const picked = q.options.find((o) => o.key === q.pick)
-  const said = q.status === 'open' ? '' : q.words ? `: ${q.words}` : q.pick === 'park' ? ': leave it parked' : picked ? `: ${q.pick}, ${picked.label}` : ''
+  const said = q.status === 'open' ? (q.recommend ? `, recommended ${q.recommend}` : '') : q.words ? `: ${q.words}` : q.pick === 'park' ? ': leave it parked' : picked ? `: ${q.pick}, ${picked.label}` : ''
   return `  ${q.id} [${q.status}${said}] ${q.text}`
 }
 
@@ -410,11 +411,15 @@ const commands = {
       // a repeat changes nothing, except after an early round that was sorted and found nothing to fix: once every
       // open wave holds in Ship, the round that follows it starts
       const sw = run.state.sweep
+      // each repeat that starts nothing says so, so it is never taken for a new round to hunt and record
       if (run.state.stage === 'Hunt') {
-        if (!sw.early?.length || sw.hunt.fix) return out('stage Hunt')
-        if (!sw.sorted) return out(`stage Hunt: round ${sw.round} stands, an early one. Once it is sorted, record its counts (lcw hunt --fix <n> --park <n> --drop <n>); with nothing to fix, the round that follows it starts here`)
+        const stands = `stage Hunt: round ${sw.round} stands`
+        const fix = sw.hunt.fix
+        if (fix) return out(`${stands}; no new round was started. It found ${fix} to fix, ${fix > 1 ? 'which go to waves; the next round starts once they are built' : 'which goes to a wave; the next round starts once it is built'}.`)
+        if (!sw.early?.length) return out(`${stands}; no new round was started. It is not an early round, so if it finds nothing to fix the sweep ends as the stop line says.`)
+        if (!sw.sorted) return out(`${stands}, an early one; no new round was started. Once it is sorted, record its counts (lcw hunt --fix <n> --park <n> --drop <n>); with nothing to fix, the round that follows it starts here`)
         const still = openWaves(run.state).filter((x) => x.status === 'running' && x.stage !== 'Ship')
-        if (still.length) return out(`stage Hunt: round ${sw.round} stands; the round that follows this early one starts once ${still.length > 1 ? 'waves' : 'wave'} ${still.map((x) => x.n).join(', ')} ${still.length > 1 ? 'hold' : 'holds'} in Ship`)
+        if (still.length) return out(`${stands}; no new round was started. The round that follows this early one starts once ${still.length > 1 ? 'waves' : 'wave'} ${still.map((x) => x.n).join(', ')} ${still.length > 1 ? 'hold' : 'holds'} in Ship`)
       }
       const queued = run.state.sweep.waves.filter((x) => x.status === 'queued')
       if (queued.length) fail(`Waves ${queued.map((x) => x.n).join(', ')} are still queued; a new hunt starts once none is. Nothing was changed.`)
@@ -468,7 +473,7 @@ const commands = {
     if (wave) mustRun(wave)
     // no ledger line: set is called often and would drown the ledger
     pairs.forEach(([k, v]) => setDotted(wave && ofWave(k) ? wave : run.state, k, v))
-    saveState(run.paths, run.state)
+    save(run.paths, run.state)
     out(`set ${pairs.map(([k]) => k).join(', ')}`)
   },
 
@@ -511,8 +516,12 @@ const commands = {
     if (go.length > 3) fail('At most 3 Go labels, such as "Go (a)" "Go (b)"')
     if (go.some((g) => [...g].length > 20)) fail('A Go label is at most 20 characters, such as "Go (a)"; say what it builds with --meaning')
     const meaning = String(flags.meaning ?? '').replace(/\s+/g, ' ').trim()
-    change(run, `approval asked${go.length ? ': ' + go.join(' / ') : ''}${meaning ? ' (' + meaning + ')' : ''}`, (s) => {
-      s.approval = { go, meaning, at: now() }
+    // of several Go labels the box draws one in pink: the one Claude recommends
+    const several = go.length > 1
+    const recommend = /^\d+$/.test(String(flags.recommend ?? '')) ? Number(flags.recommend) : 0
+    if ((several || flags.recommend !== undefined) && (recommend < 1 || recommend > Math.max(1, go.length))) fail(`lcw approval ${several ? 'with several Go labels needs' : 'takes'} --recommend <${several ? `1-${go.length}` : '1'}>: the Go label you recommend, which the box draws in pink. Nothing was changed.`)
+    change(run, `approval asked${go.length ? ': ' + go.join(' / ') : ''}${several ? `, recommending ${go[recommend - 1]}` : ''}${meaning ? ' (' + meaning + ')' : ''}`, (s) => {
+      s.approval = { go, meaning, at: now(), ...(several ? { recommend } : {}) }
       if (s.sweep) s.sweep.approvedAt = s.approval.at
     })
     out('approval: the box shows above the prompt until the person replies')
@@ -568,9 +577,11 @@ const commands = {
         const [label, ...meaning] = String(flags[key]).split(': ')
         return { key, label: label.trim(), meaning: meaning.join(': ').trim() }
       })
-      if (!id || !flags.text || options.length < 2 || options.some((o) => !o.label || !o.meaning)) fail('Usage: lcw question add <id> --text "<question>" [--why "<line>"] --a "<label>: <what it means>" --b "<label>: <what it means>" [--c ...]')
+      if (!id || !flags.text || options.length < 2 || options.some((o) => !o.label || !o.meaning)) fail('Usage: lcw question add <id> --text "<question>" [--why "<line>"] --a "<label>: <what it means>" --b "<label>: <what it means>" [--c ...] --recommend <a|b|c>')
+      const keys = options.map((o) => o.key)
+      if (!keys.includes(flags.recommend)) fail(`lcw question add needs --recommend <${keys.join('|')}>: the option you recommend, which the box draws in pink. Nothing was changed.`)
       if (list.some((q) => q.id === id)) fail(`Question ${id} exists. Nothing was changed.`)
-      change(run, `question ${id} added: ${flags.text}`, (s) => { s.questions.push({ id, text: flags.text, why: flags.why ?? '', options, status: 'open', pick: null, at: now() }) })
+      change(run, `question ${id} added: ${flags.text}`, (s) => { s.questions.push({ id, text: flags.text, why: flags.why ?? '', options, recommend: flags.recommend, status: 'open', pick: null, at: now() }) })
       return out(`${id} added; LCW's box puts it to the person`)
     }
     const q = list.find((x) => x.id === first) || fail(`No question ${first}. Nothing was changed.`)
@@ -590,7 +601,12 @@ const commands = {
     }
     if (verb === 'used') {
       if (q.status !== 'answered') fail(`${q.id} is ${q.status}; only an answered question is used. Nothing was changed.`)
-      change(run, `question ${q.id} used`, () => { q.status = 'used' })
+      // each question stands for one item the hunt parked: an answer other than park settles it
+      const settles = q.pick !== 'park' && run.state.sweep.parked > 0
+      change(run, `question ${q.id} used${settles ? `; parked down to ${run.state.sweep.parked - 1}` : ''}`, (s) => {
+        q.status = 'used'
+        if (settles) s.sweep.parked--
+      })
       return out(`${q.id}: used`)
     }
     fail(`Usage: lcw question [add ... | <id> pick <option> | <id> answer "<words>" | <id> used]`)
@@ -734,7 +750,8 @@ const commands = {
     if (run) {
       const on = applyGate(run.paths, run.state, usage, at)
       lines.push(`mark: ${driverMark(run.state)}%`)
-      if (gateExpired(readJson(run.paths.gate), at)) lines.push('the limit has reset')
+      // An expired gate stays for the mod to wake the session, but the new week may be at the mark already.
+      if (gateExpired(readJson(run.paths.gate), at)) lines.push(atMark(driverMark(run.state), usage, at) ? 'at the mark' : 'the limit has reset')
       else lines.push(on ? 'at the mark' : 'ok')
     } else if (sessionId) {
       const mark = sessionMark(sessionId)
@@ -896,7 +913,7 @@ const commands = {
       if (!canHold()) fail('LCW cannot keep this computer awake: it needs caffeinate on macOS, or systemd-inhibit on Linux.')
       if (keptHold(run.dir)) return out('already kept awake')
       const pid = Number(sessionId ? readJson(sessionFile(home(), sessionId))?.claudePid : NaN)
-      if (!alive(pid)) fail('This session has no Claude Code process on record (claudePid in its session file), so a hold could not end with it. Nothing was kept awake.')
+      if (!claudeAlive(pid)) fail('This session has no Claude Code process on record (claudePid in its session file), so a hold could not end with it. Nothing was kept awake.')
       if (!startHold(run.dir, pid, `LCW run ${s.name}`, now())) fail('The hold did not start. Nothing was kept awake.')
       appendLedger(run.paths, 'kept awake until the run pauses, finishes or stops, or Claude Code exits', ledgerWave(run.state))
       out('kept awake')
@@ -923,7 +940,7 @@ const commands = {
     const line = given.map(([k, n]) => `${k} ${n}`).join(', ')
     // progress is reported often and would drown the ledger; the sorting is noted
     if (sorted) change(run, `hunt, round ${run.state.sweep.round}: ${line}`, apply)
-    else { apply(run.state); saveState(run.paths, run.state) }
+    else { apply(run.state); save(run.paths, run.state) }
     out(`hunt: ${line}`)
   },
 
@@ -1007,6 +1024,7 @@ const commands = {
       }
       if (step === 'merging') {
         const tip = tipOf(s, wave)
+        if (wave.step === 'merging' && tip === wave.checked) return out(`wave ${wave.n} is at merging already, at ${tip}`)
         if (wave.step === 'final checks' && wave.checked) {
           if (tip !== wave.checked) fail(`${wave.branch} moved from ${wave.checked} to ${tip} while its final checks ran, so they do not count; run them again on the settled head. Nothing was changed.`)
         } else {
@@ -1072,6 +1090,9 @@ const commands = {
       if (wave.step !== 'merging') fail(`Wave ${wave.n}'s final checks have not passed${wave.step ? ` (it is at ${wave.step})` : ''}: lcw wave step "final checks" when they start, then lcw wave step merging. Nothing was changed.`)
       const before = w.waves.find((x) => x.n < wave.n && x.status !== 'shipped')
       if (before) fail(`Wave ${before.n} has not shipped yet, and waves land in order. Nothing was changed.`)
+      // a verdict changed after the wave entered Ship would ship uncounted
+      const unsettled = (wave.requirements ?? []).filter((r) => r.status === 'todo' || r.status === 'failing')
+      if (unsettled.length) fail(`Wave ${wave.n} cannot ship with ${unsettled.map((r) => `${r.id} ${r.status}`).join(', ')}: send it back, lcw stage Build --wave ${wave.n}, or record each fix as it stands. Nothing was changed.`)
       if (flags.pr !== undefined && s.sweep.prs === 'end') fail('The charter chose one pull request at the end, so a wave has no pull request of its own. Nothing was changed.')
       const pr = flags.pr === undefined ? null : prOf(flags.pr).number || fail(`--pr takes the pull request's number, not ${flags.pr}. Nothing was changed.`)
       const root = s.repoRoot
@@ -1190,9 +1211,16 @@ function checkSweepSetting(s, key, value) {
   if (!ok[key]) fail(`${key} is ${{ 'sweep.charter': 'a whole number from 0 to 10', 'sweep.open': 'a whole number', 'sweep.prs': 'stacked, merged or end' }[key]}, not ${JSON.stringify(value)}. Nothing was changed.`)
 }
 
+/** Forgets the worktree git still has on record at dir when its folder was deleted outside git, which would refuse a new one there; no other worktree's record is touched. */
+function forgetMissing(root, dir) {
+  if (fs.existsSync(dir)) return
+  try { git(root, 'worktree', 'remove', '--force', dir) } catch {}
+}
+
 /** A new worktree on a new branch, kept out of the main checkout's git status, where lcw finds this run. Returns its real path. */
 function addWorktree(run, dir, branch, from) {
   const root = run.state.repoRoot
+  forgetMissing(root, dir)
   git(root, 'worktree', 'add', '-b', branch, dir, ...(from ? [from] : []))
   const exclude = path.resolve(root, git(root, 'rev-parse', '--git-path', 'info/exclude'))
   fs.mkdirSync(path.dirname(exclude), { recursive: true })
@@ -1233,17 +1261,24 @@ function enterStage(s, stage) {
 function waveStage(run, wave, stage) {
   if (wave.stage === stage) return out(`wave ${wave.n} stage ${stage}`) // already there: a repeat must not clear its step, checked head or the later waves' checks
   if (stage === 'Review') mustHoldRange(run.state, wave, 'its review')
-  if (stage === 'Ship' && wave.stage === 'Review') {
-    mustHoldRange(run.state, wave, 'leaving Review')
+  // from any stage: a wave sent back to Build for its review's fixes, or emptied before its review, enters Ship here too
+  if (stage === 'Ship') {
+    mustHoldRange(run.state, wave, 'entering Ship')
     // a fix set back for a later round and never given its verdict again would ship uncounted
     const open = (wave.requirements ?? []).filter((r) => r.status === 'todo' || r.status === 'failing')
-    if (open.length) fail(`Wave ${wave.n} cannot leave Review with ${open.map((r) => `${r.id} ${r.status}`).join(', ')}: record each fix as it stands, lcw req <id> pass|partial --wave ${wave.n}, or take it out with lcw req <id> park|drop --wave ${wave.n}. Nothing was changed.`)
+    if (open.length) fail(`Wave ${wave.n} cannot enter Ship with ${open.map((r) => `${r.id} ${r.status}`).join(', ')}: record each fix as it stands, lcw req <id> pass|partial --wave ${wave.n}, or take it out with lcw req <id> park|drop --wave ${wave.n}. Nothing was changed.`)
   }
   if (wave.stage === 'Ship' && BUSY.includes(stage)) {
     const busy = openWaves(run.state).filter((x) => x !== wave && x.status === 'running' && BUSY.includes(x.stage))
     if (busy.length >= 2) fail(`Waves ${busy.map((x) => `${x.n} (${x.stage})`).join(' and ')} are being built or reviewed, and at most two are at once; wave ${wave.n} goes back to ${stage} once one of them holds in Ship. Nothing was changed.`)
   }
-  change(run, `wave ${wave.n} stage: ${stage}`, (s) => {
+  // the round running now may read code this wave's review will change again, as a round started with it short of Ship would
+  const sw = run.state.sweep
+  const early = run.state.stage === 'Hunt' && wave.stage === 'Ship' && BUSY.includes(stage) && !(sw.early ?? []).includes(wave.n)
+    ? `round ${sw.round} is now an early one: wave ${wave.n} left Ship during it, so if it finds nothing to fix the sweep does not end on it: one more round follows once every open wave holds in Ship`
+    : null
+  change(run, `wave ${wave.n} stage: ${stage}${early ? `; ${early}` : ''}`, (s) => {
+    if (early) (s.sweep.early ??= []).push(wave.n)
     if (stage === 'Review' && !wave.round) wave.round = 1 // a later round is raised by lcw wave round
     // its final checks no longer count, and nor do those of the waves after it, which ran on top of it
     if (wave.step === 'final checks' || wave.step === 'merging') clearLater(s, wave)
@@ -1253,7 +1288,7 @@ function waveStage(run, wave, stage) {
     if (was === 'Hunt') Object.assign(s, { stage: was, stageSince: since })
     mirror(s)
   }, wave)
-  out(`wave ${wave.n} stage ${stage}`)
+  out(`wave ${wave.n} stage ${stage}`, ...(early ? [early] : []))
 }
 
 /** The branches a wave must hold, directly or through the wave before it: the sweep's own, which holds the shipped waves, and every earlier open wave's. */
@@ -1293,7 +1328,7 @@ function sweepStatus(run) {
   const s = run.state
   const w = s.sweep
   return [
-    `pull requests: ${PR_CHOICES[w.prs] ?? 'not chosen yet'}  round: ${w.round}${s.stage === 'Hunt' && w.early?.length ? ` (early: wave ${w.early.join(', ')} was short of Ship when it started, so it cannot end the sweep)` : ''}  fixed: ${w.fixed}  ${w.partial ? `partly fixed: ${w.partial}  ` : ''}parked: ${w.parked}  dropped: ${w.dropped}`,
+    `pull requests: ${PR_CHOICES[w.prs] ?? 'not chosen yet'}  round: ${w.round}${s.stage === 'Hunt' && w.early?.length ? ` (early: wave ${w.early.join(', ')} was short of Ship during it, so it cannot end the sweep)` : ''}  fixed: ${w.fixed}  ${w.partial ? `partly fixed: ${w.partial}  ` : ''}parked: ${w.parked}  dropped: ${w.dropped}`,
     'waves:', ...(w.waves.length ? w.waves.map((x) => `  ${x.n} [${x.status}] ${fixesIn(x)} fixes  branch: ${x.branch ?? 'none yet'}  ${x.pr ? `PR #${x.pr} ${x.merged ? 'merged' : 'not merged'}` : x.empty ? 'empty, no PR' : 'no PR'}`) : ['  none queued']),
     ...openWaves(s).flatMap((x) => waveStatus(run, x)),
     // a hunt round reads its own worktree of every open wave's work; otherwise the newest wave's worktree holds the latest
@@ -1349,6 +1384,7 @@ function freshLatest(s, round) {
   if (!open.length) return null
   const newest = open.at(-1)
   const dir = latestDir(s)
+  forgetMissing(s.repoRoot, dir)
   try { git(s.repoRoot, 'worktree', 'add', '-q', '--detach', dir, `refs/heads/${newest.branch}`) } catch (e) { fail(`git could not make the worktree ${dir}: ${firstLine(e)}. Nothing was changed.`) }
   const real = fs.realpathSync(dir)
   const tip = git(real, 'rev-parse', 'HEAD')
@@ -1544,21 +1580,66 @@ function adopt(run) {
     const money = readMoney({ sessionId, now: now() })
     appendLedger(run.paths, `another session took over the run: its own usage mark applies, ${money ? moneyMark(money) : `${mark}%`}`, ledgerWave(s))
   }
-  saveState(run.paths, s)
+  save(run.paths, s)
+}
+
+// the lock's limits are LCW_LOCK_WAIT_MS and LCW_LOCK_HUNG_MS when they are set, so tests need not wait on the clock
+const msFrom = (name, ms) => (Number(process.env[name]) > 0 ? Number(process.env[name]) : ms)
+// how long a call waits for the lock before it gives up: longer than a fetch or a merge holds it, since a slow holder is no longer robbed
+const LOCK_WAIT_MS = msFrom('LCW_LOCK_WAIT_MS', 30000)
+// a holder that still runs is never robbed for being slow, only once it has held the lock this long, far past any real command
+const LOCK_HUNG_MS = msFrom('LCW_LOCK_HUNG_MS', 10 * 60000)
+// a lock with no holder on record was taken by an older lcw, which itself takes one this old
+const LOCK_UNOWNED_MS = 30000
+const holderOf = (lock) => readJson(`${lock}/holder.json`)
+let lockHeld = null // { lock, token } while this call holds a run's lock
+
+function lockStale(lock) {
+  const h = holderOf(lock)
+  if (!h) return Date.now() - fs.statSync(lock).mtimeMs > LOCK_UNOWNED_MS
+  return !alive(h.pid) || !(Date.now() - h.at < LOCK_HUNG_MS)
+}
+
+/** Fails before anything is saved when another call has taken this call's lock, so a stale copy never overwrites its change. */
+function mustHoldLock() {
+  if (lockHeld && holderOf(lockHeld.lock)?.token !== lockHeld.token) fail('Another lcw call took the run lock while this one ran, so nothing was saved to the run. Run this command again.')
+}
+
+/** Changes the run's state through this alone, so a call whose lock was taken saves nothing. */
+function save(paths, s) {
+  mustHoldLock()
+  saveState(paths, s)
 }
 
 function withLock(dir, fn) {
   const lock = `${dir}/lock`
-  const until = Date.now() + 8000
+  const token = `${process.pid}-${Math.random().toString(36).slice(2)}`
+  const until = Date.now() + LOCK_WAIT_MS
   for (;;) {
     try { fs.mkdirSync(lock); break } catch (e) {
       if (e.code !== 'EEXIST') throw e
-      try { if (Date.now() - fs.statSync(lock).mtimeMs > 30000) { fs.rmdirSync(lock); continue } } catch {}
+      try {
+        if (lockStale(lock)) {
+          // moved aside in one step, so no call sees it half removed; a fresh lock moved aside by a race fails its holder's save
+          const aside = `${lock}.${token}.stale`
+          fs.renameSync(lock, aside)
+          fs.rmSync(aside, { recursive: true, force: true })
+          continue
+        }
+      } catch {}
       if (Date.now() > until) fail('Another lcw call holds the run lock; try again.')
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20 + Math.random() * 30)
     }
   }
-  try { fn() } finally { try { fs.rmdirSync(lock) } catch {} }
+  try {
+    writeJson(`${lock}/holder.json`, { pid: process.pid, token, at: Date.now() })
+    lockHeld = { lock, token }
+    fn()
+  } finally {
+    // a lock taken from this call is the new holder's, and stays
+    if (holderOf(lock)?.token === token || !lockHeld) try { fs.rmSync(lock, { recursive: true, force: true }) } catch {}
+    lockHeld = null
+  }
 }
 
 try {
@@ -1570,7 +1651,7 @@ try {
   if (run) withLock(run.dir, () => {
     run.state = loadState(run.paths)
     if (byId) checkClaim(run) // before anything is saved, which would make the run look shown
-    if (moveOldWave(run.state)) saveState(run.paths, run.state)
+    if (moveOldWave(run.state)) save(run.paths, run.state)
     Object.assign(run.state, weekOf(run.state, usageFor(run.state.driver ?? sessionId, now(), driverMark(run.state))?.sevenDay))
     if (command !== 'abandon') adopt(run)
     held = run

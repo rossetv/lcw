@@ -8,14 +8,16 @@ import { findRun, listRuns } from './lib/runs.mjs'
 import { sessionIds, sessionMark, DEFAULT_MARK, driverMark, applyGate } from './lib/gate.mjs'
 import { readMoney, dropSpend } from './lib/money.mjs'
 import { paygLines } from './lib/payg-note.mjs'
-import { alive } from './lib/awake.mjs'
+import { claudeAlive } from './lib/awake.mjs'
 import { signInKind } from '../lib/billing.mjs'
 import { noteQuotaSession, readSessionQuota, quotaLine } from './lib/quota-session.mjs'
 import { sessionFile } from '../lib/key.mjs'
 import { openWaves } from '../lib/banner.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const cli = `node ${root}/scripts/lcw.mjs`
+// a path as one shell word, so a folder with a space or a quote in it still runs
+const sh = (p) => (/^[\w@%+=:,./-]+$/.test(p) ? p : `'${p.replace(/'/g, `'\\''`)}'`)
+const cli = `node ${sh(`${root}/scripts/lcw.mjs`)}`
 /**
  * How the sign-in says this session is billed. Only the kind leaves this function: the report holds the person's
  * email and organisation, and is never kept, logged or printed. LCW_AUTH_STATUS_JSON stands in for it in tests,
@@ -70,8 +72,8 @@ function noteClaudePid(id) {
   if (!claudePid) return
   const file = sessionFile(home(), id)
   const session = readJson(file)
-  // a session file whose recorded process is still running belongs to that process (the old id of a resume may be open elsewhere)
-  if (session?.claudePid !== claudePid && !alive(session?.claudePid)) writeJson(file, { ...session, claudePid })
+  // a session file whose recorded Claude Code is still running belongs to it (the old id of a resume may be open elsewhere)
+  if (session?.claudePid !== claudePid && !claudeAlive(session?.claudePid)) writeJson(file, { ...session, claudePid })
 }
 
 const hasGit = () => { try { execFileSync('git', ['--version'], { stdio: 'ignore', timeout: 3000 }); return true } catch { return false } }
@@ -117,7 +119,7 @@ try {
   if (quota) lines.push(quotaLine(quota), ...(quota.hold ? ['LCW: STOP. External subscription quota holds new work until a fresh allowable reading; never substitute dollar spend or raise the mark without the user.'] : []))
   if (money) lines.push(...paygLines(cli, money))
   else lines.push(`This session has a usage mark, run or no run: ${mark}% of the week${mark === DEFAULT_MARK ? ' unless the user raises it' : ', as the user set it'}. When they say "run up to N%", run: ${cli} mark N. When they say to finish regardless of the limit, run: ${cli} mark 100. It holds for this session only. When a hook tells you the session is at its mark, stop and tell the user; never raise the mark without their explicit words.`)
-  lines.push(`If the user says "set up LCW": run node ${root}/scripts/setup.mjs install (it puts LCW's status rows and the no-AI-attribution settings in place, and lets the advisor and spend banners ask again) and say what was set. If they ask to uninstall LCW: run node ${root}/scripts/setup.mjs uninstall, say what it put back, then tell them to run /plugin uninstall lcw@lcw to remove the plugin itself.`)
+  lines.push(`If the user says "set up LCW": run node ${sh(`${root}/scripts/setup.mjs`)} install (it puts LCW's status rows and the no-AI-attribution settings in place, and lets the advisor and spend banners ask again) and say what was set. If they ask to uninstall LCW: run node ${sh(`${root}/scripts/setup.mjs`)} uninstall, say what it put back, then tell them to run /plugin uninstall lcw@lcw to remove the plugin itself.`)
   if (!hasGit()) lines.push('git is not installed or not on the PATH. LCW runs need it: tell the user once, before anything else.')
   if (run) {
     const s = run.state

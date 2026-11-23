@@ -93,7 +93,7 @@ Just before you send the playback, put the same question in LCW's box above thei
 lcw approval
 ```
 
-If Go comes in variants, as when the playback leaves them one choice to make, name each and say what Go builds: `lcw approval "Go (a)" "Go (b)" --meaning "build it as played back, with (a) wrapped or (b) short rows on a phone"`. Run it again whenever you send the playback again. The box goes once they send anything; a new stage clears it. The box can be hidden (no room, a narrow window, nobody watching), so the message still ends with the question and the three replies.
+If Go comes in variants, as when the playback leaves them one choice to make, name each, say what Go builds and which one you recommend: `lcw approval "Go (a)" "Go (b)" --recommend 1 --meaning "build it as played back, with (a) wrapped or (b) short rows on a phone"`. The box draws the recommended one in pink, and the command refuses several Go labels without `--recommend`. Run it again whenever you send the playback again. The box goes once they send anything; a new stage clears it. The box can be hidden (no room, a narrow window, nobody watching), so the message still ends with the question and the three replies.
 
 If they choose something else, the run you started is named for the wrong change: `lcw stop` it, then `lcw start` a new run named for what they pick, and carry on the brainstorm there.
 

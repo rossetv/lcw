@@ -17,7 +17,7 @@ type Answer = { exitCode: number; stdout: string; stderr?: string }
 // Files in memory with their times, a clock the test moves, and every command, prompt, fill and toast the mod makes.
 function engine(on: any, files: Record<string, string>, opts: {
   answer?: (argv: string[]) => Answer | undefined | Promise<Answer | undefined>; draft?: string | (() => string); fills?: boolean
-  submitFails?: number; settings?: Record<string, unknown>; project?: Record<string, unknown>; platform?: string
+  submitFails?: number; drops?: number; settings?: Record<string, unknown>; project?: Record<string, unknown>; platform?: string
 } = {}) {
   const clock = mock.clock(on, { now: NOW })
   const times: Record<string, number> = {}
@@ -27,6 +27,7 @@ function engine(on: any, files: Record<string, string>, opts: {
   const filled: string[] = []
   const reads: string[] = []
   let fails = opts.submitFails ?? 0
+  let drops = opts.drops ?? 0
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
   on('session.info', () => ({ value: { transcriptPath: '', platform: opts.platform ?? 'linux' } }))
@@ -60,6 +61,7 @@ function engine(on: any, files: Record<string, string>, opts: {
   })
   on('prompt.submit', (_: any, e: any) => {
     if (fails > 0) { fails--; throw new Error('busy') }
+    if (drops > 0) { drops--; return { drop: 'a Stop stands' } }
     prompts.push({ text: String(e.text), asUser: e.origin?.asUser }); return { text: e.text }
   })
   on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
@@ -143,6 +145,17 @@ test('Run up to 90% on a run paused at the mark raises the mark, resumes the run
   expect(lcwCalls(w.runs, 'mark')).toEqual(['mark 90 --session s1'])
   expect(lcwCalls(w.runs, 'resume')).toEqual(['resume --session s1'])
   expect(w.prompts.map((p) => p.text).join()).toMatch(/status --session s1/)
+  await band.unmount()
+})
+
+test('a raise whose prompt the engine drops keeps the box and tells the person to carry on', async ($, on) => {
+  const w = engine(on, bound(paused), { drops: 1 })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:mark:r90' })
+  expect(w.prompts.length).toBe(0)
+  expect(w.toasts).toEqual(['LCW raised the mark and resumed the run. Say "carry on" to continue it.'])
+  expect(await band.find({ type: 'Text', text: /export-csv paused at your 75% mark\./ })).toBeDefined()
   await band.unmount()
 })
 
@@ -281,6 +294,20 @@ test('a run left halfway shows to a session driving none; Resume takes it over a
   await band.press({ key: 'banner:unfinished:resume' })
   expect(lcwCalls(w.runs, 'take')).toEqual(['take r2 --session s1'])
   expect(w.prompts.map((p) => p.text).join()).toMatch(/merge T3 and start T4/)
+  await band.unmount()
+})
+
+test('Resume pressed seconds after the session started hands Claude the run once, with no reopen prompt on top', async ($, on) => {
+  const w = engine(on, leftHalfway(), {
+    answer: (a) => { if (a[2] === 'take') w.files['/lcw/sessions/s1.json'] = JSON.stringify({ billing: 'subscription', runDir: OLD }); return undefined },
+  })
+  await start($)
+  await w.clock.advance(2000)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:unfinished:resume' })
+  await w.clock.advance(5000)
+  expect(w.prompts.length).toBe(1)
+  expect(w.prompts[0]?.text).toMatch(/pressed Resume/)
   await band.unmount()
 })
 
@@ -427,6 +454,16 @@ test('a check that cannot be submitted is kept and sent at the next idle tick', 
   await start($)
   await w.clock.advance(121000)
   expect(w.runs.filter((a) => a.at(-1) === 'due').length).toBe(1)
+  expect(w.prompts.length).toBe(0)
+  await w.clock.advance(2000)
+  expect(w.prompts.map((p) => p.text)).toEqual([WEEKLY])
+  expect(w.runs.filter((a) => a.at(-1) === 'due').length).toBe(1)
+})
+
+test('a check the engine drops is kept and sent at the next idle tick', async ($, on) => {
+  const w = engine(on, {}, { answer: weeklyAnswer, drops: 1 })
+  await start($)
+  await w.clock.advance(121000)
   expect(w.prompts.length).toBe(0)
   await w.clock.advance(2000)
   expect(w.prompts.map((p) => p.text)).toEqual([WEEKLY])

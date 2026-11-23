@@ -32,6 +32,7 @@ export function gateFor(state: any, sevenDay: SevenDay | null | undefined, now: 
 export function gateFor(state: any, sevenDay: SevenDay | null | undefined, now: number, money: Money | null | undefined): Gate | UsdGate | null
 export function gateIdentity(gate: any): string
 export function quotaWakeEvidence(gate: any, quota: import('../lib/quota.mjs').QuotaView | null | undefined, now: number): { gate: string; evidence: string } | null
+export function replacesGate(current: { unit?: string; resetsAt?: string | null } | null | undefined, next: Gate | UsdGate | null | undefined): boolean
 export function wakeDue(gate: { resetsAt?: string | null; unit?: string; retryAt?: number } | null | undefined, now: number,
   wokeFor: string | number | null | undefined, billing?: Billing | string, quota?: import('../lib/quota.mjs').QuotaView | null): boolean
 export function retryGate(gate: UsdGate, money: Money | null | undefined, now: number): UsdGate | null
@@ -49,7 +50,7 @@ export function resumePrompt(root: string, step: string): string
 export function wakePrompt(root: string): string
 export function reopenPrompt(root: string): string
 export function quietCounts(agents: readonly CardAgent[] | undefined, quietMs?: number, stalledMs?: number): { quiet: number; stalled: number }
-export type Nudged = Record<string, { at: number; times: number }>
+export type Nudged = Record<string, { at: number; times: number; tokens?: number }>
 export function nudgeable(state: any): boolean
 export function stallNudges(agents: readonly CardAgent[] | undefined, nudged: Nudged | undefined, now: number, stalledMs?: number, againMs?: number):
   { due: (CardAgent & { times: number; why: 'still' | 'held' })[]; nudged: Nudged }

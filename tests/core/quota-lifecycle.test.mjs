@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { tmp, makeRepo, run, lcw, START_HOOK, GATE_HOOK, LIMIT_HOOK, readJson } from './helpers.mjs'
 import { quotaFile, sessionFile, usageFile, spendFile } from '../../lib/key.mjs'
-import { applyGate, setSessionMark, sessionMark, sessionIds } from '../../scripts/lib/gate.mjs'
+import { applyGate, reconcileGate, setSessionMark, sessionMark, sessionIds } from '../../scripts/lib/gate.mjs'
 import { noteQuotaSession } from '../../scripts/lib/quota-session.mjs'
 import { readMoney, recordSpend, spendRecords } from '../../scripts/lib/money.mjs'
 
@@ -435,6 +435,39 @@ test('conditional reconciliation retires only acknowledged obsolete gates and re
   assert.equal(invoke('ack', newer, evidence).code, 'superseded')
   assert.equal(invoke('ack', newer).ok, true)
   assert.equal(fs.existsSync(`${dir}/gate`), false)
+})
+
+test('native gate reconciliation fills a missing reset only from current evidence without changing a human pause', () => {
+  const f = fixture()
+  put(sessionFile(f.home, 'native'), { billing: 'subscription', quotaSelection: null })
+  const paths = { gate: `${f.home}/gate`, state: `${f.home}/state.json` }
+  const state = { driver: 'native', status: 'paused', pausedReason: 'mark', markPercent: 75 }
+  const gate = { reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt: null, at: now - 1000 }
+  const usage = (resetsAt) => put(usageFile(f.home), { at: now, sevenDay: { percentUsed: 82, resetsAt } })
+  put(paths.state, state)
+  withHome(f.home, () => {
+    for (const resetsAt of [null, 'not-a-date']) {
+      put(paths.gate, gate)
+      usage(resetsAt)
+      assert.equal(reconcileGate(paths, gate, 'sync', now).hold, true)
+      assert.deepEqual(readJson(paths.gate), gate)
+    }
+    usage(reset)
+    put(paths.state, { ...state, pausedReason: 'human' })
+    assert.equal(reconcileGate(paths, gate, 'sync', now).hold, true)
+    assert.deepEqual(readJson(paths.gate), gate)
+    put(paths.state, state)
+    assert.equal(reconcileGate(paths, gate, 'sync', now).hold, true)
+    const repaired = readJson(paths.gate)
+    assert.equal(repaired.resetsAt, reset)
+    assert.equal(repaired.usedPercent, 82)
+    assert.deepEqual(readJson(paths.state), state)
+    usage('2026-02-06T12:00:00.000Z')
+    assert.equal(reconcileGate(paths, repaired, 'sync', now).hold, true)
+    assert.deepEqual(readJson(paths.gate), repaired)
+    assert.equal(reconcileGate(paths, gate, 'sync', now).code, 'superseded')
+    assert.deepEqual(readJson(paths.gate), repaired)
+  })
 })
 
 test('legacy retries are serialized and never change run status or trust unsafe helper input', () => {

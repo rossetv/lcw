@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import {
   addTotals, addUsage, agentTokens, buttons, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
-  longNudges, quietCounts, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt,
+  longNudges, quietCounts, replacesGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt,
   measureStep, retryGate, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
@@ -242,6 +242,20 @@ test('a gate is written once the week reaches the mark of an unfinished run', ()
   assert.equal(gateFor({ ...state, status: 'paused', pausedReason: 'mark' }, { percentUsed: 90, resetsAt }, NOW).reason, 'mark')
 })
 
+test('a gate is written over one on disk only where that one has no reset time and the new one has', () => {
+  const resetsAt = '2026-11-22T14:00:00.000Z'
+  const known = { reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt, at: NOW }
+  const unknown = { ...known, resetsAt: null }
+  assert.equal(replacesGate(null, known), true)
+  assert.equal(replacesGate(null, unknown), true, 'a gate with no reset time still holds the run at its mark')
+  assert.equal(replacesGate(unknown, known), true)
+  assert.equal(replacesGate({ ...known, resetsAt: undefined }, known), true, 'one another program wrote without the field')
+  assert.equal(replacesGate(known, { ...known, usedPercent: 90 }), false)
+  assert.equal(replacesGate(unknown, unknown), false)
+  assert.equal(replacesGate({ reason: 'mark', unit: 'usd', retryAt: NOW }, known), false, 'a dollar gate')
+  assert.equal(replacesGate(unknown, null), false)
+})
+
 test('the wake comes once, after the reset time', () => {
   const gate = { resetsAt: '2026-11-18T11:59:00.000Z' }
   assert.equal(wakeDue(gate, NOW, null), true)
@@ -330,11 +344,20 @@ test('the orchestrator is told when an agent stalls, then twice more, five minut
 test('an agent that moves again, or ends, is forgotten, and is reported afresh if it stalls again', () => {
   let r = stallNudges([stalling('a', 15)], {}, NOW)
   assert.equal(r.due.length, 1)
-  r = stallNudges([stalling('a', 0)], r.nudged, NOW + MIN)
+  r = stallNudges([stalling('a', 0, { tokens: 1200 })], r.nudged, NOW + MIN)
   assert.deepEqual(r.nudged, {})
-  r = stallNudges([stalling('a', 15)], r.nudged, NOW + 16 * MIN)
+  r = stallNudges([stalling('a', 15, { tokens: 1200 })], r.nudged, NOW + 16 * MIN)
   assert.deepEqual(r.due.map((a) => a.times), [1])
   assert.deepEqual(stallNudges([], r.nudged, NOW + 17 * MIN).nudged, {})
+})
+
+test('an agent whose clock starts over without its tokens moving keeps its record, so three notices stay three', () => {
+  let r = stallNudges([stalling('a', 15)], { a: { at: NOW - 20 * MIN, times: 3, tokens: 1000 } }, NOW)
+  assert.deepEqual(r.due, [])
+  r = stallNudges([stalling('a', 0)], r.nudged, NOW + MIN)
+  assert.equal(r.nudged.a.times, 3)
+  r = stallNudges([stalling('a', 15)], r.nudged, NOW + 16 * MIN)
+  assert.deepEqual(r.due, [])
 })
 
 test('an agent that only waits on a shell or a child is never reported', () => {
@@ -513,4 +536,13 @@ test('an error that does not clear on its own, or of a kind not known, is never 
 test('the carry-on prompt says what went wrong, that the reply may have stopped part-way, to carry on, and which try it is', () => {
   assert.match(carryPrompt('server_error', 3), /connection was lost.*part-way.*Carry on from where it stopped.*try 3\b/)
   assert.match(carryPrompt('overloaded', 1), /overloaded.*try 1\b/)
+})
+
+test('a row with wide characters is laid out to the width in terminal cells', async () => {
+  const { len } = await import('../../lib/format.mjs')
+  const row = [{ t: '→ ' }, { t: '再試行ポリシーのテストを書く 🧪', id: 'view:a' }, { t: ' Sonnet' }, { t: '12m', r: true }]
+  const { left, gap, right } = layout(row, 30)
+  const wide = (spans) => len(spans.map((s) => s.t).join(''))
+  assert.equal(wide(left) + gap + wide(right), 30)
+  assert.match(left[1].t, /…$/)
 })

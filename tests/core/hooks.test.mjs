@@ -2,7 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
-import { spawnSync } from 'node:child_process'
+import path from 'node:path'
+import { spawn, spawnSync } from 'node:child_process'
 import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
 import * as gate from '../../scripts/lib/gate.mjs'
 
@@ -66,6 +67,42 @@ test("a session that is not on the run is held to its own mark, not the run's", 
   lcw(['mark', '95'], { home: t.home, cwd: t.repo, session: 'other' })
   assert.equal(gateHook(t, { session_id: 'other', cwd: t.repo }).code, 0, 'its own mark lets the other session go on')
   assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 2, 'and does not lift the run')
+})
+
+test('gate hook refuses a run over its mark that has no gate file, and allows it once the mark is raised over the usage', () => {
+  const t = started()
+  weekAt(t.home, 90) // another session read the week past the mark; this one has written no gate yet
+  const refused = gateHook(t, { session_id: 's1', cwd: t.repo })
+  assert.equal(refused.code, 2)
+  assert.match(refused.err, /this run is at its usage mark.*pause mark/)
+  t.cli('usage')
+  t.cli('pause', 'mark')
+  t.cli('resume')
+  assert.equal(fs.existsSync(`${t.dir}/gate`), false, 'resume removes the gate')
+  assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 2, 'resumed while still over the mark')
+  t.cli('mark', '95')
+  assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 0)
+})
+
+test('gate hook refuses a run the user paused while over its mark', () => {
+  const t = started()
+  weekAt(t.home, 90)
+  t.cli('pause', 'human')
+  t.cli('usage')
+  assert.equal(fs.existsSync(`${t.dir}/gate`), false)
+  const refused = gateHook(t, { session_id: 's1', cwd: t.repo })
+  assert.equal(refused.code, 2)
+  assert.match(refused.err, /this run is at its usage mark/)
+  assert.ok(!/pause mark/.test(refused.err), 'the user\'s pause is not turned into a pause at the mark')
+})
+
+test('gate hook allows a run whose percent gate has expired once the new week is under the mark', () => {
+  const t = started()
+  fs.writeFileSync(`${t.dir}/gate`, JSON.stringify({ reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt: past(), at: 1 }))
+  weekAt(t.home, 10)
+  assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 0)
+  weekAt(t.home, 90)
+  assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 2, 'a new week already over the mark')
 })
 
 test('session-start hook without a run prints the rule and the command', () => {
@@ -160,6 +197,19 @@ test('a new session in the worktree of a run another open session drives neither
   assert.match(start('later').out, /Unfinished LCW run: \d{8}-busy/)
 })
 
+test('session start gives a command line that runs from a plugin folder with a space in its path', () => {
+  const plugin = tmp('plug in')
+  for (const dir of ['scripts', 'lib']) fs.cpSync(`${path.dirname(path.dirname(START_HOOK))}/${dir}`, `${plugin}/${dir}`, { recursive: true })
+  const home = tmp('home')
+  const repo = makeRepo()
+  const out = run(`${plugin}/scripts/hook-session-start.mjs`, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }) }).out
+  const cli = /^LCW command line: (.+) \(add --session/m.exec(out)[1]
+  assert.ok(gate.lcwOnly(`${cli} mark 80`), cli)
+  const r = spawnSync('sh', ['-c', `${cli} runs`], { cwd: repo, encoding: 'utf8', env: { ...process.env, LCW_HOME: home } })
+  assert.equal(r.status, 0, r.stderr)
+  assert.match(out, /"set up LCW": run node '[^']+\/scripts\/setup\.mjs' install/)
+})
+
 test('session-start hook survives bad input', () => {
   const r = run(START_HOOK, [], { home: tmp('home'), cwd: tmp('x'), input: 'garbage' })
   assert.equal(r.code, 0)
@@ -195,11 +245,26 @@ test('session start records the process id under both ids of a resumed payload',
 test('session start leaves a live process id in the old session\'s file alone', () => {
   const home = tmp('home')
   const repo = makeRepo()
-  fs.mkdirSync(`${home}/sessions`)
-  fs.writeFileSync(`${home}/sessions/old.json`, JSON.stringify({ claudePid: process.pid }))
-  spawnSync('node', [START_HOOK], { cwd: repo, env: { ...process.env, LCW_HOME: home, CLAUDE_PID: '4242' }, input: JSON.stringify({ session_id: 'old', transcript_path: '/x/new.jsonl', cwd: repo }) })
-  assert.equal(readJson(`${home}/sessions/old.json`).claudePid, process.pid)
-  assert.equal(readJson(`${home}/sessions/new.json`).claudePid, 4242)
+  const claude = fakeClaude()
+  try {
+    fs.mkdirSync(`${home}/sessions`)
+    fs.writeFileSync(`${home}/sessions/old.json`, JSON.stringify({ claudePid: claude.pid }))
+    spawnSync('node', [START_HOOK], { cwd: repo, env: { ...process.env, LCW_HOME: home, CLAUDE_PID: '4242' }, input: JSON.stringify({ session_id: 'old', transcript_path: '/x/new.jsonl', cwd: repo }) })
+    assert.equal(readJson(`${home}/sessions/old.json`).claudePid, claude.pid)
+    assert.equal(readJson(`${home}/sessions/new.json`).claudePid, 4242)
+  } finally { claude.kill() }
+})
+
+test('session start replaces a recorded process id that now belongs to a program other than Claude Code', () => {
+  const home = tmp('home')
+  const repo = makeRepo()
+  const other = spawn('sleep', ['30'], { stdio: 'ignore' })
+  try {
+    fs.mkdirSync(`${home}/sessions`)
+    fs.writeFileSync(`${home}/sessions/a.json`, JSON.stringify({ claudePid: other.pid }))
+    spawnSync('node', [START_HOOK], { cwd: repo, env: { ...process.env, LCW_HOME: home, CLAUDE_PID: '4242' }, input: JSON.stringify({ session_id: 'a', cwd: repo }) })
+    assert.equal(readJson(`${home}/sessions/a.json`).claudePid, 4242)
+  } finally { other.kill() }
 })
 
 test('a session with no run is refused new agents at its mark, and allowed once the user raises it', () => {
@@ -433,6 +498,23 @@ test('at the mark a per-token session is told to stop in dollars, and not once o
   assert.equal(limit(home, repo, { hook_event_name: 'UserPromptSubmit' }), null, 'old spend drops out')
 })
 
+test('the limit hook gives a command line that runs from a plugin folder with a space in its path', () => {
+  const plugin = tmp('plug in')
+  for (const dir of ['scripts', 'lib']) fs.cpSync(`${path.dirname(path.dirname(LIMIT_HOOK))}/${dir}`, `${plugin}/${dir}`, { recursive: true })
+  const home = tmp('home')
+  const repo = makeRepo()
+  writeSession(home, 'p1', { billing: 'payg' })
+  spent(home, 'p1', 100)
+  const told = withEnv(clock, () => {
+    const r = run(`${plugin}/scripts/hook-limit.mjs`, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'p1', cwd: repo, hook_event_name: 'PostToolUse', tool_name: 'Edit' }) })
+    return JSON.parse(r.out).hookSpecificOutput.additionalContext
+  })
+  const cli = /run (node \S.*lcw\.mjs'?) cap 5000/.exec(told)[1]
+  assert.ok(gate.lcwOnly(`${cli} cap 5000`), cli)
+  const r = spawnSync('sh', ['-c', `${cli} runs`], { cwd: repo, encoding: 'utf8', env: { ...process.env, LCW_HOME: home } })
+  assert.equal(r.status, 0, r.stderr)
+})
+
 test('a session that turns out to be billed per token is told once, with the commands, and a subscriber is never stopped by dollars', () => {
   const home = tmp('home')
   const repo = makeRepo()
@@ -477,6 +559,19 @@ test('the agent gate holds a run at its dollar gate only while the spend is over
   assert.match(refused.err, /\$3,020 was spent in the last 7 days and the mark is \$3,000.*pause mark/)
   spent(t.home, 's1', 2500)
   assert.equal(spawnGate(t.home, t.repo, 's1').code, 0, 'under the mark again, though the gate file stands')
+})
+
+test('the agent gate refuses a run billed per token whose spend is over its mark before any gate file is written', () => {
+  const t = started('dollars')
+  writeSession(t.home, 's1', { ...readJson(`${t.home}/sessions/s1.json`), billing: 'payg', toldPayg: true })
+  weekAt(t.home, 90) // a share of the week does not count for a session billed per token
+  spent(t.home, 's1', 2500)
+  assert.equal(spawnGate(t.home, t.repo, 's1').code, 0)
+  spent(t.home, 's1', 3020)
+  assert.equal(fs.existsSync(`${t.dir}/gate`), false)
+  const refused = spawnGate(t.home, t.repo, 's1')
+  assert.equal(refused.code, 2)
+  assert.match(refused.err, /\$3,020 was spent in the last 7 days and the mark is \$3,000.*pause mark/)
 })
 
 test('at a mark of the whole week or the full cap the stop text does not offer "finish this regardless", which would lift nothing', () => {

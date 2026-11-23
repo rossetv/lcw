@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { tmp, makeRepo, git, lcw, readJson } from './helpers.mjs'
+import { spawn } from 'node:child_process'
+import { tmp, makeRepo, git, lcw, readJson, CLI } from './helpers.mjs'
 
 /** A repo with a GitHub origin, a home and a started sweep. */
 function sweep(name = 'tidy') {
@@ -56,7 +57,8 @@ function commit(wt, file, text) {
 /**
  * A gh on PATH that writes each call's arguments to a log. GH_STATE is what each pr view shows in turn, comma separated,
  * the last one again once they run out (open, then merged, by default); GH_DRAFT and GH_BASE are the rest of what it shows,
- * and the repository's default branch is main. GH_FAIL is the subcommand that fails, GH_API_ERROR what a failing api call says.
+ * and the repository's default branch is main. GH_FAIL is the subcommand that fails, GH_API_ERROR what a failing api call says,
+ * GH_SLEEP how many seconds pr merge takes.
  */
 function fakeGh(more = {}) {
   const bin = tmp('bin')
@@ -66,6 +68,7 @@ echo "$*" >> "${log}"
 case "$*" in *--delete-branch*) echo "gh must not delete the branch" >&2; exit 1;; esac
 if [ -n "$GH_UNDO_FAIL" ] && echo "$*" | grep -q -- --undo; then echo "cannot undo" >&2; exit 1; fi
 if [ "$1 $2" = "$GH_FAIL" ]; then echo "GraphQL: not mergeable" >&2; exit 1; fi
+if [ "$1 $2" = "pr merge" ] && [ -n "$GH_SLEEP" ]; then sleep "$GH_SLEEP"; fi
 if [ "$1 $2" = "pr view" ]; then
   states="\${GH_STATE:-OPEN,MERGED}"
   state=$(echo "$states" | cut -d, -f"$(grep -c '^pr view' "${log}")")
@@ -357,6 +360,20 @@ test('a wave whose head moved during its final checks does not merge until they 
   assert.notEqual(git(t.repo, 'rev-parse', 'lcw/tidy'), tip)
   assert.equal(t.ship().code, 0)
   assert.equal(git(t.repo, 'rev-parse', 'lcw/tidy'), tip)
+})
+
+test('a repeat of step merging on the head that was checked says it is at merging already and changes nothing', () => {
+  const t = shipping(1)
+  const tip = commit(t.wt, 'b.txt', 'fix\n')
+  t.cli('wave', 'step', 'final checks')
+  t.cli('wave', 'step', 'merging')
+  const before = JSON.stringify(t.state().sweep)
+  const ledger = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
+  const r = t.cli('wave', 'step', 'merging')
+  assert.equal(r.code, 0, r.out)
+  assert.equal(r.out.trim(), `wave 1 is at merging already, at ${tip}`)
+  assert.equal(JSON.stringify(t.state().sweep), before)
+  assert.equal(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), ledger)
 })
 
 test('waves land in order, and a shipped wave\'s worktree stays as the latest work until a later wave ships', () => {
@@ -719,6 +736,47 @@ test('merge is refused out of order, under another choice, and for a wave with n
   assert.deepEqual(gh.calls(), [])
 })
 
+/** Starts lcw merge 1 in the background; once gh is in its pr merge, resolves to { done }, what the merge ends with. */
+async function slowMerge(t, gh) {
+  const p = spawn('node', [CLI, 'merge', '1'], { cwd: t.o.cwd, env: { ...process.env, ...gh.env, LCW_HOME: t.o.home, CLAUDE_CODE_SESSION_ID: t.o.session } })
+  let out = ''
+  p.stdout.on('data', (d) => { out += d })
+  const done = new Promise((res) => p.on('close', (code) => res({ code, out })))
+  while (!gh.calls().some((c) => c.startsWith('pr merge'))) await new Promise((r) => setTimeout(r, 20))
+  return { done }
+}
+
+test('a command that waits on a slow lcw merge does not lose its change, however long the merge holds the lock', async () => {
+  const t = shippedWaves()
+  const gh = fakeGh({ GH_SLEEP: '1' })
+  const { done: merging } = await slowMerge(t, gh)
+  // a lock this old was once taken from its holder while the holder still ran
+  const old = new Date(Date.now() - 60000)
+  fs.utimesSync(`${t.dir}/lock`, old, old)
+  const q = t.cli('question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it', '--recommend', 'a')
+  assert.equal(q.code, 0, q.out)
+  const m = await merging
+  assert.equal(m.code, 0, m.out)
+  assert.deepEqual([t.state().sweep.waves[0].merged, t.state().questions.map((x) => x.id)], [true, ['Q1']])
+})
+
+test('a command whose lock was taken from it as hung saves nothing over the newer state, and says to run it again', async () => {
+  const t = shippedWaves()
+  const gh = fakeGh({ GH_SLEEP: '1' })
+  const { done: merging } = await slowMerge(t, gh)
+  await new Promise((r) => setTimeout(r, 200))
+  const q = lcw(['question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it', '--recommend', 'a'], { ...t.o, env: { LCW_LOCK_HUNG_MS: '100' } })
+  assert.equal(q.code, 0, q.out)
+  const m = await merging
+  assert.equal(m.code, 1, m.out)
+  assert.match(m.out, /nothing was saved to the run\. Run this command again/)
+  assert.deepEqual([t.state().sweep.waves[0].merged, t.state().questions.map((x) => x.id)], [false, ['Q1']])
+  assert.ok(!fs.existsSync(`${t.dir}/lock`))
+  const again = lcw(['merge', '1'], { ...t.o, env: fakeGh({ GH_STATE: 'MERGED' }).env })
+  assert.equal(again.code, 0, again.out)
+  assert.deepEqual([t.state().sweep.waves[0].merged, t.state().questions.map((x) => x.id)], [true, ['Q1']])
+})
+
 test('a failing gh merge is reported and records nothing', () => {
   const t = shippedWaves()
   const gh = fakeGh({ GH_FAIL: 'pr merge' })
@@ -907,7 +965,7 @@ test('Hunt is refused while a wave is queued or still being built, and starts an
   assert.equal(early.code, 0, 'built and in Review')
   assert.match(early.out, /early round: wave 1 \(Review\) is short of Ship/)
   assert.deepEqual([t.state().stage, t.state().sweep.round, t.state().sweep.early, t.state().sweep.waves[0].stage], ['Hunt', 2, [1], 'Review'])
-  assert.match(t.cli('status').out, /round: 2 \(early: wave 1 was short of Ship when it started/)
+  assert.match(t.cli('status').out, /round: 2 \(early: wave 1 was short of Ship during it/)
   assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /stage: Hunt; .*early round: wave 1 \(Review\)/)
   assert.equal(t.cli('hunt', '--areas', '3').code, 0, 'the hunt round records while the wave is reviewed')
   t.cli('stage', 'Build')
@@ -926,9 +984,12 @@ test('a round that starts with every open wave holding in Ship is not an early o
   assert.doesNotMatch(r.out, /early round/)
   assert.deepEqual([t.state().sweep.round, t.state().sweep.early], [2, []])
   assert.doesNotMatch(t.cli('status').out, /early:/)
-  t.cli('hunt', '--fix', '0', '--park', '0', '--drop', '1')
-  assert.equal(t.cli('stage', 'Hunt').out.trim(), 'stage Hunt', 'a repeat changes nothing')
-  assert.equal(t.state().sweep.round, 2)
+  t.cli('hunt', '--fix', '0', '--park', '1', '--drop', '1')
+  const before = JSON.stringify(t.state())
+  const repeat = t.cli('stage', 'Hunt')
+  assert.equal(repeat.code, 0)
+  assert.equal(repeat.out.trim(), 'stage Hunt: round 2 stands; no new round was started. It is not an early round, so if it finds nothing to fix the sweep ends as the stop line says.', 'a repeat changes nothing and says so')
+  assert.equal(JSON.stringify(t.state()), before)
 })
 
 test('an early round that finds nothing to fix is followed by one more, once it is sorted and every open wave holds in Ship', () => {
@@ -939,12 +1000,12 @@ test('an early round that finds nothing to fix is followed by one more, once it 
   t.cli('stage', 'Build')
   t.cli('stage', 'Review')
   t.cli('stage', 'Hunt')
-  assert.match(t.cli('stage', 'Hunt').out, /round 2 stands, an early one\. Once it is sorted, record its counts/, 'not sorted yet: a repeat starts no round and says why')
+  assert.match(t.cli('stage', 'Hunt').out, /round 2 stands, an early one; no new round was started\. Once it is sorted, record its counts/, 'not sorted yet: a repeat starts no round and says why')
   assert.equal(t.state().sweep.round, 2)
   t.cli('hunt', '--fix', '0', '--park', '0', '--drop', '2')
   const waits = t.cli('stage', 'Hunt')
   assert.equal(waits.code, 0)
-  assert.match(waits.out, /round 2 stands; the round that follows this early one starts once wave 1 holds in Ship/)
+  assert.match(waits.out, /round 2 stands; no new round was started\. The round that follows this early one starts once wave 1 holds in Ship/)
   assert.equal(t.state().sweep.round, 2)
   t.cli('stage', 'Ship')
   assert.deepEqual([t.state().stage, t.state().sweep.waves[0].stage], ['Hunt', 'Ship'])
@@ -953,6 +1014,30 @@ test('an early round that finds nothing to fix is followed by one more, once it 
   assert.doesNotMatch(follows.out, /early round/)
   assert.deepEqual([t.state().sweep.round, t.state().sweep.early, t.state().sweep.sorted, t.state().sweep.hunt.drop], [3, [], false, 0])
   assert.equal(t.state().sweep.dropped, 2, 'the early round\'s drops stay counted')
+})
+
+test('a wave sent back from Ship during a round that was not early makes it early, so one more round follows it', () => {
+  const t = shipping(1)
+  t.cli('stage', 'Hunt')
+  assert.deepEqual(t.state().sweep.early, [])
+  const back = t.cli('stage', 'Build')
+  assert.equal(back.code, 0, back.out)
+  assert.match(back.out, /round 2 is now an early one: wave 1 left Ship/)
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1 stage: Build; round 2 is now an early one: wave 1 left Ship/)
+  assert.deepEqual([t.state().stage, t.state().sweep.round, t.state().sweep.early], ['Hunt', 2, [1]])
+  assert.match(t.cli('status').out, /round: 2 \(early: wave 1/)
+  commit(t.wt, 'b.txt', 'fix\n')
+  t.cli('hunt', '--fix', '0', '--park', '0', '--drop', '0')
+  t.cli('stage', 'Review')
+  t.cli('stage', 'Build')
+  t.cli('stage', 'Ship')
+  assert.deepEqual(t.state().sweep.early, [1], 'named once')
+  t.cli('stage', 'Review')
+  assert.doesNotMatch(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8').trim().split('\n').at(-1), /early/, 'said once')
+  t.cli('stage', 'Ship')
+  const follows = t.cli('stage', 'Hunt')
+  assert.equal(follows.code, 0, follows.out)
+  assert.deepEqual([t.state().sweep.round, t.state().sweep.early], [3, []])
 })
 
 test('an early round that found fixes is not repeated: its waves are queued', () => {
@@ -964,8 +1049,24 @@ test('an early round that found fixes is not repeated: its waves are queued', ()
   t.cli('stage', 'Hunt')
   t.cli('hunt', '--fix', '3', '--park', '0', '--drop', '0')
   t.cli('stage', 'Ship')
-  assert.equal(t.cli('stage', 'Hunt').out.trim(), 'stage Hunt')
+  const repeat = t.cli('stage', 'Hunt')
+  assert.equal(repeat.code, 0)
+  assert.equal(repeat.out.trim(), 'stage Hunt: round 2 stands; no new round was started. It found 3 to fix, which go to waves; the next round starts once they are built.')
   assert.equal(t.state().sweep.round, 2)
+})
+
+test('a wave does not ship while a fix recorded after it entered Ship has no verdict', () => {
+  const t = shipping(1)
+  t.cli('req', 'add', 'F1', 'one')
+  t.cli('wave', 'step', 'final checks')
+  t.cli('wave', 'step', 'merging')
+  const r = t.cli('wave', 'shipped')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /Wave 1 cannot ship with F1 todo/)
+  assert.equal(t.state().sweep.waves[0].status, 'running')
+  t.cli('req', 'F1', 'pass')
+  assert.equal(t.cli('wave', 'shipped').code, 0)
+  assert.equal(t.state().sweep.fixed, 1)
 })
 
 test('wave round takes a number, which sets the round and puts a mistaken raise right', () => {
@@ -1112,8 +1213,15 @@ test('a question is added with its choices, picked once, answered in words or us
   const t = hunting()
   const add = (...a) => t.cli('question', 'add', ...a)
   assert.equal(add('Q1', '--text', 'Allow a 422?', '--a', 'Answer 422').code, 1, 'two choices, each with what it means')
-  assert.equal(add('Q1', '--text', 'Allow a 422?', '--why', 'a 409 names the owner', '--a', 'Answer 422: fixed next wave', '--b', 'Keep the 409: closed as decided').code, 0)
-  assert.equal(add('Q1', '--text', 'again', '--a', 'x: y', '--b', 'z: w').code, 1)
+  const bare = add('Q1', '--text', 'Allow a 422?', '--a', 'Answer 422: fixed next wave', '--b', 'Keep the 409: closed as decided')
+  assert.equal(bare.code, 1, 'a question names the option Claude recommends')
+  assert.match(bare.out, /^lcw question add needs --recommend <a\|b>/)
+  assert.equal(bare.out.trim().split('\n').length, 1)
+  assert.equal(add('Q1', '--text', 'Allow a 422?', '--a', 'Answer 422: fixed next wave', '--b', 'Keep the 409: closed as decided', '--recommend', 'c').code, 1, 'one of the options given')
+  assert.equal(add('Q1', '--text', 'Allow a 422?', '--why', 'a 409 names the owner', '--a', 'Answer 422: fixed next wave', '--b', 'Keep the 409: closed as decided', '--recommend', 'b').code, 0)
+  assert.equal(t.state().questions[0].recommend, 'b')
+  assert.match(t.cli('question').out, /Q1 \[open, recommended b\] Allow a 422\?/)
+  assert.equal(add('Q1', '--text', 'again', '--a', 'x: y', '--b', 'z: w', '--recommend', 'a').code, 1)
   assert.equal(t.cli('question', 'Q1', 'used').code, 1, 'only an answered question is used')
   assert.equal(t.cli('question', 'Q1', 'pick', 'd').code, 1)
   assert.equal(t.cli('question', 'Q1', 'pick', 'a').code, 0)
@@ -1122,17 +1230,38 @@ test('a question is added with its choices, picked once, answered in words or us
   assert.match(t.cli('status').out, /Q1 \[answered: a, Answer 422\] Allow a 422\?/)
   assert.equal(t.cli('question', 'Q1', 'used').code, 0)
 
-  add('Q2', '--text', 'Which cutoff?', '--a', '30 days: x', '--b', '90 days: y')
+  add('Q2', '--text', 'Which cutoff?', '--a', '30 days: x', '--b', '90 days: y', '--recommend', 'a')
   assert.equal(t.cli('question', 'Q2', 'pick', 'other').code, 1, 'their own words come through answer')
   t.cli('question', 'Q2', 'answer', '60 days')
   assert.deepEqual([t.state().questions[1].status, t.state().questions[1].words], ['answered', '60 days'])
+})
+
+test('a question used with an answer settles one parked item, never below none, and one left parked does not', () => {
+  const t = hunting()
+  t.cli('hunt', '--fix', '0', '--park', '2', '--drop', '0')
+  const ask = (id) => t.cli('question', 'add', id, '--text', `${id}?`, '--a', 'Yes: fix it', '--b', 'No: leave it', '--recommend', 'a')
+  for (const id of ['Q1', 'Q2', 'Q3', 'Q4']) ask(id)
+  t.cli('question', 'Q1', 'pick', 'a')
+  assert.match(t.cli('question', 'Q1', 'used').out, /Q1: used/)
+  assert.equal(t.state().sweep.parked, 1)
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /question Q1 used; parked down to 1/)
+  t.cli('question', 'Q2', 'pick', 'park')
+  t.cli('question', 'Q2', 'used')
+  assert.equal(t.state().sweep.parked, 1, 'left parked')
+  t.cli('question', 'Q3', 'answer', 'only the second half')
+  t.cli('question', 'Q3', 'used')
+  assert.equal(t.state().sweep.parked, 0)
+  t.cli('question', 'Q4', 'pick', 'b')
+  t.cli('question', 'Q4', 'used')
+  assert.equal(t.state().sweep.parked, 0)
+  assert.doesNotMatch(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /question Q4 used;/)
 })
 
 test('questions are a sweep\'s own', () => {
   const home = tmp('home')
   const o = { home, cwd: makeRepo(), session: 's1' }
   lcw(['start', 'b', '--title', 'B'], o)
-  const r = lcw(['question', 'add', 'Q1', '--text', 't', '--a', 'x: y', '--b', 'z: w'], o)
+  const r = lcw(['question', 'add', 'Q1', '--text', 't', '--a', 'x: y', '--b', 'z: w', '--recommend', 'a'], o)
   assert.equal(r.code, 1)
   assert.match(r.out, /is for a sweep/)
 })
@@ -1482,6 +1611,26 @@ test('a hunt beside open waves reads a fresh worktree of every wave\'s latest wo
   assert.equal(git(t.repo, 'for-each-ref', 'refs/lcw/'), '')
 })
 
+test('a worktree folder deleted outside git does not block wave start or a hunt from making it again', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1')
+  const gone = (dir, ...a) => { git(t.repo, 'worktree', 'add', '-q', ...a, dir); fs.rmSync(dir, { recursive: true, force: true }) }
+  gone(`${t.repo}/.claude/worktrees/tidy-wave-1`, '-b', 'stray')
+  // a worktree of the person's own whose folder is missing, such as one on a drive not plugged in, stays on git's record
+  const theirs = `${tmp('theirs')}/elsewhere`
+  gone(theirs, '-b', 'their-work')
+  const started = t.start()
+  assert.equal(started.code, 0, started.out)
+  assert.match(git(t.repo, 'worktree', 'list', '--porcelain'), /their-work/)
+  t.cli('stage', 'Ship')
+  gone(`${t.repo}/.claude/worktrees/tidy-latest`, '--detach')
+  const hunt = t.cli('stage', 'Hunt')
+  assert.equal(hunt.code, 0, hunt.out)
+  assert.equal(t.state().sweep.round, 2)
+  assert.ok(fs.existsSync(`${t.repo}/.claude/worktrees/tidy-latest/a.txt`))
+  assert.match(git(t.repo, 'worktree', 'list', '--porcelain'), /their-work/)
+})
+
 test('stop removes the hunt\'s worktree and the refs that kept its rounds\' commits', () => {
   const t = holdingWithClosure()
   assert.equal(t.cli('stage', 'Hunt').code, 0)
@@ -1623,6 +1772,30 @@ test('a wave leaves Review only once every fix has its verdict', () => {
   assert.equal(t.w(1).stage, 'Review')
   t.at(1, 'req', 'F2', 'partial')
   t.at(1, 'req', 'F3', 'park')
+  assert.equal(t.at(1, 'stage', 'Ship').code, 0)
+})
+
+test('a wave enters Ship from any stage only with every fix given its verdict and every take-in held, and an emptied wave still does', () => {
+  const t = overlapping()
+  for (const id of ['F1', 'F2']) t.at(1, 'req', 'add', id, `fix ${id}`)
+  t.at(1, 'req', 'F1', 'pass')
+  t.at(1, 'req', 'F2', 'failing')
+  assert.equal(t.at(1, 'stage', 'Ship').code, 1)
+  t.at(1, 'stage', 'Build')
+  commit(t.wt1, 'c.txt', 'review fix\n')
+  const r = t.at(1, 'stage', 'Ship')
+  assert.equal(r.code, 1, 'from Build too')
+  assert.match(r.out, /F2 failing/)
+  assert.equal(t.w(1).stage, 'Build')
+  const w2 = t.at(2, 'stage', 'Ship')
+  assert.equal(w2.code, 1, 'wave 2 lacks wave 1\'s review fix')
+  assert.match(w2.out, /has not taken in the latest of lcw\/tidy-wave-1/)
+  assert.equal(t.w(2).stage, 'Build')
+  t.at(2, 'req', 'add', 'F3', 'fix F3')
+  t.at(2, 'req', 'F3', 'park')
+  t.at(2, 'wave', 'take')
+  assert.equal(t.at(2, 'stage', 'Ship').code, 0, 'every fix parked or dropped')
+  t.at(1, 'req', 'F2', 'pass')
   assert.equal(t.at(1, 'stage', 'Ship').code, 0)
 })
 
