@@ -74,3 +74,23 @@ test('uninstall removes the agent depth only when install set it', () => {
   assert.deepEqual(read(settings).env, own.env, 'the person set it themselves')
   assert.ok(!/removed env\.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH/.test(u.out), u.out)
 })
+
+test('uninstall leaves an attribution the person changed after install, and keeps the keys they added', () => {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ model: 'opus' }))
+  setup(home, settings, 'install')
+  const s = read(settings)
+  s.attribution = { commit: 'Reviewed-by: me', pr: '' }
+  fs.writeFileSync(settings, JSON.stringify(s))
+  assert.equal(setup(home, settings, 'uninstall').code, 0)
+  assert.deepEqual(read(settings).attribution, { commit: 'Reviewed-by: me', pr: '' })
+  assert.ok(!fs.existsSync(`${home}/previous-attribution.json`), 'the record is dropped')
+
+  fs.writeFileSync(settings, JSON.stringify({ attribution: { commit: 'Co-Authored-By: x' } }))
+  setup(home, settings, 'install')
+  const t = read(settings)
+  t.attribution.sessionUrl = false
+  fs.writeFileSync(settings, JSON.stringify(t))
+  setup(home, settings, 'uninstall')
+  assert.deepEqual(read(settings).attribution, { commit: 'Co-Authored-By: x', sessionUrl: false }, 'a key added since is kept')
+})

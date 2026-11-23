@@ -203,9 +203,13 @@ if (cmd === 'install') {
   done.push(addedDirFile)
   if (fs.existsSync(attributionFile)) {
     const prev = JSON.parse(fs.readFileSync(attributionFile, 'utf8'))
-    if (prev === undefined || prev === null) delete s.attribution
-    else s.attribution = prev
-    out('restored your previous attribution setting')
+    // only while it is still as LCW set it; what the person has set beside commit and pr wins over the record
+    if (attributionOff(s)) {
+      const { commit, pr, ...kept } = s.attribution
+      s.attribution = { ...(prev && typeof prev === 'object' ? prev : {}), ...kept }
+      if (!Object.keys(s.attribution).length) delete s.attribution
+      out('restored your previous attribution setting')
+    } else out('left your attribution setting: it has changed since LCW set it')
     done.push(attributionFile)
   }
   if (fs.existsSync(advisorFile) && s.advisorModel === 'fable') { delete s.advisorModel; out('removed advisorModel') }
