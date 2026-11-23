@@ -19,3 +19,9 @@ test('a reading with a reset time still follows the window: same window keeps th
   assert.deepEqual(mergeUsage(week(80, R), week(10, R2)).sevenDay, { percentUsed: 10, resetsAt: R2 })
   assert.deepEqual(mergeUsage(week(80, null), week(30, null)).sevenDay, { percentUsed: 30, resetsAt: null })
 })
+
+test('a reading with no reset time replaces a stored week whose reset time has already passed', () => {
+  const now = Date.parse('2026-06-14T12:00:00.000Z')
+  const expired = week(95, '2026-06-14T11:00:00.000Z')
+  assert.deepEqual(mergeUsage(expired, { ...week(88, null), at: now }).sevenDay, { percentUsed: 88, resetsAt: null })
+})
