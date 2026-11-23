@@ -1,6 +1,6 @@
 # Hunt
 
-Each round of a sweep starts here: probes look for problems in the areas the charter names, and you sort what they find. Entering Hunt adds one to the round. A later round starts with `lcw stage Hunt` once no wave is queued and every open wave is holding in Ship; it does not wait for their final checks or merges, which go on alongside it (stages/ship.md). You do not read code: probes do, and they report.
+Each round of a sweep starts here: probes look for problems in the areas the charter names, and you sort what they find. Entering Hunt adds one to the round. A later round starts with `lcw stage Hunt` once no wave is queued and every open wave is built: in Review, back in Build for its review's fixes, or holding in Ship. It does not wait for their reviews, final checks or merges, which go on alongside it (stages/review.md, stages/ship.md). A round that starts while a wave is short of Ship is an early one: it reads code that wave's review may still change, so it cannot end the sweep (Waves, below). `lcw stage Hunt` says so when it starts one, and `lcw status` shows it. You do not read code: probes do, and they report.
 
 `lcw set health="hunting, area by area"` in round 1, `health="hunting again, round <n>; <each open wave and what it does>"` in a later one, such as `health="hunting again, round 2; wave 3 in its final checks"` (SKILL.md). Read charter.md and, in a later round, findings.md, both in the run folder.
 
@@ -38,6 +38,8 @@ A check the baseline found failing is handled as the charter's PRs line says. Wh
 
 Never guess a decision that should be parked.
 
+In an early round, a finding in a file a wave still in review has changed is sorted like any other, though that review may fix it first: its wave takes it up only once that file is free (stages/plan.md, step 2), and a worker who cannot make its test fail drops it.
+
 ### Security holes
 
 charter.md says whether the repository is public; if it does not, check now (`gh repo view --json visibility`; only `PRIVATE` is private, and a remote not on GitHub is public). In a private repository a security finding is sorted like any other.
@@ -66,9 +68,9 @@ Show the sorted list in the conversation, short: what goes to Fix, area by area;
 
 ## Waves
 
-If nothing was sorted to Fix, the sweep is over: once every open wave has shipped (stages/ship.md), go to "Ending the sweep" below.
+If nothing was sorted to Fix, and the round was not an early one, the sweep is over: once every open wave has shipped (stages/ship.md), go to "Ending the sweep" below. An early round that finds nothing does not end it. Record its counts all the same, and once every open wave holds in Ship run `lcw stage Hunt` again, which starts one more round (until then it changes nothing). That round hunts only what the waves changed since this one read the code (Which areas); with nothing changed it has nothing to hunt, and the sweep is over.
 
-Otherwise group the fixes into waves of about the charter's size. Within a wave, group the fixes by area, and choose areas that touch different files, so they can be built at the same time. Order the waves so that each touches different files from the wave before it, where the fixes allow, such as a backend wave and then a UI wave: the next wave starts while this one is still in review, and takes no fix that needs a file this one changed (stages/plan.md), so two waves in a row on the same files run one after the other. Where two waves must share files, put a wave that shares none between them. Write each wave in findings.md (its number, its fixes by id, its areas), and queue them, one count of fixes for each wave, in the order they will run; this works while earlier waves still hold in Ship:
+Otherwise group the fixes into waves of about the charter's size. Within a wave, group the fixes by area, and choose areas that touch different files, so they can be built at the same time. Order the waves so that each touches different files from the wave before it, where the fixes allow, such as a backend wave and then a UI wave: the next wave starts while this one is still in review, and takes no fix that needs a file this one changed (stages/plan.md), so two waves in a row on the same files run one after the other. Where two waves must share files, put a wave that shares none between them. After an early round, the first wave takes the fixes that need no file a wave still in review has changed (`lcw wave files` lists them), so it can start at once. Write each wave in findings.md (its number, its fixes by id, its areas), and queue them, one count of fixes for each wave, in the order they will run; this works while earlier waves are still open:
 
 ```
 lcw wave add 25 25 24 26 25 26
@@ -84,7 +86,7 @@ and do as it says (SKILL.md, Compaction).
 
 ## Ending the sweep
 
-The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix. A stop line that counts fixes counts what the charter's goals line calls done, which is `fixed` in `lcw status`: a partly fixed fix is not one, so the sweep goes on to find a replacement. It ends short of the count only when a round finds nothing more to fix, and says why. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it. The sweep ends with no wave open: a wave still open is taken through its Ship first, and no queued wave starts. A wave held at merging on the human's answer about its push, and each wave after it at merging, is recorded shipped with no pull request, in order (`lcw wave shipped --wave <n>`), and stays unpushed.
+The sweep ends as the charter's stop line says: by default when a round's hunt finds nothing to fix, an early round's aside (Waves, above). A stop line that counts fixes counts what the charter's goals line calls done, which is `fixed` in `lcw status`: a partly fixed fix is not one, so the sweep goes on to find a replacement. It ends short of the count only when a round finds nothing more to fix, and says why. An earlier end the charter names, such as a number of waves or a share of the week (`lcw usage` shows it), is a normal finish, not a stop; Ship sends you here when a wave reaches it. The sweep ends with no wave open: a wave still open is taken through its Ship first, and no queued wave starts. A wave held at merging on the human's answer about its push, and each wave after it at merging, is recorded shipped with no pull request, in order (`lcw wave shipped --wave <n>`), and stays unpushed.
 
 Before you report, settle the pull requests as the charter's PRs line says. Whichever it is, run `lcw status` just before `lcw finish` and keep what it prints, the totals and each wave's pull request: once the run is finished, the session is no longer bound to it.
 
