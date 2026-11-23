@@ -1,8 +1,8 @@
-import test from 'node:test'
+import test, { after } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
-import { tmp, readJson, started, CLI } from './helpers.mjs'
+import { tmp, readJson, started, fakeClaude, CLI } from './helpers.mjs'
 import { othersHold } from '../../scripts/lib/awake.mjs'
 
 // What `pmset -g assertions` printed on a Mac: macOS's own holders, Claude Code's 5-minute caffeinate holds, Amphetamine.
@@ -69,11 +69,16 @@ async function gone(pid) {
   return !alive(pid)
 }
 
+// A hold is kept only for a process that is Claude Code's, so each run records a stand-in one.
+const claudes = []
+after(() => claudes.forEach((c) => c.kill()))
+
 function building() {
   const t = started()
   t.cli('stage', 'Build')
   const file = `${t.home}/sessions/s1.json`
-  fs.writeFileSync(file, JSON.stringify({ ...readJson(file), claudePid: process.pid }))
+  claudes.push(fakeClaude())
+  fs.writeFileSync(file, JSON.stringify({ ...readJson(file), claudePid: claudes.at(-1).pid }))
   return { ...t, check: () => JSON.parse(t.cli('awake', '--check').out) }
 }
 
