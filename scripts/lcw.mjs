@@ -576,7 +576,12 @@ const commands = {
     }
     if (verb === 'used') {
       if (q.status !== 'answered') fail(`${q.id} is ${q.status}; only an answered question is used. Nothing was changed.`)
-      change(run, `question ${q.id} used`, () => { q.status = 'used' })
+      // each question stands for one item the hunt parked: an answer other than park settles it
+      const settles = q.pick !== 'park' && run.state.sweep.parked > 0
+      change(run, `question ${q.id} used${settles ? `; parked down to ${run.state.sweep.parked - 1}` : ''}`, (s) => {
+        q.status = 'used'
+        if (settles) s.sweep.parked--
+      })
       return out(`${q.id}: used`)
     }
     fail(`Usage: lcw question [add ... | <id> pick <option> | <id> answer "<words>" | <id> used]`)

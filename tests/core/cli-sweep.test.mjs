@@ -1128,6 +1128,27 @@ test('a question is added with its choices, picked once, answered in words or us
   assert.deepEqual([t.state().questions[1].status, t.state().questions[1].words], ['answered', '60 days'])
 })
 
+test('a question used with an answer settles one parked item, never below none, and one left parked does not', () => {
+  const t = hunting()
+  t.cli('hunt', '--fix', '0', '--park', '2', '--drop', '0')
+  const ask = (id) => t.cli('question', 'add', id, '--text', `${id}?`, '--a', 'Yes: fix it', '--b', 'No: leave it')
+  for (const id of ['Q1', 'Q2', 'Q3', 'Q4']) ask(id)
+  t.cli('question', 'Q1', 'pick', 'a')
+  assert.match(t.cli('question', 'Q1', 'used').out, /Q1: used/)
+  assert.equal(t.state().sweep.parked, 1)
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /question Q1 used; parked down to 1/)
+  t.cli('question', 'Q2', 'pick', 'park')
+  t.cli('question', 'Q2', 'used')
+  assert.equal(t.state().sweep.parked, 1, 'left parked')
+  t.cli('question', 'Q3', 'answer', 'only the second half')
+  t.cli('question', 'Q3', 'used')
+  assert.equal(t.state().sweep.parked, 0)
+  t.cli('question', 'Q4', 'pick', 'b')
+  t.cli('question', 'Q4', 'used')
+  assert.equal(t.state().sweep.parked, 0)
+  assert.doesNotMatch(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /question Q4 used;/)
+})
+
 test('questions are a sweep\'s own', () => {
   const home = tmp('home')
   const o = { home, cwd: makeRepo(), session: 's1' }
