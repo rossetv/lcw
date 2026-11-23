@@ -2,7 +2,7 @@
 
 The draft pull request is what the human comes back to, so you write its text yourself.
 
-`lcw set health="opening the draft pull request"`, or `health="leaving the branch for your review"` when there is no GitHub remote. The review has run the tests. Check with `git status` that everything is committed and the worktree is clean; if it is not, launch a worker to sort it out.
+`lcw set health="opening the draft pull request"`, or `health="leaving the branch for your review"` when there is no GitHub remote. The review has run the tests. Check with `git -C <worktree> status` that everything is committed and the worktree is clean; if it is not, launch a worker to sort it out.
 
 ## The text
 
