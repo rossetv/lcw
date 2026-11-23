@@ -114,6 +114,7 @@ const S = {
   mark: { since: 0, below: 0 },
   autoDone: false,
   pressing: false,
+  setupDraft: null as { changed: boolean } | null,
   // The box last drawn ('kind:key', '' for none), and until when the band is drawn without buttons since it changed.
   drawnBox: '',
   unfocusUntil: 0,
@@ -796,24 +797,33 @@ async function fillAnswer($: EngineInterface, n: number | undefined) {
 // A button's reply put in the prompt, never sent. Only into an empty prompt: a draft the person typed is
 // neither replaced nor added to, and they are told to type the reply themselves.
 async function fillReply($: EngineInterface, text: string, setup?: Banner) {
-  let typed = await draft($)
-  if (typed === '' && setup) {
-    await refresh($).catch(() => {})
-    const facts = await gather($, await $.clock.now())
-    if (!sameBox(setup, S.interactive ? bannerFor(facts) : null, 'setup') || !facts.proxyQuota?.canSetup) {
-      $.ui.toast('The connection or session controls changed. Nothing was filled; try setup again when this session is idle.')
+  const watch = setup ? { changed: false } : null
+  if (watch) S.setupDraft = watch
+  try {
+    let typed = await draft($)
+    if (typed === '' && setup) {
+      // The final draft read can outlast a control change; take a bounded snapshot after each read.
+      for (let pass = 0; pass < 2; pass++) {
+        await refresh($).catch(() => {})
+        const facts = await gather($, await $.clock.now())
+        if (!sameBox(setup, S.interactive ? bannerFor(facts) : null, 'setup') || !facts.proxyQuota?.canSetup || watch?.changed || S.turnRunning || S.compacting || S.carry || S.owed) {
+          $.ui.toast('The draft, connection or session controls changed. Nothing was filled; try setup again when this session is idle.')
+          return false
+        }
+        if (pass === 0) typed = await draft($)
+        if (typed !== '') break
+      }
+    }
+    if (typed !== '') {
+      $.ui.toast(`Your prompt has text in it. Clear it and press the button again, or type "${text.trim()}" yourself.`, { timeoutMs: 10000 })
       return false
     }
-    typed = await draft($)
-    if (S.turnRunning || S.compacting || S.carry || S.owed) return false
+    const filled = await $.prompt.fill({ text }).catch(() => null)
+    if (!filled?.isFilled) $.ui.toast(`LCW could not fill your prompt. Type "${text.trim()}" there and press Enter.`, { timeoutMs: 10000 })
+    return !!filled?.isFilled
+  } finally {
+    if (watch && S.setupDraft === watch) S.setupDraft = null
   }
-  if (typed !== '') {
-    $.ui.toast(`Your prompt has text in it. Clear it and press the button again, or type "${text.trim()}" yourself.`, { timeoutMs: 10000 })
-    return false
-  }
-  const filled = await $.prompt.fill({ text }).catch(() => null)
-  if (!filled?.isFilled) $.ui.toast(`LCW could not fill your prompt. Type "${text.trim()}" there and press Enter.`, { timeoutMs: 10000 })
-  return !!filled?.isFilled
 }
 
 // A press's plan carried out: its commands in order (the first that fails says why and the box stays), then the
@@ -995,6 +1005,21 @@ export const register: Register = (on) => {
     await countTurn($, e).catch(() => {})
     if (!e.agentId && !e.isAborted) await checkpoint($).catch(() => {})
     return result
+  })
+
+  on('prompt.edit', ($, e, next) => {
+    if (S.setupDraft) S.setupDraft.changed = true
+    return next(e)
+  })
+
+  on('prompt.change', ($, e, next) => {
+    if (S.setupDraft) S.setupDraft.changed = true
+    return next(e)
+  })
+
+  on('prompt.fill', ($, e, next) => {
+    if (S.setupDraft) S.setupDraft.changed = true
+    return next(e)
   })
 
   // A prompt or slash command the person sent (not one the engine or a plugin sent for them) is their reply to the approval box, if it shows.
