@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
 import * as gate from '../../scripts/lib/gate.mjs'
 
@@ -230,11 +230,26 @@ test('session start records the process id under both ids of a resumed payload',
 test('session start leaves a live process id in the old session\'s file alone', () => {
   const home = tmp('home')
   const repo = makeRepo()
-  fs.mkdirSync(`${home}/sessions`)
-  fs.writeFileSync(`${home}/sessions/old.json`, JSON.stringify({ claudePid: process.pid }))
-  spawnSync('node', [START_HOOK], { cwd: repo, env: { ...process.env, LCW_HOME: home, CLAUDE_PID: '4242' }, input: JSON.stringify({ session_id: 'old', transcript_path: '/x/new.jsonl', cwd: repo }) })
-  assert.equal(readJson(`${home}/sessions/old.json`).claudePid, process.pid)
-  assert.equal(readJson(`${home}/sessions/new.json`).claudePid, 4242)
+  const claude = fakeClaude()
+  try {
+    fs.mkdirSync(`${home}/sessions`)
+    fs.writeFileSync(`${home}/sessions/old.json`, JSON.stringify({ claudePid: claude.pid }))
+    spawnSync('node', [START_HOOK], { cwd: repo, env: { ...process.env, LCW_HOME: home, CLAUDE_PID: '4242' }, input: JSON.stringify({ session_id: 'old', transcript_path: '/x/new.jsonl', cwd: repo }) })
+    assert.equal(readJson(`${home}/sessions/old.json`).claudePid, claude.pid)
+    assert.equal(readJson(`${home}/sessions/new.json`).claudePid, 4242)
+  } finally { claude.kill() }
+})
+
+test('session start replaces a recorded process id that now belongs to a program other than Claude Code', () => {
+  const home = tmp('home')
+  const repo = makeRepo()
+  const other = spawn('sleep', ['30'], { stdio: 'ignore' })
+  try {
+    fs.mkdirSync(`${home}/sessions`)
+    fs.writeFileSync(`${home}/sessions/a.json`, JSON.stringify({ claudePid: other.pid }))
+    spawnSync('node', [START_HOOK], { cwd: repo, env: { ...process.env, LCW_HOME: home, CLAUDE_PID: '4242' }, input: JSON.stringify({ session_id: 'a', cwd: repo }) })
+    assert.equal(readJson(`${home}/sessions/a.json`).claudePid, 4242)
+  } finally { other.kill() }
 })
 
 test('a session with no run is refused new agents at its mark, and allowed once the user raises it', () => {

@@ -8,7 +8,7 @@ import { findRun, listRuns } from './lib/runs.mjs'
 import { sessionIds, sessionMark, DEFAULT_MARK } from './lib/gate.mjs'
 import { readMoney, dropSpend } from './lib/money.mjs'
 import { paygLines } from './lib/payg-note.mjs'
-import { alive } from './lib/awake.mjs'
+import { claudeAlive } from './lib/awake.mjs'
 import { signInKind } from '../lib/billing.mjs'
 import { sessionFile } from '../lib/key.mjs'
 import { openWaves } from '../lib/banner.mjs'
@@ -69,8 +69,8 @@ function noteClaudePid(id) {
   if (!claudePid) return
   const file = sessionFile(home(), id)
   const session = readJson(file)
-  // a session file whose recorded process is still running belongs to that process (the old id of a resume may be open elsewhere)
-  if (session?.claudePid !== claudePid && !alive(session?.claudePid)) writeJson(file, { ...session, claudePid })
+  // a session file whose recorded Claude Code is still running belongs to it (the old id of a resume may be open elsewhere)
+  if (session?.claudePid !== claudePid && !claudeAlive(session?.claudePid)) writeJson(file, { ...session, claudePid })
 }
 
 const hasGit = () => { try { execFileSync('git', ['--version'], { stdio: 'ignore', timeout: 3000 }); return true } catch { return false } }
