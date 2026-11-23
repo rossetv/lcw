@@ -497,6 +497,23 @@ test('at the mark a per-token session is told to stop in dollars, and not once o
   assert.equal(limit(home, repo, { hook_event_name: 'UserPromptSubmit' }), null, 'old spend drops out')
 })
 
+test('the limit hook gives a command line that runs from a plugin folder with a space in its path', () => {
+  const plugin = tmp('plug in')
+  for (const dir of ['scripts', 'lib']) fs.cpSync(`${path.dirname(path.dirname(LIMIT_HOOK))}/${dir}`, `${plugin}/${dir}`, { recursive: true })
+  const home = tmp('home')
+  const repo = makeRepo()
+  writeSession(home, 'p1', { billing: 'payg' })
+  spent(home, 'p1', 100)
+  const told = withEnv(clock, () => {
+    const r = run(`${plugin}/scripts/hook-limit.mjs`, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'p1', cwd: repo, hook_event_name: 'PostToolUse', tool_name: 'Edit' }) })
+    return JSON.parse(r.out).hookSpecificOutput.additionalContext
+  })
+  const cli = /run (node \S.*lcw\.mjs'?) cap 5000/.exec(told)[1]
+  assert.ok(gate.lcwOnly(`${cli} cap 5000`), cli)
+  const r = spawnSync('sh', ['-c', `${cli} runs`], { cwd: repo, encoding: 'utf8', env: { ...process.env, LCW_HOME: home } })
+  assert.equal(r.status, 0, r.stderr)
+})
+
 test('a session that turns out to be billed per token is told once, with the commands, and a subscriber is never stopped by dollars', () => {
   const home = tmp('home')
   const repo = makeRepo()
