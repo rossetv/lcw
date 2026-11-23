@@ -962,6 +962,12 @@ test('the requirements bar stays twenty cells when one failing of many rounds to
   const requirements = [...Array.from({ length: 39 }, (_, k) => ({ id: 'R' + k, name: 'x', status: 'pass' })), { id: 'R39', name: 'retry policy', status: 'failing' }];
   const row = plain(renderCard(buildView({ state: { name: 'd', stage: 'Review', status: 'running', requirements }, ...at }), { width: 120 })).find(t => t.startsWith('requirements'));
   assert.match(row, /^requirements ▰{20}  39 pass · 1 failing/);
+  // The failing one keeps a cell of its own in the bar, here and in a wave's lane.
+  const cellsOf = (rows, colour) => rows.flat().filter(s => /^▰+$/.test(s.t) && String(s.c).startsWith(colour)).reduce((n, s) => n + [...s.t].length, 0);
+  const card = renderCard(buildView({ state: { name: 'd', stage: 'Review', status: 'running', requirements }, ...at }), { width: 120 });
+  assert.deepEqual([cellsOf(card, 'ok'), cellsOf(card, 'caution')], [19, 1]);
+  const lane = renderCard(buildView(withWave1({ requirements })), { width: 115 }).filter(r => r.some(s => s.t === 'wave ')).slice(0, 1);
+  assert.equal(cellsOf(lane, 'caution'), 1);
 });
 
 test('a long model name is shortened so row 1 keeps to the width', () => {
