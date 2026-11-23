@@ -269,12 +269,23 @@ test('install lets the advisor and spend boxes ask again and leaves the other bo
   assert.deepEqual(read(home + '/notices.json'), kept)
 })
 
-test('the status line saved at install survives a second run over another line', () => {
+test('putting LCW\'s line back over a newer line of the person\'s saves that one for uninstall', () => {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ statusLine: { type: 'command', command: 'starship' } }))
+  setup(home, settings, 'install')
+  const newer = { type: 'command', command: 'ccstatusline' }
+  fs.writeFileSync(settings, JSON.stringify({ statusLine: newer }))
+  setup(home, settings, 'statusline')
+  assert.deepEqual(read(home + '/previous-statusline.json'), newer)
+  setup(home, settings, 'uninstall')
+  assert.deepEqual(read(settings).statusLine, newer)
+})
+
+test('putting LCW\'s line back over LCW\'s own keeps the saved line', () => {
   const home = tmp('home'), settings = tmp('s') + '/settings.json'
   const first = { type: 'command', command: 'starship' }
   fs.writeFileSync(settings, JSON.stringify({ statusLine: first }))
   setup(home, settings, 'install')
-  fs.writeFileSync(settings, JSON.stringify({ statusLine: { type: 'command', command: 'ccstatusline' } }))
   setup(home, settings, 'statusline')
   assert.deepEqual(read(home + '/previous-statusline.json'), first)
   setup(home, settings, 'uninstall')

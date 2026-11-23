@@ -98,8 +98,8 @@ function setAdvisor(s) {
 function setStatusLine(s) {
   writeAtomic(shim, shimText)
   out(`wrote ${shim}`)
-  // the first one saved stays until uninstall restores it: a later run over another line must not lose the original
-  if (s.statusLine && !mine(s.statusLine) && !fs.existsSync(prevFile)) {
+  // the line replaced is saved each time it is not LCW's own, so uninstall restores the newest one the person had
+  if (s.statusLine && !mine(s.statusLine)) {
     writeAtomic(prevFile, JSON.stringify(s.statusLine, null, 2) + '\n')
     out(`saved your previous statusLine to ${prevFile}`)
   }

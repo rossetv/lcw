@@ -447,7 +447,7 @@ async function refresh($: EngineInterface) {
   if (firstSight) {
     await $.fs.write(run.paths.modAlive, String(now)).catch(() => {})
     // Within ten seconds of start: the session-start hook that binds a resumed session can run after us.
-    if (now - S.startedAt <= 10000 && run.state.id !== S.taken && !run.quota?.hold && reopenDue(run.state, run.gate, aliveAt, now)) owe($, run.runDir, reopenPrompt($.plugin.root))
+    if (now - S.startedAt <= 10000 && run.state.id !== S.taken && !run.quota?.hold && reopenDue(run.state, run.gate, aliveAt, now) && !(await driverOpen($, run.state.driver))) owe($, run.runDir, reopenPrompt($.plugin.root))
   }
   if (run.gate?.unit === 'usd' && !run.quota && wakeable(run.state) && run.money?.atMark && wakeDue(run.gate, now, null, quotaBilling(run.session, null))) {
     await reconcileGate($, run, 'retry')
