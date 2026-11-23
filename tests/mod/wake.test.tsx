@@ -208,6 +208,26 @@ test('a reopened session with a running run carries on by itself, once', async (
   expect(w.prompts.length).toBe(1)
 })
 
+test('a reopened session whose run another open session drives does not carry on beside it', async ($, on) => {
+  const driven = JSON.stringify({ ...JSON.parse(state('running')), driver: 's2' })
+  const w = engine(on, {
+    ...BIND, '/lcw/sessions/s2.json': JSON.stringify({ claudePid: 4242 }), [RUN + '/state.json']: driven, [RUN + '/mod-alive']: String(NOW - 60000),
+  }, { ps: 'claude --resume\n' })
+  await start($)
+  await w.clock.advance(5000)
+  expect(w.prompts.length).toBe(0)
+})
+
+test('a reopened session whose run a closed session drove carries on', async ($, on) => {
+  const driven = JSON.stringify({ ...JSON.parse(state('running')), driver: 's2' })
+  const w = engine(on, {
+    ...BIND, '/lcw/sessions/s2.json': JSON.stringify({ claudePid: 4242 }), [RUN + '/state.json']: driven, [RUN + '/mod-alive']: String(NOW - 60000),
+  }, { ps: 'vim notes\n' })
+  await start($)
+  await w.clock.advance(5000)
+  expect(w.prompts.length).toBe(1)
+})
+
 test('a reopen prompt the engine drops is sent later, once', async ($, on) => {
   const w = engine(on, { ...BIND, [RUN + '/state.json']: state('running'), [RUN + '/mod-alive']: String(NOW - 60000) }, { drops: 1 })
   await start($)
