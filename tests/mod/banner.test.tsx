@@ -65,10 +65,11 @@ test('a box dismissed before a reload of the mod stays away after it', async ($,
   await band.unmount()
 })
 
-test('Fix it runs setup to turn the advisor on', async ($, on) => {
+test('Turn it on runs setup to turn the advisor on', async ($, on) => {
   const seen = engine(on, {})
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Button', text: /Turn it on/ })).toBeDefined()
   await band.press({ key: 'banner:advisor:fix' })
   expect(seen.runs.some((argv) => argv.at(-2)?.endsWith('scripts/setup.mjs') && argv.at(-1) === 'advisor')).toBe(true)
   await band.unmount()
