@@ -10,11 +10,11 @@ The spec is the agreed intent translated into a document that agents who were ne
 
 Launch the probes stages/plan.md asks for to map the code at the same time as the blind reviewer: they need only the brainstorm, not the spec's final wording, and Plan then starts with its map ready. As each reports, add its answer, with its sources, to map.md in the run folder.
 
-Launch the blind-reviewer agent with the full text of spec.md in its prompt and nothing else: no brainstorm, no summary, no hint of what you hope it finds. Describe it as "Read the spec cold and explain it back". Record it: `lcw set health="a blind reviewer is explaining the spec back" 'blindReview.now={"reviewer":1}'`.
+Launch the blind-reviewer agent with the path of spec.md in its prompt and nothing else: no brainstorm, no summary, no hint of what you hope it finds. It opens that one file itself and reads no other. Describe it as "Read the spec cold and explain it back". Record it: `lcw set health="a blind reviewer is explaining the spec back" 'blindReview.now={"reviewer":1}'`.
 
 Then judge, holding the whole brainstorm: does its explanation match what the human meant? The review passes when it does. Judge by the explanation, not by the doubts. A fresh reviewer always lists doubts, and treating them as the test becomes an endless nitpick loop. The doubts are advice: act only on one whose two readings would make a builder build different things, where the spec does not decide between them.
 
-If the explanation misses or misstates the intent, the spec said it badly: fix the spec there, and give the new text to a new blind reviewer, never one that has read an earlier version. Record each round; `lcw set` replaces the whole list:
+If the explanation misses or misstates the intent, the spec said it badly: fix the spec there, and give the new spec to a new blind reviewer, never one that has read an earlier version. Record each round; `lcw set` replaces the whole list:
 
 ```
 lcw set 'blindReview.done=[{"reviewer":1,"caught":"row cap fixed"}]' 'blindReview.now={"reviewer":2}'
