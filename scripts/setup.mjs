@@ -13,6 +13,7 @@ const shim = `${lcw}/bin/statusline.mjs`
 const prevFile = `${lcw}/previous-statusline.json`
 const addedDirFile = `${lcw}/added-directory`
 const advisorFile = `${lcw}/set-advisor`
+const depthFile = `${lcw}/set-depth`
 const attributionFile = `${lcw}/previous-attribution.json`
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 let quiet = false // auto prints only its own lines
@@ -120,6 +121,7 @@ function setRunSettings(s) {
   s.env = s.env && typeof s.env === 'object' ? s.env : {}
   if (s.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === undefined) {
     s.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH = '5'
+    writeAtomic(depthFile, '5\n')
     out('set env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH to "5"')
     changed = true
   }
@@ -182,11 +184,14 @@ if (cmd === 'install') {
     else { delete s.statusLine; out('removed statusLine') }
   }
   done.push(prevFile) // a saved line the person has since replaced is not kept for a later install
-  if (s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === '5') {
+  if (s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === '5' && fs.existsSync(depthFile)) {
     delete s.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH
     if (!Object.keys(s.env).length) delete s.env
     out('removed env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH')
+  } else if (s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === '5') {
+    out('left env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH at "5": LCW has no record of setting it; remove it yourself if LCW did')
   }
+  done.push(depthFile)
   if (fs.existsSync(addedDirFile) && Array.isArray(s.permissions?.additionalDirectories)) {
     s.permissions.additionalDirectories = s.permissions.additionalDirectories.filter((x) => x !== lcw)
     if (!s.permissions.additionalDirectories.length) delete s.permissions.additionalDirectories

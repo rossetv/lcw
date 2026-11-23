@@ -34,3 +34,20 @@ test('setup keeps the settings file\'s mode', () => {
     assert.equal(fs.statSync(settings).mode & 0o777, 0o600, cmd)
   }
 })
+
+test('uninstall removes the agent depth only when install set it', () => {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ theme: 'dark' }))
+  assert.equal(setup(home, settings, 'install').code, 0)
+  assert.equal(read(settings).env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH, '5')
+  assert.equal(setup(home, settings, 'install').code, 0, 'a second install finds it set and keeps the record')
+  setup(home, settings, 'uninstall')
+  assert.deepEqual(read(settings), { theme: 'dark' })
+
+  const own = { env: { CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '5' } }
+  fs.writeFileSync(settings, JSON.stringify(own))
+  setup(home, settings, 'install')
+  const u = setup(home, settings, 'uninstall')
+  assert.deepEqual(read(settings).env, own.env, 'the person set it themselves')
+  assert.ok(!/removed env\.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH/.test(u.out), u.out)
+})
