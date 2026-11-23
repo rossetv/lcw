@@ -103,3 +103,14 @@ test('a run bound while the box is hidden gets no mod-alive until its card is dr
   expect(w.age(B)).toBeLessThan(1000)
   await band.unmount()
 })
+
+test('while a survey holds the band, the card is still claimed and mod-alive stays fresh', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.unmount()
+  const survey = await $.ui.mount(SURVEY)
+  await w.advance(20000)
+  expect(w.age(A)).toBeLessThan(15000)
+  await survey.unmount()
+})

@@ -1149,7 +1149,7 @@ export const register: Register = (on) => {
       let drawn = shown && !e.props.hasSurvey ? bannerRows(shown, cols, !!run) : []
       let banner = drawn
       if ((!run && !banner.length) || e.props.hasSurvey) {
-        S.holdsCard = false
+        S.holdsCard = !!run
         if (S.hideRows) { S.hideRows = false; S.dirty = true }
         return next(e)
       }
