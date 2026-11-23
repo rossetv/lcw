@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { spawn } from 'node:child_process'
+import { spawn, execFileSync } from 'node:child_process'
 import { tmp, makeRepo, git, lcw, readJson, CLI } from './helpers.mjs'
 
 /** A repo with a GitHub origin, a home and a started sweep. */
@@ -1629,6 +1629,34 @@ test('a worktree folder deleted outside git does not block wave start or a hunt 
   assert.equal(t.state().sweep.round, 2)
   assert.ok(fs.existsSync(`${t.repo}/.claude/worktrees/tidy-latest/a.txt`))
   assert.match(git(t.repo, 'worktree', 'list', '--porcelain'), /their-work/)
+})
+
+test('a hunt whose worktree git cannot read says so, and does not call the folder foreign', () => {
+  const t = holdingWithClosure()
+  assert.equal(t.cli('stage', 'Hunt').code, 0)
+  t.edit((s) => { s.stage = 'Plan' })
+  const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
+  const bin = tmp('bin')
+  fs.writeFileSync(`${bin}/git`, `#!/bin/sh\ncase "$PWD" in *tidy-latest) if [ "$1" = rev-parse ]; then echo "fatal: cannot read folder" >&2; exit 128; fi;; esac\nexec "${realGit}" "$@"\n`, { mode: 0o755 })
+  const r = lcw(['stage', 'Hunt'], { ...t.o, env: { PATH: `${bin}:${process.env.PATH}` } })
+  assert.equal(r.code, 1, r.out)
+  assert.doesNotMatch(r.out, /not the hunt's/)
+  assert.match(r.out, /folder at .*tidy-latest could not be read.*cannot read folder.*Move or remove it/s)
+  assert.ok(fs.existsSync(`${t.repo}/.claude/worktrees/tidy-latest`), 'nothing was removed')
+})
+
+test('a hunt whose repository refs git cannot read does not blame the worktree folder', () => {
+  const t = holdingWithClosure()
+  assert.equal(t.cli('stage', 'Hunt').code, 0)
+  t.edit((s) => { s.stage = 'Plan' })
+  const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
+  const bin = tmp('bin')
+  fs.writeFileSync(`${bin}/git`, `#!/bin/sh\nif [ "$1" = for-each-ref ]; then echo "fatal: cannot read refs" >&2; exit 128; fi\nexec "${realGit}" "$@"\n`, { mode: 0o755 })
+  const r = lcw(['stage', 'Hunt'], { ...t.o, env: { PATH: `${bin}:${process.env.PATH}` } })
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /repository's refs.*cannot read refs.*Nothing was changed/s)
+  assert.doesNotMatch(r.out, /folder at|Move or remove/)
+  assert.ok(fs.existsSync(`${t.repo}/.claude/worktrees/tidy-latest`), 'nothing was removed')
 })
 
 test('stop removes the hunt\'s worktree and the refs that kept its rounds\' commits', () => {

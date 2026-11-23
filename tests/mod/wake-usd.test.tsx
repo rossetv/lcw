@@ -192,3 +192,30 @@ test('a spend file nobody has written for 8 days is not read', async ($, on) => 
   expect(w.prompts.length).toBe(1)
   expect(w.prompts[0]).toMatch(/back under your \$3,000 mark/)
 })
+
+test('a resumed session settles pay-per-token billing on its canonical row too, so the dollar gate is set', async ($, on) => {
+  const files: Record<string, string> = {
+    '/lcw/sessions/s1.json': JSON.stringify({ runDir: RUN, sessionCanonicalId: 'anchor', markUsd: 0.5 }),
+    '/lcw/sessions/anchor.json': JSON.stringify({ sessionCanonicalId: 'anchor', billing: 'unclear', markUsd: 0.5 }),
+    [RUN + '/state.json']: state('running'),
+  }
+  engine(on, files, '', { '/lcw/spend/s1.json': NOW })
+  await start($)
+  await $.session.measure({ context: { window: 200000 }, changed: ['cost'], cost: { usd: 0.5 } } as any)
+  await $.session.measure({ context: { window: 200000 }, changed: ['cost'], cost: { usd: 1.0 } } as any)
+  expect(json(files['/lcw/sessions/anchor.json']).billing).toBe('payg')
+  expect(json(files[RUN + '/gate']).unit).toBe('usd')
+})
+
+test('a canonical row owned by another running Claude Code is not rewritten by this session\'s billing', async ($, on) => {
+  const files: Record<string, string> = {
+    '/lcw/sessions/s1.json': JSON.stringify({ runDir: RUN, sessionCanonicalId: 'anchor', claudePid: 999, markUsd: 0.5 }),
+    '/lcw/sessions/anchor.json': JSON.stringify({ sessionCanonicalId: 'anchor', billing: 'subscription', claudePid: 4242 }),
+    [RUN + '/state.json']: state('running'),
+  }
+  engine(on, files, '', { '/lcw/spend/s1.json': NOW })
+  await start($)
+  await $.session.measure({ context: { window: 200000 }, changed: ['cost'], cost: { usd: 0.5 } } as any)
+  await $.session.measure({ context: { window: 200000 }, changed: ['cost'], cost: { usd: 1.0 } } as any)
+  expect(json(files['/lcw/sessions/anchor.json']).billing).toBe('subscription')
+})

@@ -53,8 +53,6 @@ function settleBilling(ids, signedIn) {
   for (const { id, file, session } of rows) {
     const change = {}
     if (session?.billing !== signedIn) change.billing = signedIn
-    // the note this start gives is the payg instructions
-    if (signedIn === 'payg' && id === ids[0] && !rows.some((row) => row.session?.toldPayg)) change.toldPayg = true
     if (Object.keys(change).length) writeJson(file, { ...session, ...change })
     if (signedIn === 'subscription' && session?.billing === 'payg') dropSpend(id)
   }
@@ -126,7 +124,13 @@ try {
     if (driverQuota.hold && !quota?.hold) lines.push(`LCW: STOP. This run's ${quotaLine(driverQuota)}. Launch nothing new; let running agents finish and pause the run at the mark.`)
   }
   if (quota) lines.push(quotaLine(quota), ...(quota.hold ? ['LCW: STOP. External subscription quota holds new work until a fresh allowable reading; never substitute dollar spend or raise the mark without the user.'] : []))
-  if (money) lines.push(...paygLines(cli, money))
+  if (money) {
+    lines.push(...paygLines(cli, money))
+    // this note is the payg instructions, so the first prompt does not tell them again
+    const file = sessionFile(home(), ids[0])
+    const session = readJson(file)
+    if (!session?.toldPayg) writeJson(file, { ...session, toldPayg: true })
+  }
   else lines.push(`This session has a usage mark, run or no run: ${mark}% of the week${mark === DEFAULT_MARK ? ' unless the user raises it' : ', as the user set it'}. When they say "run up to N%", run: ${cli} mark N. When they say to finish regardless of the limit, run: ${cli} mark 100. It holds for this session only. When a hook tells you the session is at its mark, stop and tell the user; never raise the mark without their explicit words.`)
   lines.push(`If the user says "set up LCW": run node ${sh(`${root}/scripts/setup.mjs`)} install (it puts LCW's status rows and the no-AI-attribution settings in place, and lets the advisor and spend banners ask again) and say what was set. If they ask to uninstall LCW: run node ${sh(`${root}/scripts/setup.mjs`)} uninstall, say what it put back, then tell them to run /plugin uninstall lcw@lcw to remove the plugin itself.`)
   if (!hasGit()) lines.push('git is not installed or not on the PATH. LCW runs need it: tell the user once, before anything else.')

@@ -1128,3 +1128,27 @@ test('a cut never leaves a separator before its "…"', () => {
   assert.match(at('RunningA', 55, 'tasks'), /3 running…$/);
   assert.match(at('StageSpec', 59, 'blind review'), /reviewer 1…/);
 });
+
+test('a cut inside a span ahead of a separator drops the separator too', () => {
+  for (const [board, width] of [['RunningA', 46], ['19-finished-some-waves-short-of-your-rule', 28], ['NeedsYou', 62], ['ManyAgents', 77], ['ManyAgents', 31], ['StageSpec', 56], ['NeedsYou', 23], ['NeedsYou', 31], ['NeedsYou', 40], ['Done', 46]]) {
+    for (const w of [width, width + 1]) for (const frame of [true, false]) {
+      const lines = strip(toAnsi(card(board, { width: w, frame }), 'dark', w)).split('\n');
+      for (const l of lines) {
+        // A dim " …" after the lanes, waves or totals marks parts dropped, and keeps its space; a clipped word does not.
+        assert.ok(!/[·›] ?…/.test(l), board + ' at ' + w + ': ' + l);
+        assert.ok(!/\S\s+…/.test(l.replace(/(\d+ \w+|queued|fixed|done|waves?) …/g, '$1…')), board + ' at ' + w + ': ' + l);
+        assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l);
+      }
+    }
+  }
+  const l = strip(toAnsi(card('RunningA', { width: 46, frame: true }), 'dark', 46)).split('\n')[1];
+  assert.equal(cols(l), 46);
+  // An agent description clipped and padded already ends in "…": the cut keeps one.
+  const views = [['StageBrainstorm', buildView(inputsOf('StageBrainstorm'))], ['08-build-a-very-large-wave', buildView(inputsOf('08-build-a-very-large-wave'))]];
+  for (const [name, view] of views) for (const w of [45, 46, 47, 48]) for (const frame of [true, false]) {
+    for (const r of strip(toAnsi(renderCard(view, { width: w, frame }), 'dark', w)).split('\n')) {
+      assert.ok(!/……|… …/.test(r), name + ' at ' + w + ': ' + r);
+      assert.ok(cols(r) <= w, name + ' at ' + w + ': ' + r);
+    }
+  }
+});
