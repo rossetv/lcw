@@ -944,6 +944,19 @@ test('outside the lanes the waves row keeps its label and cells, and its counts 
   for (let w = 44; w <= 90; w++) assert.match(row(w, none), /^waves none queued yet( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?$/, w + ': ' + row(w, none));
 });
 
+test("the lanes' heading keeps its wave cells to the room left, so none is cut while the lanes fit", () => {
+  const queued = Array.from({ length: 20 }, (_, k) => ({ n: 10 + k, status: 'queued' }));
+  const state = { name: 'sweep-x', shape: 'sweep', stage: 'Ship', status: 'running', createdAt: NOW - 3e6, stageSince: NOW - 1e6,
+    sweep: { round: 1, fixed: 3, parked: 1, dropped: 2, prs: 'stacked', waves: [{ n: 1, status: 'shipped', pr: 5 },
+      { n: 2, status: 'running', stage: 'Ship', step: 'merging', stageSince: NOW - 6e5, requirements: [], tasks: [] }, ...queued] } };
+  for (const width of [60, 62, 64, 66]) {
+    const rows = laneRows({ state, now: NOW }, width);
+    assert.match(rows.find(l => l.startsWith('waves ')), /^waves {3}✓ Plan {2}✓ Build {2}✓ Review {2}› Ship {4}▰+▱+$/, width + ': ' + rows.join('\n'));
+    assert.equal(rows.find(l => l.startsWith('waves ')).length, width);
+    assert.match(laneOf(rows, 2), / {4}merging +10m$/);
+  }
+});
+
 test("an agent's effort stays whole and in its column, with no token figure or with a chip of an hour or more", () => {
   const efforts = (i, width) => strip(toAnsi(renderCard(buildView(i), { width }), 'dark', width)).split('\n')
     .filter(l => /^ *→/.test(l)).map(l => [l.indexOf(/(medium|low|high|xhigh)\b/.exec(l)?.[0]), /(medium|low|high|xhigh) /.exec(l)?.[1]]);
