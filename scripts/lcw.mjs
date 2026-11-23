@@ -1373,7 +1373,7 @@ function dropLatest(s, also) {
     let attached = true
     try { git(dir, 'symbolic-ref', '-q', 'HEAD') } catch { attached = false }
     own = !attached && commits.includes(git(dir, 'rev-parse', 'HEAD'))
-  } catch {}
+  } catch (e) { return `worktree kept: ${dir}, because git could not read it: ${firstLine(e)}` }
   if (!own) return `worktree kept: ${dir}, because it is not the hunt's own worktree (detached at a commit of the hunt)`
   try { git(s.repoRoot, 'worktree', 'remove', '--force', dir) } catch (e) { return `worktree kept: ${dir}, because git would not remove it: ${firstLine(e)}` }
   return `worktree removed: ${dir}`
@@ -1399,6 +1399,7 @@ function endHunts(s) {
 function freshLatest(s, round) {
   const was = dropLatest(s)
   if (was?.startsWith('worktree kept')) {
+    if (was.includes('because git could not read it')) fail(`The folder at ${latestDir(s)} could not be read, so it is not known whether it is the hunt's worktree: ${was.split('because git could not read it: ')[1]}. Nothing was changed.`)
     if (was.includes("not the hunt's own")) fail(`A folder that is not the hunt's sits at ${latestDir(s)}, where the hunt's worktree goes. Move or remove it, then try again. Nothing was changed.`)
     fail(`The hunt's worktree from the last round could not be refreshed: ${was}. Nothing was changed.`)
   }
