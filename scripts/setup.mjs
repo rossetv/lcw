@@ -202,9 +202,11 @@ if (cmd === 'install') {
   }
   done.push(addedDirFile)
   if (fs.existsSync(attributionFile)) {
-    const prev = JSON.parse(fs.readFileSync(attributionFile, 'utf8'))
+    let prev
+    try { prev = JSON.parse(fs.readFileSync(attributionFile, 'utf8')) } catch { prev = undefined }
     // only while it is still as LCW set it; what the person has set beside commit and pr wins over the record
-    if (attributionOff(s)) {
+    if (prev === undefined) out('left your attribution setting: LCW\'s record of the old one is unreadable')
+    else if (attributionOff(s)) {
       const { commit, pr, ...kept } = s.attribution
       s.attribution = { ...(prev && typeof prev === 'object' ? prev : {}), ...kept }
       if (!Object.keys(s.attribution).length) delete s.attribution

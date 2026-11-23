@@ -94,3 +94,16 @@ test('uninstall leaves an attribution the person changed after install, and keep
   setup(home, settings, 'uninstall')
   assert.deepEqual(read(settings).attribution, { commit: 'Co-Authored-By: x', sessionUrl: false }, 'a key added since is kept')
 })
+
+test('uninstall with a damaged attribution record leaves attribution, says so, and finishes the rest', () => {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ model: 'opus' }))
+  setup(home, settings, 'install')
+  fs.writeFileSync(`${home}/previous-attribution.json`, '{"commit":')
+  const r = setup(home, settings, 'uninstall')
+  assert.equal(r.code, 0, r.err)
+  assert.equal(read(settings).statusLine, undefined)
+  assert.deepEqual(read(settings).attribution, { commit: '', pr: '' })
+  assert.match(r.out, /attribution/)
+  assert.equal(setup(home, settings, 'uninstall').code, 0, 'a second run does not trip on it')
+})
