@@ -703,9 +703,9 @@ const commands = {
     }
     if (!rest.length) {
       const state = readQuotaState(home())
-      if (!state || quotaOff(state)) return out('No external quota command set.')
+      if (!state || quotaOff(state) || !activeQuota(state)) return out('No external quota command set.')
       const view = evaluateQuota({ sourceId: QUOTA_SOURCE_ID, endpoint: state.endpoint }, state, now(), sessionMark(sessionId))
-      const label = activeQuota(state) ? `External quota for ${state.endpoint}` : 'External quota'
+      const label = `External quota for ${state.endpoint}`
       return out(view.status === 'ok'
         ? `${label}: ${view.percentUsed}% used; resets ${view.resetsAt}${view.blocked ? '; provider blocked' : ''}.`
         : `${label}: ${view.status} (${view.code}); new work held.`)
