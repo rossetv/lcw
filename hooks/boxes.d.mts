@@ -7,6 +7,7 @@ export const RUNS_EVERY_MS: number
 export const AWAKE_EVERY_MS: number
 export const LEARN_TEXT: string
 
+export function proxyQuotaEndpoint(value: unknown, configuration: any, ...sessions: any[]): string | null
 export function runFact(state: any, kept?: boolean): BannerRun | null
 export function awakeApplies(state: any): boolean
 export function usageFact(args: { state?: any; session?: any; usage?: any; money?: any; quota?: import('../lib/quota.mjs').QuotaView | null; now: number }): NonNullable<BannerFacts['usage']>
@@ -42,6 +43,7 @@ export type Plan = {
   promptFailed?: string
   fill?: number
   fillText?: string
+  proxyQuotaChoice?: { endpoint: string; choice: string }
   dismiss?: boolean
   toast?: string
 }

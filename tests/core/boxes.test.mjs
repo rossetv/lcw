@@ -8,6 +8,51 @@ import {
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue,
 } from '../../hooks/boxes.mjs'
 import { bannerFor, openWaves } from '../../lib/banner.mjs'
+import * as boxes from '../../hooks/boxes.mjs'
+import * as keys from '../../lib/key.mjs'
+
+test('proxy setup excludes native, unsafe, selected and explicitly disabled connections', () => {
+  const endpoint = 'https://proxy.example/private/team'
+  const config = { v: 1, sourceId: 'external-quota', enabled: true, revision: 'r', endpoint, command: 'quota' }
+  assert.equal(boxes.proxyQuotaEndpoint('https://PROXY.example:443/private/team///', null), endpoint)
+  for (const value of [undefined, '', 'bad', 'https://u:secret@proxy.example', 'https://proxy.example/?key=secret', 'https://api.anthropic.com/', 'https://api.anthropic.com/v1', 'https://proxy.example/' + String.fromCharCode(0xd800), 'https://proxy.example/' + String.fromCharCode(0xdfff)]) {
+    assert.equal(boxes.proxyQuotaEndpoint(value, null), null, String(value))
+  }
+  assert.equal(boxes.proxyQuotaEndpoint(endpoint, config), null)
+  assert.equal(boxes.proxyQuotaEndpoint(endpoint + '/other', config), endpoint + '/other')
+  assert.equal(boxes.proxyQuotaEndpoint(endpoint, { v: 1, enabled: false, sourceId: 'external-quota', revision: 'off' }), null)
+  for (const configuration of [null, {}, { ...config, endpoint: endpoint + '/other' }]) {
+    for (const selection of [{ sourceId: 'external-quota' }, { sourceId: 'external-quota', endpoint }, { sourceId: 'other' }]) {
+      assert.equal(boxes.proxyQuotaEndpoint(endpoint, configuration, { quotaSelection: selection }), null)
+      assert.equal(boxes.proxyQuotaEndpoint(endpoint, configuration, {}, { quotaSelection: selection }), null)
+    }
+  }
+})
+
+test('proxy choices use distinct fixed-length files even for long normalized endpoints', async () => {
+  const file = await keys.proxyQuotaNoticeFile('/lcw', 'https://proxy.example/' + 'x'.repeat(10000))
+  assert.match(file, /^\/lcw\/notices\/proxy-quota\/[a-f0-9]{64}\.json$/)
+  assert.notEqual(await keys.proxyQuotaNoticeFile('/lcw', 'https://proxy.example/a'), await keys.proxyQuotaNoticeFile('/lcw', 'https://proxy.example/b'))
+})
+
+test('proxy choices only acknowledge, and setup fills a generic conversation with no configuration command', () => {
+  const facts = { advisorModel: 'fable', proxyQuota: { endpoint: 'https://proxy.example/private/team', key: 'connection', canSetup: true } }
+  for (const choice of ['setup', 'keep', 'dismiss']) {
+    const plan = press(facts, choice)
+    assert.ok(plan)
+    assert.deepEqual(argvs(plan), [])
+    assert.equal(plan.prompt, undefined)
+    assert.equal(plan.notices, undefined)
+    assert.deepEqual(plan.proxyQuotaChoice, { endpoint: facts.proxyQuota.endpoint, choice })
+    assert.equal(plan.dismiss, true)
+    if (choice === 'setup') {
+      assert.match(plan.fillText, /subscription/)
+      assert.match(plan.fillText, /authorization/i)
+      assert.doesNotMatch(plan.fillText, /proxy\.example|private|team/)
+    } else assert.equal(plan.fillText, undefined)
+  }
+  assert.equal(press({ ...facts, proxyQuota: { ...facts.proxyQuota, canSetup: false } }, 'setup').fillText, undefined)
+})
 
 const NOW = Date.parse('2026-11-20T12:00:00Z')
 const MIN = 60000

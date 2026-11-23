@@ -6,6 +6,20 @@ import { toAnsi } from '../../lib/paint.mjs'
 import * as S from './banner-samples.mjs'
 import { runFact } from '../../hooks/boxes.mjs'
 
+test('proxy setup asks rather than assuming billing, before dollar setup and without exposing the endpoint', () => {
+  const facts = { advisorModel: 'fable', billing: 'payg', proxyQuota: { endpoint: 'https://proxy.example/private/team', key: 'connection', canSetup: true } }
+  const b = bannerFor(facts)
+  assert.equal(b?.kind, 'proxyquota')
+  assert.equal(b.title, 'Using a subscription-backed proxy?')
+  assert.equal(b.lines[0], 'Set up a quota check to track percentages instead of estimated dollars.')
+  assert.deepEqual(b.options, [['setup', 'Set up quota check'], ['keep', 'Keep dollar tracking'], ['dismiss', 'Dismiss']])
+  const rows = bannerRows(b, 92)
+  assert.ok(rows.flat().some((s) => s.c === 'Fable'))
+  assert.doesNotMatch(rows.flat().map((s) => s.t).join(''), /proxy\.example|private|team/)
+  assert.equal(bannerFor({ ...facts, proxyQuota: null })?.kind, 'cap')
+  assert.equal(bannerFor({ ...facts, usage: { atMark: true, capUsd: 100, markUsd: 75, spentUsd: 80 } })?.kind, 'mark')
+})
+
 const kindOf = (facts) => bannerFor(facts)?.kind ?? null
 const textOf = (b) => [b.title, ...b.bullets, ...b.lines, ...b.options.map((o) => o[1])].join('\n')
 const ids = (b) => b.options.map((o) => o[0])

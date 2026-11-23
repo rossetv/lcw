@@ -4,6 +4,19 @@ import { thresholds as TH } from '../lib/theme.mjs'
 import { DEFAULT_CAP_USD } from '../lib/spend.mjs'
 import { dollars } from '../lib/format.mjs'
 import { openWaves, workOf } from '../lib/banner.mjs'
+import { activeQuota, normalizeEndpoint, quotaOff } from '../lib/quota.mjs'
+
+export function proxyQuotaEndpoint(value, configuration, ...sessions) {
+  if (typeof value !== 'string') return null
+  // URL replaces lone surrogates; reject them rather than aliasing a different connection's choice.
+  try { encodeURIComponent(value) } catch { return null }
+  const endpoint = normalizeEndpoint(value)
+  if (!endpoint || ['https://api.anthropic.com', 'https://api.anthropic.com/v1'].includes(endpoint)) return null
+  if (sessions.some((s) => s?.quotaSelection) || quotaOff(configuration) || activeQuota(configuration) && configuration.endpoint === endpoint) return null
+  return endpoint
+}
+
+const PROXY_QUOTA_TEXT = 'Help me work out whether my current custom AI connection is subscription-backed and whether a weekly percentage quota check is appropriate for LCW. A custom endpoint does not establish subscription billing. Discuss the generic quota-command adapter contract with me first. Do not read credentials, install an adapter, configure quota, change billing, raise marks or resume a run without my separate explicit authorization. Keep endpoint URLs and account details out of prompts and shared output.'
 
 /** A run no session has shown for this long is no longer open anywhere (lcw take and abandon use the same). */
 export const SHOWN_WITHIN_MS = 15 * 60000
@@ -253,7 +266,8 @@ export function discussPrompt(root, cleanup, cleanupPath) {
  * - prompt: submitted ({ text, asUser }); when it cannot be, the box stays and the person is told;
  * - notices: written into notices.json (the machine's "never again" choices);
  * - fill: the ask number Answer now puts in the prompt;
- * - fillText: the reply the approval box puts in an empty prompt, never sent (the person presses Enter);
+ * - fillText: the reply put in an empty prompt, never sent (the person presses Enter);
+ * - proxyQuotaChoice: saved in its connection's notice file, only after a requested fill succeeds;
  * - dismiss: the box's occurrence is hidden for this session;
  * - toast: said at the end; 'output' says the last command's output.
  * null when the box does not offer option. facts are those the box was chosen from; ctx: { root, sessionId, repoKey, cleanupPath }.
@@ -267,6 +281,9 @@ export function pressPlan(banner, option, facts, ctx) {
   const run = facts?.run
   if (option === 'later' || option === 'wait') return close
   switch (banner.kind) {
+    case 'proxyquota':
+      if (option === 'setup' && !facts?.proxyQuota?.canSetup) return { toast: 'Wait until this session is idle, below its mark and no run is active, then press setup again.' }
+      return { ...(option === 'setup' ? { fillText: PROXY_QUOTA_TEXT } : {}), proxyQuotaChoice: { endpoint: facts.proxyQuota.endpoint, choice: option }, dismiss: true }
     case 'approve':
       return { fillText: approveText(banner, option), dismiss: true }
     case 'answer':

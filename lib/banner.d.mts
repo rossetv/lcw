@@ -2,7 +2,7 @@ import type { Row } from '../hooks/lcw-mod.mjs'
 
 export type BannerKind =
   | 'answer' | 'approve' | 'mark' | 'spendfail' | 'unfinished' | 'awake' | 'restart' | 'update' | 'whatsnew' | 'guide' | 'cleanup' | 'statusline'
-  | 'advisor' | 'cap' | 'spend' | 'question'
+  | 'advisor' | 'cap' | 'spend' | 'question' | 'proxyquota'
 
 /** One box: its kind, the occurrence key (a dismissal is "kind:key"), the title, plain lines, bullets, and [id, label] options. */
 export interface Banner {
@@ -42,6 +42,7 @@ export interface BannerRun {
 export interface BannerFacts {
   now?: number
   billing?: 'subscription' | 'payg' | string
+  proxyQuota?: { endpoint: string; key: string; canSetup: boolean } | null
   advisorModel?: unknown; advisorFlag?: boolean; capSet?: boolean; spendCommandSet?: boolean
   notices?: Record<string, string | boolean> | null
   /** 'kind:key' of each box dismissed this session; 'kind' alone for the advisor, cap and spend boxes. */
