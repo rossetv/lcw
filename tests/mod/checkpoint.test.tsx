@@ -13,7 +13,8 @@ const files = (more: Record<string, string> = {}) => ({
 })
 
 // The world beneath the mod: files in memory, a clock the test moves, compactions that can be refused, and the prompts sent.
-function engine(on: any, files: Record<string, string>, opts: { refuse?: number; veto?: number; drops?: number; slowWrites?: boolean } = {}) {
+function engine(on: any, files: Record<string, string>, opts: { refuse?: number; veto?: number; drops?: number; slowWrites?: boolean; kept?: Record<string, any>; slowRead?: Promise<void> } = {}) {
+  const kept = opts.kept ?? {}
   const clock = mock.clock(on, { now: NOW })
   const prompts: string[] = []
   const compacts: unknown[] = []
@@ -23,7 +24,8 @@ function engine(on: any, files: Record<string, string>, opts: { refuse?: number;
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
-  on('fs.read', (_: any, e: any) => {
+  on('fs.read', async (_: any, e: any) => {
+    if (opts.slowRead && e.path === '/lcw/sessions/s1.json') await opts.slowRead
     if (e.path in files) return { value: files[e.path] }
     throw new Error('ENOENT')
   })
@@ -48,6 +50,9 @@ function engine(on: any, files: Record<string, string>, opts: { refuse?: number;
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
   on('ui.invalidate', () => ({ value: undefined }))
+  // $.state as a reload of the mod's code finds it: what the test put there, and what the mod writes.
+  on('state.get', (_: any, e: any) => ({ value: { value: kept[e.key], version: e.key in kept ? 1 : 0 } }))
+  on('state.set', (_: any, e: any) => { kept[e.key] = e.value; return { value: { isSet: true, version: 2 } } })
   return { clock, compacts, files, resumes: () => prompts.filter((p) => /LCW checkpoint/.test(p)) }
 }
 
@@ -123,6 +128,20 @@ test('a resume not yet sent when the mod reloads is sent by the reloaded mod, on
   expect(w.compacts.length).toBe(1)
   expect(w.resumes().length).toBe(1)
   expect(w.resumes()[0]).toContain(STEP)
+})
+
+test('a resume kept before a reload is sent once, though the first look at the run takes longer than the wait before it', async ($, on) => {
+  let read!: () => void
+  const slowRead = new Promise<void>((r) => { read = r })
+  const owed = { session: 's1', runDir: RUN, text: 'LCW checkpoint: carry on with ' + STEP }
+  const w = engine(on, files(), { kept: { owed: { shape: 'kept-1', value: owed } }, slowRead })
+  const started = start($)
+  await new Promise((r) => setTimeout(r, 10))
+  await w.clock.advance(2000)
+  read()
+  await started
+  await w.clock.advance(60000)
+  expect(w.resumes()).toEqual([owed.text])
 })
 
 test('two agents that finish at the same moment both count in the run\'s totals', async ($, on) => {

@@ -77,3 +77,29 @@ test('a session bound to a second run gives that run a mod-alive on the next dra
   expect(w.age(B)).toBeLessThan(1000)
   await band.unmount()
 })
+
+test('a card the approval box takes all the room from is not drawn, so mod-alive is let go stale', async ($, on) => {
+  const w = engine(on)
+  const approval = { go: ['Go'], meaning: 'build it', at: NOW - 1000 }
+  w.files[A + '/state.json'] = JSON.stringify({ ...JSON.parse(state('a')), status: 'with-you', stage: 'Brainstorm', approval })
+  await start($)
+  const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 13 } })
+  expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /in Brainstorm/ })).toBeUndefined()
+  await w.advance(20000)
+  expect(w.age(A)).toBeGreaterThan(15000)
+  await band.unmount()
+})
+
+test('a run bound while the box is hidden gets no mod-alive until its card is drawn', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  const first = await $.ui.mount(BAND)
+  await first.unmount()
+  w.files['/lcw/sessions/s1.json'] = bind(B)
+  await w.advance(20000)
+  expect(w.age(B)).toBe(Infinity)
+  const band = await $.ui.mount(BAND)
+  expect(w.age(B)).toBeLessThan(1000)
+  await band.unmount()
+})

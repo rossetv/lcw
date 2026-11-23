@@ -128,6 +128,8 @@ const S = {
   carry: null as Carry | null,
   // A prompt that carries the run on (the reopen, the resume after a checkpoint) and has not been sent yet: see owe.
   owed: null as { runDir: string; text: string } | null,
+  // A refresh has finished: until then a null run is not yet known, not none.
+  refreshed: false,
   // What an earlier copy of this code kept has been read: nothing is written over it before then.
   restored: false,
 }
@@ -320,13 +322,15 @@ function owe($: EngineInterface, runDir: string, text: string, wait = 700) {
   const owed = { runDir, text }
   S.owed = owed
   keepOwed($)
-  $.clock.after(wait, () => void (async () => {
+  const due = () => void (async () => {
     if (S.owed !== owed) return
+    if (!S.refreshed) return void $.clock.after(700, due)
     if (S.run?.runDir !== runDir) { S.owed = null; keepOwed($); return }
     const sent = await submit($, { text })
     if (S.owed !== owed) return
     if (sent) { S.owed = null; keepOwed($) } else owe($, runDir, text, RETRY_MS)
-  })())
+  })()
+  $.clock.after(wait, due)
 }
 
 // Notices that were not sent are taken off the record, where no later poll has changed it, so they fall due again.
@@ -417,7 +421,7 @@ async function refresh($: EngineInterface) {
   const run = await readRun($, now)
   // Before the run is shown: a card drawn without its money view would count percentages.
   if (run) run.money = await readMoney($, run.session, run.state, run.gate, now)
-  if (!run && !S.run) return
+  if (!run && !S.run) { S.refreshed = true; return }
   // The first run this process sees is judged once, by mod-alive as it stood before this process drew it.
   const firstSight = !!run && !S.reopenChecked
   if (firstSight) S.reopenChecked = true
@@ -429,6 +433,7 @@ async function refresh($: EngineInterface) {
     S.quiet = null
   }
   S.run = run
+  S.refreshed = true
   S.dirty = true
   if (!run) {
     S.agents = []
@@ -932,7 +937,8 @@ async function heartbeat($: EngineInterface) {
   if (!S.run) return
   const now = await $.clock.now()
   S.theme = themeFrom(await $.config.list())
-  if (S.holdsCard) await writeAlive($, S.run, now)
+  // Only for the run whose card was drawn: one bound since is not drawn until the box comes back.
+  if (S.holdsCard && S.alive.runDir === S.run.runDir) await writeAlive($, S.run, now)
 }
 
 async function checkpoint($: EngineInterface) {
@@ -1197,8 +1203,8 @@ export const register: Register = (on) => {
       const rows: Row[] = banner.length && below.length ? [...banner, [{ t: ' ' }], ...below] : [...banner, ...below]
       const hide = !S.collapsed && rows.some((row) => row.some((s) => /^(view|toggle):/.test(s.id ?? '')))
       if (hide !== S.hideRows) { S.hideRows = hide; S.dirty = true }
-      S.holdsCard = !!run
-      if (run && (now - S.alive.at >= 5000 || S.alive.runDir !== run.runDir)) void writeAlive($, run, now).catch(() => {})
+      S.holdsCard = !!run && card.length > 0
+      if (S.holdsCard && run && (now - S.alive.at >= 5000 || S.alive.runDir !== run.runDir)) void writeAlive($, run, now).catch(() => {})
 
       const press = async (id: string) => {
         if (id.startsWith('banner:')) return void (await pressBanner($, id, banner.length ? shown : null).catch(() => {}))
