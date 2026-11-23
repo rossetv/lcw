@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { gateFor, retryGate } from '../../hooks/lcw-mod.mjs'
+import { moneyFrom } from '../../lib/spend.mjs'
 
 // The mod on pay-per-token billing: the dollar gate's morning try, the spend it records, and a subscriber left as today.
 
@@ -44,6 +46,23 @@ function engine(on: any, files: Record<string, string>, transcriptPath = '', mti
     return { value: names.map((name) => ({ name, kind: 'file', size: 1, mtimeMs: mtimes[e.path + '/' + name] ?? 0, isLink: false })) }
   })
   on('process.run', (_: any, e: any) => {
+    if (e.argv[1]?.endsWith('/scripts/gate-reconcile.mjs')) {
+      const p = JSON.parse(e.argv[2])
+      const file = RUN + '/gate'
+      const g = JSON.parse(files[file] ?? 'null')
+      if (JSON.stringify(g) !== JSON.stringify(p.expectedGate)) return { value: { exitCode: 0, stdout: '{"ok":false}', stderr: '' } }
+      if (p.action === 'ack') delete files[file]
+      if (p.action === 'retry') files[file] = JSON.stringify(retryGate(g, { atMark: true } as any, g.retryAt))
+      if (p.action === 'sync') {
+        const session = JSON.parse(files['/lcw/sessions/s1.json'] ?? 'null')
+        const state = JSON.parse(files[RUN + '/state.json'] ?? 'null')
+        const records = Object.entries(files).filter(([path]) => path.startsWith(SPEND + '/')).map(([, text]) => JSON.parse(text))
+        const money = session?.billing === 'payg' ? moneyFrom({ records, session, state, cap: null, now: NOW }) : null
+        const next = gateFor(state, JSON.parse(files['/lcw/usage.json'] ?? 'null')?.sevenDay, NOW, money)
+        if (next) files[file] = JSON.stringify(next)
+      }
+      return { value: { exitCode: 0, stdout: '{"ok":true}', stderr: '' } }
+    }
     if (e.argv[0] === 'rm') delete files[e.argv[e.argv.length - 1]]
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
   })

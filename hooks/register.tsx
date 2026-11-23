@@ -2,18 +2,20 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import {
-  activityFile, capFile, cleanupFile, noticesFile, runPaths, runsDir, sessionFile, spendCommandFile, spendDir, spendFile, spendReadingFile, updateFile, usageFile,
+  activityFile, capFile, cleanupFile, noticesFile, quotaFile, runPaths, runsDir, sessionFile, spendCommandFile, spendDir, spendFile, spendReadingFile, updateFile, usageFile,
 } from '../lib/key.mjs'
 import { answerKey, bannerFor, bannerRows } from '../lib/banner.mjs'
 import type { Banner, BannerFacts } from '../lib/banner.mjs'
 import { moneyFrom, readingOf, spendFileCounts } from '../lib/spend.mjs'
 import { buildView, renderCard } from '../lib/card.mjs'
-import { hex } from '../lib/theme.mjs'
+import { hex, thresholds as TH } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
+import { activeQuota, CLAIM_MS, evaluateQuota, quotaOff, REFRESH_MS } from '../lib/quota.mjs'
+import type { QuotaView } from '../lib/quota.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep,
-  longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, retryGate, stallNudges, stallPrompt, themeFrom, trackAgents,
-  usageFrom, usdWakePrompt, wakeable, wakeDue, wakePrompt,
+  longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
+  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity,
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
@@ -40,7 +42,7 @@ const keptNudged = atom({ plugin: 'lcw', key: 'nudged' } as const, {}, { shape: 
 const keptCarry = atom({ plugin: 'lcw', key: 'carry' } as const, null, { shape: KEPT })
 
 // session is the session's file (the binding, its billing and its mark); money is the pay-per-token view, else null.
-type Run = { runDir: string; paths: ReturnType<typeof runPaths>; state: any; gate: any; usage: any; session: any; money: any }
+type Run = { runDir: string; paths: ReturnType<typeof runPaths>; state: any; gate: any; usage: any; session: any; money: any; quota: QuotaView | null }
 
 const S = {
   started: false,
@@ -62,6 +64,11 @@ const S = {
   shownSince: 0,
   dirty: false,
   wokeFor: null as string | number | null,
+  quotaWaking: false,
+  quotaRetry: { key: '', at: 0 },
+  quotaRefresh: { revision: '', at: -Infinity, busy: false },
+  gateCheck: { key: '', at: -Infinity, busy: false },
+  aliasBlockedUntil: new Map<string, number>(),
   startedAt: 0,
   reopenChecked: false,
   // The id of the run a Resume press on the unfinished-run box takes over: no reopened session's, so no reopen prompt.
@@ -183,18 +190,67 @@ async function lcwHome($: EngineInterface) {
   return S.home
 }
 
+async function readSession($: EngineInterface, id: string) {
+  const home = await lcwHome($)
+  const session = await readJson($, sessionFile(home, id))
+  const canonical = session?.sessionCanonicalId
+  if (typeof canonical !== 'string' || !/^[\w.-]{1,256}$/.test(canonical) || /^\.+$/.test(canonical) || canonical === id) return session
+  const anchor = await readJson($, sessionFile(home, canonical))
+  if (anchor?.sessionCanonicalId !== canonical) return session
+  const pid = Number(session?.claudePid) || Number(await $.env.get('CLAUDE_PID'))
+  if (Number.isInteger(anchor.claudePid) && anchor.claudePid > 1 && anchor.claudePid !== pid) {
+    const key = id + ':' + canonical + ':' + anchor.claudePid
+    const now = await $.clock.now()
+    if ((S.aliasBlockedUntil.get(key) ?? 0) > now) return session
+    // ps is not available on every host; an unknown owner never lends its mark.
+    const r = await $.process.run(['ps', '-p', String(anchor.claudePid), '-o', 'pid='], { timeoutMs: 1000 }).catch(() => null)
+    if (r?.exitCode !== 1 || String(r.stdout ?? '').trim() || String(r.stderr ?? '').trim()) {
+      S.aliasBlockedUntil.set(key, now + 5000)
+      return session
+    }
+  }
+  return {
+    ...session, markPercent: anchor.markPercent, markUsd: anchor.markUsd,
+    billing: typeof anchor.billing === 'string' || anchor.quotaSelection ? anchor.billing : session?.billing,
+    ...(Object.prototype.hasOwnProperty.call(anchor, 'quotaSelection') ? { quotaSelection: anchor.quotaSelection, quotaDefaultBilling: anchor.quotaDefaultBilling } : {}),
+  }
+}
+
 // The run bound to this session, or null. A state.json caught mid-write throws, keeping the last one.
 async function readRun($: EngineInterface, now: number): Promise<Run | null> {
   const home = await lcwHome($)
-  const binding = await readJson($, sessionFile(home, await $.session.id()))
+  const binding = await readSession($, await $.session.id())
   if (!binding?.runDir) return null
   const paths = runPaths(binding.runDir)
   if (!(await $.fs.exists(paths.state))) return null
-  const state = JSON.parse(await $.fs.read(paths.state))
+  let state = JSON.parse(await $.fs.read(paths.state))
   if (!isShown(state, now)) return null
+  const session = state.driver && state.driver !== await $.session.id()
+    ? await readSession($, state.driver) : binding
+  state = { ...state, markPercent: session?.markPercent ?? (session?.markUsd != null ? TH.usageMarkPercent : state.markPercent) }
+  const quota = await readQuota($, session, state.markPercent ?? TH.usageMarkPercent, now)
   return {
-    runDir: binding.runDir, paths, state, gate: await readJson($, paths.gate), usage: await readJson($, usageFile(home)), session: binding, money: null,
+    runDir: binding.runDir, paths, state, gate: await readJson($, paths.gate), usage: quota ? null : await readJson($, usageFile(home)), session, money: null, quota,
   }
+}
+
+async function readQuota($: EngineInterface, session: any, mark: number, now: number) {
+  const home = await lcwHome($)
+  const state = await readJson($, quotaFile(home))
+  if (activeQuota(state) && session?.quotaSelection?.sourceId === state.sourceId && session?.quotaSelection?.endpoint === state.endpoint) {
+    const last = S.quotaRefresh
+    const due = !Number.isFinite(state.lastAttemptAt) || now - state.lastAttemptAt >= REFRESH_MS
+    const claimed = state.claim?.revision === state.revision && now - state.claim.startedAt < CLAIM_MS
+    if (due && !claimed && (last.revision !== state.revision || !last.busy && now - last.at >= REFRESH_MS)) {
+      const request = { revision: state.revision, at: now, busy: true }
+      S.quotaRefresh = request
+      void $.process.run(['node', `${$.plugin.root}/scripts/quota-refresh.mjs`], { timeoutMs: 35000, env: { LCW_HOME: home } })
+        .then((r) => { if (r.exitCode !== 0) request.at = now - REFRESH_MS + 5000 })
+        .catch(() => { request.at = now - REFRESH_MS + 5000 })
+        .finally(() => { request.busy = false })
+    }
+  }
+  return evaluateQuota(session?.quotaSelection, state, now, mark)
 }
 
 // The name a session's spend is kept under: its transcript's, which a resumed session keeps and the status line
@@ -208,7 +264,9 @@ async function spendName($: EngineInterface) {
 // cap, the session's mark, the run's own spend (this session's cost so far is its record's highest reading), and
 // the next try from a dollar gate. Nothing in ~/.lcw/spend is read for any other session.
 async function readMoney($: EngineInterface, session: any, state: any, gate: any, now: number) {
-  if (session?.billing !== 'payg') return null
+  const quota = await readQuota($, session, state?.markPercent ?? session?.markPercent ?? TH.usageMarkPercent, now)
+  if (quotaBilling(session, quota) !== 'payg') return null
+  session = { ...session, billing: 'payg' }
   const home = await lcwHome($)
   const dir = spendDir(home)
   const names = ((await $.fs.list(dir).catch(() => [])) as { name: string; kind: string; mtimeMs: number }[])
@@ -265,8 +323,70 @@ function unsay($: EngineInterface, stall: { due: { id: string }[]; nudged: Nudge
   keepNotices($)
 }
 
+async function reconcileGate($: EngineInterface, run: Run, action: 'sync' | 'retry' | 'ack') {
+  const now = await $.clock.now()
+  const key = run.runDir + ':' + action + ':' + gateIdentity(run.gate)
+  if (S.gateCheck.busy || S.gateCheck.key === key && now - S.gateCheck.at < 5000) return false
+  const check = { key, at: now, busy: true }
+  S.gateCheck = check
+  try {
+    const q = run.quota
+    const expectedQuota = q ? { sourceId: q.sourceId, revision: q.revision, requestId: q.requestId, accountKey: q.accountKey, resetsAt: q.resetsAt, observedAt: q.observedAt } : undefined
+    const payload = { sessionId: run.state.driver || await $.session.id(), action, expectedGate: run.gate, ...(expectedQuota ? { expectedQuota } : {}) }
+    const r = await $.process.run(['node', `${$.plugin.root}/scripts/gate-reconcile.mjs`, JSON.stringify(payload)], { timeoutMs: 10000, env: { LCW_HOME: await lcwHome($) } })
+    return r.exitCode === 0 && JSON.parse(String(r.stdout)).ok === true
+  } catch { return false } finally { check.busy = false }
+}
+
+async function recoveryProof($: EngineInterface, run: Run, now: number) {
+  if (!run.gate) return null
+  if (run.quota) return quotaWakeEvidence(run.gate, run.quota, now)
+  if (run.gate.unit === 'quota' && run.session?.quotaSelection !== null && !quotaOff(await readJson($, quotaFile(await lcwHome($))))) return null
+  const money = await readMoney($, run.session, run.state, run.gate, now)
+  run.money = money
+  if (run.gate.unit !== 'quota' && !wakeDue(run.gate, now, null, quotaBilling(run.session, null))) return null
+  if (usageFact({ state: run.state, session: run.session, usage: run.usage, money, now }).atMark) return null
+  return { gate: gateIdentity(run.gate), evidence: JSON.stringify(['default', quotaBilling(run.session, null), run.usage?.sevenDay, money?.spentUsd, money?.markUsd]) }
+}
+
+async function recoverQuota($: EngineInterface, run: Run, now: number) {
+  if (!wakeable(run.state)) return
+  const proof = await recoveryProof($, run, now)
+  const key = run.runDir + ':' + proof?.gate
+  if (!proof || S.quotaWaking || S.wokeFor === key || S.quotaRetry.key === key && now < S.quotaRetry.at) return
+  S.quotaWaking = true
+  try {
+    const ackFile = `${run.runDir}/quota-woke`
+    if ((await readJson($, ackFile))?.gate === proof.gate) { S.wokeFor = key; S.quotaWaking = false; return }
+    $.clock.after(700, () => void (async () => {
+      const at = await $.clock.now()
+      const current = await readRun($, at)
+      const fresh = current && await recoveryProof($, current, at)
+      if (!current || !wakeable(current.state) || current.runDir !== run.runDir || !fresh || fresh.gate !== proof.gate) return
+      const own = await readSession($, await $.session.id())
+      const quota = await readQuota($, own, own?.markPercent ?? TH.usageMarkPercent, at)
+      const money = await readMoney($, own, null, null, at)
+      const usage = await readJson($, usageFile(await lcwHome($)))
+      if (usageFact({ session: own, quota, money, usage, now: at }).atMark) return
+      const why = current.quota ? 'a fresh subscription quota reading allows work below your mark'
+        : current.gate.unit === 'quota' ? 'external quota was disabled; the default source allows work below your mark'
+        : current.gate.unit === 'usd' ? 'the 7-day spend is back under your mark' : 'the weekly usage limit has reset'
+      S.quotaRetry = { key, at: at + (current.quota || current.gate.unit === 'quota' ? 5000 : RETRY_MS) }
+      const text = !current.quota && current.gate.unit !== 'quota'
+        ? current.gate.unit === 'usd' ? usdWakePrompt($.plugin.root, current.money?.markUsd ?? null) : wakePrompt($.plugin.root)
+        : `LCW: ${why}. Run \`node "${$.plugin.root}/scripts/lcw.mjs" resume\`, then \`node "${$.plugin.root}/scripts/lcw.mjs" status\`, and carry on from the ledger.`
+      if (!(await submit($, { text }))) return
+      S.wokeFor = key
+      await $.fs.write(ackFile, JSON.stringify(fresh))
+      await reconcileGate($, current, 'ack')
+    })().catch(() => {}).finally(() => { S.quotaWaking = false }))
+  } catch { S.quotaWaking = false }
+}
+
 async function refresh($: EngineInterface) {
   const now = await $.clock.now()
+  const own = await readSession($, await $.session.id())
+  await readQuota($, own, own?.markPercent ?? TH.usageMarkPercent, now)
   const run = await readRun($, now)
   // Before the run is shown: a card drawn without its money view would count percentages.
   if (run) run.money = await readMoney($, run.session, run.state, run.gate, now)
@@ -295,32 +415,13 @@ async function refresh($: EngineInterface) {
   if (firstSight) {
     await $.fs.write(run.paths.modAlive, String(now)).catch(() => {})
     // Within ten seconds of start: the session-start hook that binds a resumed session can run after us.
-    if (now - S.startedAt <= 10000 && run.state.id !== S.taken && reopenDue(run.state, run.gate, aliveAt, now)) owe($, run.runDir, reopenPrompt($.plugin.root))
+    if (now - S.startedAt <= 10000 && run.state.id !== S.taken && !run.quota?.hold && reopenDue(run.state, run.gate, aliveAt, now)) owe($, run.runDir, reopenPrompt($.plugin.root))
   }
-  if (!wakeDue(run.gate, now, S.wokeFor, run.session?.billing)) return
-  const gate = run.gate
-  const woke = gate.unit === 'usd' ? gate.retryAt : gate.resetsAt
-  // Set before anything is awaited: refreshes overlap, and this try is made once.
-  S.wokeFor = woke
-  // At 08:00 a run still at its dollar mark stays paused and tries again the next morning.
-  const later = gate.unit === 'usd' && wakeable(run.state) ? retryGate(gate, run.money, now) : null
-  if (later) {
-    await $.fs.write(run.paths.gate, JSON.stringify(later)).catch(() => {})
-    run.gate = later
-    run.money = { ...run.money, retryAt: later.retryAt, retried: true }
+  if (run.gate?.unit === 'usd' && !run.quota && wakeable(run.state) && run.money?.atMark && wakeDue(run.gate, now, null, quotaBilling(run.session, null))) {
+    await reconcileGate($, run, 'retry')
     return
   }
-  if (!wakeable(run.state)) {
-    await $.process.run(['rm', '-f', run.paths.gate]).catch(() => {})
-    run.gate = null
-    if (run.money) run.money = { ...run.money, retryAt: undefined, retried: undefined }
-    return
-  }
-  // The gate stays until the wake has been sent: one that was not is made again later.
-  void submitSoon($, gate.unit === 'usd' ? usdWakePrompt($.plugin.root, run.money?.markUsd ?? null) : wakePrompt($.plugin.root)).then(async (sent) => {
-    if (sent) await $.process.run(['rm', '-f', run.paths.gate]).catch(() => {})
-    else retryLater($, () => { if (S.wokeFor === woke) S.wokeFor = null })
-  })
+  await recoverQuota($, run, now)
 }
 
 async function pollAgents($: EngineInterface) {
@@ -396,8 +497,10 @@ async function measureSpend($: EngineInterface, e: { cost?: { usd: number } }, r
   const id = await $.session.id()
   const spent = spendFile(home, await spendName($))
   const [session, rec] = await Promise.all([readParsed($, sessionFile(home, id)), readParsed($, spent)])
-  const step = measureStep(session, rec, { weekly: reading, cost: e.cost?.usd }, now)
-  if (step.changed && session !== undefined) await $.fs.write(sessionFile(home, id), JSON.stringify({ ...session, billing: step.billing }))
+  const control = await readSession($, id)
+  const quota = await readQuota($, control, control?.markPercent ?? TH.usageMarkPercent, now)
+  const step = measureStep(control, rec, { weekly: quota ? null : reading, cost: e.cost?.usd, quota }, now)
+  if ((step.changed || control?.billing !== session?.billing) && session !== undefined) await $.fs.write(sessionFile(home, id), JSON.stringify({ ...session, billing: step.billing }))
   if (step.drop) await $.process.run(['rm', '-f', spent]).catch(() => {})
   // A record caught mid-write is left for the next reading rather than started again from this one.
   if (step.record && rec !== undefined) await $.fs.write(spent, JSON.stringify(step.record))
@@ -414,7 +517,7 @@ async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
     $.settings.read({ key: 'advisorModel' }).catch(() => 'unread'),
     // The user settings file alone: the one Put LCW's back writes.
     $.settings.read({ key: 'statusLine', source: 'user' }).catch(() => undefined),
-    readJson($, sessionFile(home, await $.session.id())),
+    readSession($, await $.session.id()),
     readJson($, capFile(home)),
     readJson($, spendCommandFile(home)),
     readJson($, spendReadingFile(home)),
@@ -427,11 +530,12 @@ async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
   const money = run ? run.money : await readMoney($, session, null, null, now)
   const runF = runFact(run?.state, S.sleep?.kept)
   const asked = runF?.asks?.length ? answerKey(runF) : ''
-  const week = usageFact({ state: run?.state, session, usage: run ? run.usage : usage, money, now })
+  const quota = run ? run.quota : await readQuota($, session, session?.markPercent ?? TH.usageMarkPercent, now)
+  const week = usageFact({ state: run?.state, session: run?.session ?? session, usage: run ? run.usage : usage, money, quota, now })
   // When the week reached the mark, until it has been below it for a minute: a climb back is another occurrence of the mark box.
   S.mark = markSpell(S.mark, week.atMark, now)
   return {
-    now, mac: S.mac, billing: session?.billing, advisorModel, advisorFlag: !!session?.advisorFlag, capSet: Number(cap?.usd) > 0,
+    now, mac: S.mac, billing: quotaBilling(run?.session ?? session, quota), advisorModel, advisorFlag: !!session?.advisorFlag, capSet: Number(cap?.usd) > 0,
     spendCommandSet: !!command?.command, notices, dismissed: S.banner.dismissed, repoKey: S.repoKey ?? undefined,
     run: runF,
     usage: { ...week, since: S.mark.since || undefined },
@@ -835,7 +939,10 @@ export const register: Register = (on) => {
     const result = await next(e)
     try {
       const now = await $.clock.now()
-      const reading = usageFrom(e.rateLimits, now)
+      const home = await lcwHome($)
+      const session = await readSession($, await $.session.id())
+      const quota = await readQuota($, session, session?.markPercent ?? TH.usageMarkPercent, now)
+      const reading = quota ? null : usageFrom(e.rateLimits, now)
       // Its own failure must not keep a subscriber's figure and gate from being written below.
       const billing = await measureSpend($, e, reading, now).catch(() => null)
       if (reading) {
@@ -844,13 +951,13 @@ export const register: Register = (on) => {
         const usage = mergeUsage(await readJson($, file), reading as any)
         await $.fs.write(file, JSON.stringify(usage))
         const run = await readRun($, now)
-        const gate = run ? gateFor(run.state, usage?.sevenDay, now) : null
-        if (run && replacesGate(run.gate, gate)) await $.fs.write(run.paths.gate, JSON.stringify(gate))
+        const gate = run && !run.quota ? gateFor(run.state, usage?.sevenDay, now) : null
+        if (run && replacesGate(run.gate, gate)) await reconcileGate($, run, 'sync')
       } else if (billing === 'payg') {
         const run = await readRun($, now)
         const money = run && !run.gate ? await readMoney($, run.session, run.state, null, now) : null
         const gate = money ? gateFor(run!.state, null, now, money) : null
-        if (run && gate) await $.fs.write(run.paths.gate, JSON.stringify(gate))
+        if (run && gate) await reconcileGate($, run, 'sync')
       }
     } catch {}
     return result
@@ -886,7 +993,7 @@ export const register: Register = (on) => {
       if (run) {
         // The mod's totals are newer than the run's copy: the turn that ran lcw finish is counted after it.
         const state = Number.isFinite(S.totals.tokens) ? { ...run.state, totals: { ...run.state.totals, agents: S.totals.agents, tokens: S.totals.tokens } } : run.state
-        const view = buildView({ state, agents: S.agents, usage: run.usage, gate: run.gate, money: run.money, now, ui: S.ui })
+        const view = buildView({ state, agents: S.agents, usage: run.usage, gate: run.gate, money: run.money, quota: run.quota, now, ui: S.ui })
         const tick = isAnimating(run.state) ? Math.floor((now - S.shownSince) / 100) : undefined
         // The mark box offers the raises, so the card does not also say "say run up to ...", unless the box waits for room.
         const draw = (maxRows: number, hideMarkHint: boolean) => {

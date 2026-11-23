@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { gateFor } from '../../hooks/lcw-mod.mjs'
 
 declare const setTimeout: (fn: (value?: unknown) => void, ms: number) => unknown
 
@@ -25,6 +26,18 @@ function engine(on: any, files: Record<string, string>, opts: { rmWorks?: boolea
   on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
   on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
   on('process.run', (_: any, e: any) => {
+    if (e.argv[1]?.endsWith('/scripts/gate-reconcile.mjs')) {
+      const p = JSON.parse(e.argv[2])
+      const file = RUN + '/gate'
+      const current = JSON.parse(files[file] ?? 'null')
+      if (JSON.stringify(current) !== JSON.stringify(p.expectedGate)) return { value: { exitCode: 0, stdout: '{"ok":false}', stderr: '' } }
+      if (p.action === 'ack' && opts.rmWorks !== false) delete files[file]
+      if (p.action === 'sync') {
+        const g = gateFor(JSON.parse(files[RUN + '/state.json'] ?? 'null'), JSON.parse(files['/lcw/usage.json'] ?? 'null')?.sevenDay, NOW)
+        if (g) files[file] = JSON.stringify(g)
+      }
+      return { value: { exitCode: 0, stdout: '{"ok":true}', stderr: '' } }
+    }
     if (opts.rmWorks !== false && e.argv[0] === 'rm') delete files[e.argv[e.argv.length - 1]]
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
   })
@@ -74,15 +87,16 @@ test('a gate that cannot be removed still wakes the session only once', async ($
   expect(w.prompts.length).toBe(1)
 })
 
-// Pausing, resuming and stopping are the human's: the reset removes the gate of any other run without a word.
+// Inactive runs retain harmless evidence; only a delivered recovery retires a gate.
 for (const [status, reason] of [['paused', 'human'], ['paused', null], ['with-you', null], ['finished', null]] as const) {
-  test(`an expired gate on a run that is ${status}${reason ? ' (' + reason + ')' : ''} is removed and nothing is submitted`, async ($, on) => {
+  test(`an expired gate on a run that is ${status}${reason ? ' (' + reason + ')' : ''} is retained without changing the run or submitting a prompt`, async ($, on) => {
     const w = engine(on, {
       ...BIND, [RUN + '/state.json']: state(status, reason), [RUN + '/gate']: gate(NOW - DAY), [RUN + '/mod-alive']: String(NOW - 60000),
     })
     await start($)
     await w.clock.advance(10000)
-    expect(RUN + '/gate' in w.files).toBe(false)
+    expect(w.files[RUN + '/gate']).toBe(gate(NOW - DAY))
+    expect(w.files[RUN + '/state.json']).toBe(state(status, reason))
     expect(w.prompts.length).toBe(0)
   })
 }
@@ -101,7 +115,8 @@ test('a run the human paused while its gate held is not woken when the reset pas
   await w.clock.advance(2000)
   w.files[RUN + '/state.json'] = state('paused', 'human')
   await w.clock.advance(10000)
-  expect(RUN + '/gate' in w.files).toBe(false)
+  expect(w.files[RUN + '/gate']).toBe(gate(NOW + 5000))
+  expect(w.files[RUN + '/state.json']).toBe(state('paused', 'human'))
   expect(w.prompts.length).toBe(0)
 })
 

@@ -75,11 +75,16 @@ export const awakeApplies = (state) => state?.status === 'running' && !!state.st
  * The week against the mark: the run's mark, else the session's, against usage.json's figure (one past its reset
  * counts as no figure); with money (the session is billed per token), the dollars, whose own atMark decides.
  */
-export function usageFact({ state, session, usage, money, now }) {
-  const week = usage?.sevenDay
-  const live = Number.isFinite(week?.percentUsed) && !(Date.parse(week.resetsAt ?? '') <= now)
+export function usageFact({ state, session, usage, money, quota, now }) {
   const own = state ? state.markPercent : session?.markPercent
   const markPercent = typeof own === 'number' ? own : TH.usageMarkPercent
+  if (quota) return {
+    quota, markPercent, atMark: quota.hold,
+    usedPercent: quota.status === 'ok' ? quota.percentUsed : undefined,
+    resetsAt: quota.status === 'ok' ? quota.resetsAt : undefined,
+  }
+  const week = usage?.sevenDay
+  const live = Number.isFinite(week?.percentUsed) && !(Date.parse(week.resetsAt ?? '') <= now)
   const fact = {
     usedPercent: live ? week.percentUsed : undefined, resetsAt: week?.resetsAt ?? undefined, markPercent,
     atMark: live && week.percentUsed >= markPercent,

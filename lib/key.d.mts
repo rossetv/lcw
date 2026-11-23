@@ -10,6 +10,7 @@ export function spendCommandFile(lcwHome: string): string
 export function noticesFile(lcwHome: string): string
 export function spendReadingFile(lcwHome: string): string
 export function spendTryFile(lcwHome: string, window: number): string
+export function quotaFile(lcwHome: string): string
 export function usageFile(lcwHome: string): string
 export function activityFile(lcwHome: string, sessionId: string): string
 export function runsDir(lcwHome: string, key: string): string

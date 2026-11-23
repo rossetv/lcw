@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { gateFor, retryGate } from '../../hooks/lcw-mod.mjs'
+import { moneyFrom, readingOf } from '../../lib/spend.mjs'
 
 // The mod's 7-day figure when a spend command has a reading: the dollar gate and the morning try go by it.
 
@@ -43,6 +45,24 @@ function engine(on: any, files: Record<string, string>) {
   })
   on('process.run', (_: any, e: any) => {
     ran.push(e.argv)
+    if (e.argv[1]?.endsWith('/scripts/gate-reconcile.mjs')) {
+      const p = JSON.parse(e.argv[2])
+      const file = RUN + '/gate'
+      const g = JSON.parse(files[file] ?? 'null')
+      if (JSON.stringify(g) !== JSON.stringify(p.expectedGate)) return { value: { exitCode: 0, stdout: '{"ok":false}', stderr: '' } }
+      if (p.action === 'ack') delete files[file]
+      if (p.action === 'retry') files[file] = JSON.stringify(retryGate(g, { atMark: true } as any, g.retryAt))
+      if (p.action === 'sync') {
+        const session = JSON.parse(files['/lcw/sessions/s1.json'] ?? 'null')
+        const state = JSON.parse(files[RUN + '/state.json'] ?? 'null')
+        const records = Object.entries(files).filter(([path]) => path.startsWith(SPEND + '/')).map(([, text]) => JSON.parse(text))
+        const money = moneyFrom({ records, session, state, cap: JSON.parse(files['/lcw/cap.json'] ?? 'null'), now: NOW,
+          reading: readingOf(JSON.parse(files['/lcw/spend-command.json'] ?? 'null'), JSON.parse(files['/lcw/spend-reading.json'] ?? 'null')) })
+        const next = gateFor(state, null, NOW, money)
+        if (next) files[file] = JSON.stringify(next)
+      }
+      return { value: { exitCode: 0, stdout: '{"ok":true}', stderr: '' } }
+    }
     if (e.argv[0] === 'rm') delete files[e.argv[e.argv.length - 1]]
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
   })
@@ -93,7 +113,7 @@ test('a run paused at the mark is not woken at 08:00 while the command fails, it
   await w.clock.advance(7000)
   expect(json(w.files[RUN + '/gate'])).toMatchObject({ retried: true })
   expect(w.prompts.length).toBe(0)
-  expect(w.ran.some((a) => a[0] !== 'rm')).toBe(false)
+  expect(w.ran.some((a) => a[0] !== 'rm' && !a[1]?.endsWith('/scripts/gate-reconcile.mjs'))).toBe(false)
 })
 
 test('a run paused at the mark is woken at 08:00 once the command\'s reading is under it', async ($, on) => {

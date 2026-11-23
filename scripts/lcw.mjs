@@ -8,14 +8,17 @@ import { home, readJson, writeJson, writeAtomic, git, mainCheckout, saveState, a
 import { findRun, bindSession, unbindSession, listRuns, open, runOf, lastShown, machineRunCount } from './lib/runs.mjs'
 import { sessionFolders } from './lib/cleanup.mjs'
 import { canHold, heldByOther, keptHold, startHold, releaseHold, alive, claudeAlive } from './lib/awake.mjs'
-import { readUsage, applyGate, atMark, sessionMark, setSessionMark, DEFAULT_MARK } from './lib/gate.mjs'
+import { readUsage, applyGate, atMark, sessionMark, setSessionMark, DEFAULT_MARK, driverMark } from './lib/gate.mjs'
 import { readMoney, readCap, writeCap, spendRecords } from './lib/money.mjs'
 import { gateExpired } from '../lib/usage.mjs'
 import { weekOf, weekShare } from '../lib/card.mjs'
 import { moneyFrom, runSpend, markUsdOf, machineSpend, readingOf, SPEND_COMMAND_FAILS, DEFAULT_CAP_USD } from '../lib/spend.mjs'
 import { runCommand, readSetting, writeSetting, clearSetting, readReading, recordResult, claimWindow } from './lib/spend-command.mjs'
+import { configureQuota, disableQuota, readQuotaState } from './lib/quota-command.mjs'
+import { QUOTA_SOURCE_ID, activeQuota, evaluateQuota, quotaOff } from '../lib/quota.mjs'
 import { dollars, ageText } from '../lib/format.mjs'
 import { isOpenWave } from '../lib/banner.mjs'
+import { noteQuotaSession, readSessionQuota, quotaUsage, quotaLine, sessionBilling } from './lib/quota-session.mjs'
 
 class Fail extends Error {}
 const fail = (msg) => { throw new Fail(msg) }
@@ -44,7 +47,7 @@ const HUNT_COUNTS = ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'd
 const flags = {}
 const args = []
 const argv = process.argv.slice(2)
-const COMMANDS = 'start status stage set task req ask answer question approval ledger checkpoint mark cap spend-command usage pause resume stop finish worktree pictures runs where take abandon awake hunt wave merge'
+const COMMANDS = 'start status stage set task req ask answer question approval ledger checkpoint mark cap spend-command quota-command usage pause resume stop finish worktree pictures runs where take abandon awake hunt wave merge'
 const USAGE = `lcw commands: ${COMMANDS}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
 In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked, charter.md written, no wave queued and every open wave built (in Review, back in Build from it, or in Ship); a round entered with a wave short of Ship is an early one, which status shows and which cannot end the sweep; with waves open it makes .claude/worktrees/<name>-latest, detached, holding every open wave's work (the newest wave's tip alone if they conflict), which status prints as latest work while the round runs. worktree makes only the branch lcw/<name>; the session stays in the main checkout and each wave gets its own worktree.
@@ -56,6 +59,7 @@ take <runId> makes this session take over a run of this repository that no sessi
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
 flags: --session <id> (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --wave; approval --meaning --recommend; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
+quota-command <endpoint> <command line> sets an external weekly subscription source for sessions whose ANTHROPIC_BASE_URL matches that endpoint; quota-command alone inspects it, quota-command off disables it. Quote the command as one argument for shell syntax; a final --session <id> is not part of it. Keep credentials out of command text. Setup requires a successful v:1 quota JSON reading within 30 seconds; failed setup leaves the prior setting intact. Refreshes are shared every 5 minutes; failed, refused or expired readings hold new work, never supply dollar estimates. The source is account-wide, not this machine's spend.
 question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> puts a short question to the person in LCW's box, in a sweep, the recommended option drawn in pink; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
 checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
@@ -65,14 +69,17 @@ const SEE_HELP = 'Nothing was changed. "lcw help" prints every command.'
 const help = () => { console.log(USAGE); process.exit(0) }
 const allowed = COMMAND_FLAGS[argv[0]] || []
 const switches = SWITCHES[argv[0]] || []
-// after spend-command every word is the command line, even one that starts with "-"; only a final --session <id> pair is not
+// Shell commands preserve their words and flags; only a final --session <id> pair is not part of them.
 let spendWords = null
-if (argv[0] === 'spend-command') {
-  spendWords = argv.slice(1)
-  if (spendWords.length >= 2 && spendWords.at(-2) === '--session') { flags.session = spendWords.at(-1); spendWords = spendWords.slice(0, -2) }
-  if (spendWords.length === 1 && (spendWords[0] === '-h' || spendWords[0] === '--help')) help()
+let quotaWords = null
+if (argv[0] === 'spend-command' || argv[0] === 'quota-command') {
+  let words = argv.slice(1)
+  if (words.length >= 2 && words.at(-2) === '--session') { flags.session = words.at(-1); words = words.slice(0, -2) }
+  if (words.length === 1 && (words[0] === '-h' || words[0] === '--help')) help()
+  if (argv[0] === 'quota-command') quotaWords = words
+  else spendWords = words
 }
-for (let i = 0; i < (spendWords ? 0 : argv.length); i++) {
+for (let i = 0; i < (spendWords || quotaWords ? 0 : argv.length); i++) {
   const a = argv[i]
   if (!a.startsWith('-')) { args.push(a); continue }
   // a flag may come with its value in the same word, as --wave=2, or as "--wave 2" from a shell variable that was not split
@@ -89,7 +96,7 @@ for (let i = 0; i < (spendWords ? 0 : argv.length); i++) {
     refuse(`Unknown flag or argument starting with "-": ${a}.${COMMANDS.split(' ').includes(argv[0]) ? ` lcw ${argv[0]} takes ${own.join(', ')}.` : ''}${text} ${SEE_HELP}`)
   }
 }
-const [command, ...rest] = spendWords ? ['spend-command', ...spendWords] : args
+const [command, ...rest] = quotaWords ? ['quota-command', ...quotaWords] : spendWords ? ['spend-command', ...spendWords] : args
 if (command === 'help') help()
 if (argv[0] !== command && argv.length) refuse(`The command must come first, as in "lcw status --session <id>". ${SEE_HELP}`)
 const sessionId = flags.session || process.env.CLAUDE_CODE_SESSION_ID || null
@@ -251,7 +258,11 @@ function cumOf(id) {
   return Number.isFinite(max) ? max : null
 }
 
-const billingOf = (id) => (id ? readJson(sessionFile(home(), id))?.billing : null)
+const billingOf = (id) => (id ? sessionBilling(readJson(sessionFile(home(), id))) : null)
+const usageFor = (id, at = now(), mark = sessionMark(id)) => {
+  const quota = readSessionQuota(id, at, mark)
+  return quota ? quotaUsage(quota, at) : readUsage()
+}
 
 // "5500usd", "$5500", "5,500 USD" and a bare "5000" read as dollars; only a bare number is not marked as such
 function parseMoney(text) {
@@ -332,7 +343,7 @@ const commands = {
       : { brainstorm: paths.brainstorm, spec: paths.spec, plan: paths.plan, ledger: paths.ledger }
     for (const f of Object.values(files)) fs.writeFileSync(f, '')
     const at = now()
-    const sevenDay = readUsage()?.sevenDay
+    const sevenDay = usageFor(sessionId, at)?.sevenDay
     const week = sevenDay?.percentUsed
     const state = {
       version: 1, id, name: runName, title: flags.title, repoRoot: mainCheckout(cwd), worktree: null, branch: null,
@@ -358,6 +369,7 @@ const commands = {
     saveState(paths, state)
     appendLedger(paths, `run started: ${flags.title}`)
     bindSession(sessionId, dir)
+    if (readSessionQuota(sessionId, at, state.markPercent)) applyGate(paths, state, null, at)
     const lines = [`Run ${id}`, `folder: ${dir}`, ...Object.entries(files).map(([k, f]) => `${k}: ${f}`), `artifacts: ${paths.artifacts}`]
     if (!sessionId) lines.push('note: no session id (CLAUDE_CODE_SESSION_ID or --session), so this session is not bound to the run')
     try { if (!git(cwd, 'remote')) lines.push('note: this repository has no remote; the run will end on a local branch, not a pull request') } catch {}
@@ -371,10 +383,12 @@ const commands = {
     const p = run.paths
     const ledger = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean).slice(-15)
     const money = readMoney({ sessionId: s.driver ?? sessionId, now: now() })
+    const quota = readSessionQuota(s.driver ?? sessionId, now(), driverMark(s))
     out(
       `Run ${s.id}: ${s.title}`,
       `stage: ${s.stage}  status: ${s.status}${s.pausedReason ? ` (${s.pausedReason})` : ''}  health: ${s.health}`,
-      `mark: ${money ? moneyMark(money) : `${s.markPercent}%`}${s.worktree ? `  worktree: ${s.worktree}  branch: ${s.branch}` : ''}${s.base ? `  base: ${s.base}` : ''}`,
+      `mark: ${money ? moneyMark(money) : `${driverMark(s)}%`}${s.worktree ? `  worktree: ${s.worktree}  branch: ${s.branch}` : ''}${s.base ? `  base: ${s.base}` : ''}`,
+      ...(quota ? [quotaLine(quota), ...(quota.hold ? ['new work held'] : [])] : []),
       'tasks:', ...(s.tasks.length ? s.tasks.map((t) => `  ${t.id} [${t.status}] ${t.title}`) : ['  none']),
       'asks:', ...(s.asks.length ? s.asks.map((a) => `  ${a.n}. ${a.text}${a.wave ? ` (wave ${a.wave})` : ''}`) : ['  none']),
       ...((s.questions ?? []).length ? ['questions (lcw question):', ...s.questions.map(questionLine)] : []),
@@ -618,15 +632,18 @@ const commands = {
     } else if (sessionId) setSessionMark(sessionId, pct)
     const at = now()
     const view = readMoney({ sessionId: run?.state.driver ?? sessionId, now: at })
-    const usage = readUsage()
+    const quota = readSessionQuota(run?.state.driver ?? sessionId, at, given.usd !== undefined ? DEFAULT_MARK : pct)
+    const usage = quota ? quotaUsage(quota, at) : readUsage()
     const mark = given.usd !== undefined ? dollars(given.usd) : `${pct}%`
     const confirm = given.usd !== undefined || view ? markWord(capNow(), given) : null
+    if (!run && quota) return out(`mark ${pct}%`, quotaLine(quota), quota.hold ? 'new work held' : 'ok')
     if (!run) return out(...(confirm ? [confirm, ...(view && atMark(null, null, at, view) ? ['at the mark'] : [])] : [`mark ${pct}%`, weekLine(usage), atMark(pct, usage, at) ? 'at the mark' : 'ok']))
     change(run, `mark set to ${mark}`, (s) => { s.markPercent = given.usd !== undefined ? DEFAULT_MARK : pct })
-    if (gateExpired(readJson(run.paths.gate), at)) fs.rmSync(run.paths.gate, { force: true })
-    // on pay-per-token billing a dollar gate waits for its 08:00 try, so a mark raised over the spend lifts it here
-    if (view && !atMark(null, null, at, view)) fs.rmSync(run.paths.gate, { force: true })
-    const on = applyGate(run.paths, run.state, usage, at, view)
+    if (quota) {
+      const on = applyGate(run.paths, run.state, null, at)
+      return out(`mark ${pct}%`, quotaLine(quota), on ? 'new work held' : 'ok')
+    }
+    const on = applyGate(run.paths, run.state, usage, at, view, 'mark')
     if (confirm) return out(confirm, ...(on ? ['at the mark'] : []))
     out(`mark ${pct}%`, weekLine(usage), on ? 'at the mark' : 'ok')
   },
@@ -672,11 +689,38 @@ const commands = {
     out(`Spend command set. It says ${dollars(result.usd)} for the last 7 days; LCW now takes the figure from it.`)
   },
 
+  async 'quota-command'() {
+    if (rest.length === 1 && rest[0] === 'off') {
+      const result = await disableQuota(home())
+      if (!result.ok) fail(`Not disabled: ${result.code}.`)
+      return out('External quota command off. Default session selection restored.')
+    }
+    if (!rest.length) {
+      const state = readQuotaState(home())
+      if (!state || quotaOff(state)) return out('No external quota command set.')
+      const view = evaluateQuota({ sourceId: QUOTA_SOURCE_ID, endpoint: state.endpoint }, state, now(), sessionMark(sessionId))
+      const label = activeQuota(state) ? `External quota for ${state.endpoint}` : 'External quota'
+      return out(view.status === 'ok'
+        ? `${label}: ${view.percentUsed}% used; resets ${view.resetsAt}${view.blocked ? '; provider blocked' : ''}.`
+        : `${label}: ${view.status} (${view.code}); new work held.`)
+    }
+    if (rest.length < 2 || rest[0] === 'off') fail('Usage: lcw quota-command <endpoint> <command line>, quota-command, or quota-command off.')
+    const result = await configureQuota(home(), rest[0], rest.slice(1).join(' '), { now })
+    if (!result.ok) fail(`Not set: ${result.code}. The prior quota setting stays as it was.`)
+    out(`External quota command set: ${result.result.weekly.percentUsed}% used${result.result.blocked ? '; provider blocked' : ''}.`)
+  },
+
   usage() {
     const run = findRun({ sessionId, cwd })
     const at = now()
     const usage = readUsage()
     const driver = run?.state.driver ?? sessionId
+    const mark = run ? driverMark(run.state) : sessionMark(driver)
+    const quota = readSessionQuota(driver, at, mark)
+    if (quota) {
+      const on = run ? applyGate(run.paths, run.state, null, at) : quota.hold
+      return out(quotaLine(quota), `resets: ${quota.resetsAt ?? 'unknown'}`, `mark: ${mark}%`, on ? 'new work held' : 'ok')
+    }
     const view = driver ? readMoney({ sessionId: driver, now: at }) : machineMoney(at)
     if (view) {
       const reached = run ? applyGate(run.paths, run.state, usage, at, view) : atMark(null, null, at, view)
@@ -704,10 +748,11 @@ const commands = {
     const w = usage?.sevenDay
     const lines = [weekLine(usage), `resets: ${w?.resetsAt ?? 'unknown'}`]
     if (run) {
-      lines.push(`mark: ${run.state.markPercent}%`)
-      // an expired gate stays for the mod to wake the session, but the new week may be at the mark already
-      if (gateExpired(readJson(run.paths.gate), at)) lines.push(atMark(run.state.markPercent ?? DEFAULT_MARK, usage, at) ? 'at the mark' : 'the limit has reset')
-      else lines.push(applyGate(run.paths, run.state, usage, at) ? 'at the mark' : 'ok')
+      const on = applyGate(run.paths, run.state, usage, at)
+      lines.push(`mark: ${driverMark(run.state)}%`)
+      // An expired gate stays for the mod to wake the session, but the new week may be at the mark already.
+      if (gateExpired(readJson(run.paths.gate), at)) lines.push(atMark(driverMark(run.state), usage, at) ? 'at the mark' : 'the limit has reset')
+      else lines.push(on ? 'at the mark' : 'ok')
     } else if (sessionId) {
       const mark = sessionMark(sessionId)
       lines.push(`mark: ${mark}%`, atMark(mark, usage, at) ? 'at the mark' : 'ok')
@@ -725,7 +770,14 @@ const commands = {
 
   resume() {
     const run = need()
-    fs.rmSync(run.paths.gate, { force: true })
+    const quota = readSessionQuota(run.state.driver ?? sessionId, now(), driverMark(run.state))
+    const ownQuota = readSessionQuota(sessionId, now(), sessionMark(sessionId))
+    const heldQuota = quota?.hold ? quota : ownQuota?.hold ? ownQuota : null
+    if (heldQuota) {
+      applyGate(run.paths, run.state, null, now())
+      fail(`${quotaLine(heldQuota)}. The run stays paused.`)
+    }
+    if (applyGate(run.paths, run.state, readUsage(), now(), readMoney({ sessionId: run.state.driver, now: now(), state: run.state }), 'resume')) fail('Usage control is unavailable or holds new work; the run stays paused.')
     change(run, 'resumed', (s) => { s.status = withYou(s.stage) ? 'with-you' : 'running'; s.pausedReason = null; s.pausedAt = null })
     out('resumed')
   },
@@ -745,7 +797,7 @@ const commands = {
   finish() {
     const run = need()
     const written = readJson(`${run.dir}/totals.json`)
-    const share = weekShare(run.state, readUsage()?.sevenDay)
+    const share = readSessionQuota(run.state.driver, now(), driverMark(run.state)) ? null : weekShare(run.state, readUsage()?.sevenDay)
     const spent = readMoney({ sessionId: run.state.driver ?? sessionId, now: now(), state: run.state })?.runUsd
     const dropped = isSweep(run.state) ? endHunts(run.state) : null
     change(run, `finished${dropped ? `; ${dropped}` : ''}`, (s) => {
@@ -820,6 +872,7 @@ const commands = {
     bindSession(sessionId, run.dir)
     if (run.from !== sessionId) unbindSession(run.from, run.dir) // the session that drove it no longer does, even if it comes back
     change(run, 'taken over by this session (Resume)', () => {})
+    applyGate(run.paths, run.state, readUsage(), now(), readMoney({ sessionId, now: now(), state: run.state }))
     out(`took over ${run.state.id}`)
     commands.status()
     const open = openWaves(run.state)
@@ -1511,6 +1564,12 @@ function adopt(run) {
   const s = run.state
   if (!sessionId || s.driver === sessionId) return
   const known = s.driver !== undefined && s.driver !== null
+  const fromQuota = readSessionQuota(s.driver, now(), driverMark(s))
+  const toQuota = readSessionQuota(sessionId, now(), sessionMark(sessionId))
+  if (fromQuota || toQuota) {
+    const week = usageFor(sessionId)?.sevenDay
+    Object.assign(s, { shareBefore: 0, weekAtStart: week?.percentUsed ?? null, weekResetsAt: week?.resetsAt ?? null, weekUsed: week?.percentUsed ?? null })
+  }
   // what the run has spent so far stays with it; the new session counts from where its own meter stands
   s.usdBefore = runSpend(s, (known ? cumOf(s.driver) : null) ?? s.usdAtStart ?? 0)
   s.usdAtStart = cumOf(sessionId) ?? 0
@@ -1586,13 +1645,14 @@ function withLock(dir, fn) {
 try {
   if (!command) fail(USAGE)
   if (!commands[command]) fail(`No lcw command "${command}". The commands are: ${COMMANDS}. ${SEE_HELP}`)
+  noteQuotaSession(sessionId)
   const byId = BY_ID.includes(command)
   const run = byId ? namedRun() : MUTATING.includes(command) ? findRun({ sessionId, cwd }) : null
   if (run) withLock(run.dir, () => {
     run.state = loadState(run.paths)
     if (byId) checkClaim(run) // before anything is saved, which would make the run look shown
     if (moveOldWave(run.state)) save(run.paths, run.state)
-    Object.assign(run.state, weekOf(run.state, readUsage()?.sevenDay))
+    Object.assign(run.state, weekOf(run.state, usageFor(run.state.driver ?? sessionId, now(), driverMark(run.state))?.sevenDay))
     if (command !== 'abandon') adopt(run)
     held = run
     commands[command]()

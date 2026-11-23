@@ -1,6 +1,7 @@
 // The mod's pure decisions, kept apart from register.tsx so node --test can reach them.
 
 import { gateExpired } from '../lib/usage.mjs'
+import { MAX_AGE_MS } from '../lib/quota.mjs'
 import { thresholds as TH } from '../lib/theme.mjs'
 import { recordReading, next0800 } from '../lib/spend.mjs'
 import { settle } from '../lib/billing.mjs'
@@ -291,22 +292,42 @@ export function gateFor(state, sevenDay, now, money) {
   return { reason: 'mark', markPercent: mark, usedPercent: sevenDay.percentUsed, resetsAt: sevenDay.resetsAt ?? null, at: now }
 }
 
-/**
- * Whether a gate gateFor gave is written over the one on disk: there is none, or that one is a usage gate with no
- * reset time (which would never lift) and this one has it. A dollar gate is never replaced.
- */
+export function gateIdentity(gate) {
+  return gate?.unit === 'quota'
+    ? JSON.stringify([gate.holdId, gate.sourceId, gate.revision, gate.requestId, gate.accountKey, gate.resetsAt, gate.at])
+    : JSON.stringify([gate?.unit ?? 'percent', gate?.resetsAt, gate?.retryAt, gate?.markPercent, gate?.markUsd, gate?.at])
+}
+
+/** A recovery must carry a new allowable observation, not just an elapsed reset. */
+export function quotaWakeEvidence(gate, quota, now) {
+  if (!gate || !quota || (gate.unit === 'quota' && quota.sourceId !== gate.sourceId) || quota.status !== 'ok' || quota.hold || quota.blocked) return null
+  if (!quota.revision || !quota.requestId || !quota.accountKey || !(Date.parse(quota.resetsAt) > now)) return null
+  if (!Number.isFinite(quota.observedAt) || quota.observedAt > now || now - quota.observedAt >= MAX_AGE_MS) return null
+  if (quota.revision === gate.revision && quota.requestId === gate.requestId) return null
+  return {
+    gate: gateIdentity(gate),
+    evidence: JSON.stringify([quota.sourceId, quota.revision, quota.accountKey, quota.resetsAt, quota.requestId, quota.observedAt]),
+  }
+}
+
+/** Whether a native usage gate can gain a known reset; dollar and external gates keep their own evidence. */
 export function replacesGate(current, next) {
   if (!next) return false
   if (!current) return true
   const known = (g) => Number.isFinite(Date.parse(g?.resetsAt ?? ''))
-  return current.unit !== 'usd' && next.unit !== 'usd' && !known(current) && known(next)
+  return !['usd', 'quota'].includes(current.unit) && !['usd', 'quota'].includes(next.unit) && !known(current) && known(next)
 }
 
 /**
  * True once a gate's reset time has passed and this reset has not been handled yet. A dollar gate is due at its
  * retryAt, and at once in a session settled as a subscription, where a dollar mark never holds.
  */
-export function wakeDue(gate, now, wokeFor, billing) {
+export function wakeDue(gate, now, wokeFor, billing, quota) {
+  if (gate?.unit === 'quota') {
+    const proof = quotaWakeEvidence(gate, quota, now)
+    return !!proof && proof.gate !== wokeFor
+  }
+  if (quota) return false
   if (gate?.unit === 'usd') return gate.retryAt !== wokeFor && (billing === 'subscription' || gate.retryAt <= now)
   return !!gate && gate.resetsAt !== wokeFor && gateExpired(gate, now)
 }
@@ -343,6 +364,10 @@ export function retryGate(gate, money, now) {
   return { ...gate, retryAt: next0800(now), retried: true }
 }
 
+export function quotaBilling(session, quota) {
+  return quota ? 'subscription' : session?.quotaSelection ? session.quotaDefaultBilling ?? 'unclear' : session?.billing ?? 'unclear'
+}
+
 /**
  * What one session.measure reading does to the session's billing and its spend record. A weekly figure settles a
  * subscription, whose spend is dropped; a reply (a cost above 0) without one settles an unclear session as
@@ -350,9 +375,9 @@ export function retryGate(gate, money, now) {
  * no ledger, and then nothing is recorded. rec is the stored record, null when there is none (undefined when it
  * could not be read). record is the record to write, or null when nothing changed.
  */
-export function measureStep(session, rec, { weekly, cost }, now) {
+export function measureStep(session, rec, { weekly, cost, quota }, now) {
   const was = session?.billing ?? 'unclear'
-  const billing = settle(was, { weekly, replied: cost > 0 })
+  const billing = quota ? 'subscription' : settle(quotaBilling(session, quota), { weekly, replied: cost > 0 })
   const changed = billing !== was
   if (billing === 'subscription') return { billing, changed, record: null, drop: rec !== null }
   const next = recordReading(rec, cost, now)

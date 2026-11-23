@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import { fnv1a32hex } from '../../lib/key.mjs'
 import { spawn } from 'node:child_process'
 import { tmp, makeRepo, git, lcw, readJson, started, CLI } from './helpers.mjs'
+import { wakeable } from '../../hooks/lcw-mod.mjs'
 
 process.env.TZ = 'Europe/Dublin'
 const NOW = new Date(2026, 5, 10, 10, 0).getTime() // June 10 2026, 10:00 local
@@ -119,7 +120,14 @@ test('no gate is written for a run the human paused; resume lets it be evaluated
   fs.writeFileSync(`${t.home}/usage.json`, JSON.stringify({ at: 1, sevenDay: { percentUsed: 90, resetsAt: new Date(Date.now() + 1e8).toISOString() }, source: 'statusline' }))
   t.cli('stage', 'Spec')
   t.cli('pause', 'human')
-  assert.match(t.cli('usage').out, /ok/)
+  const paused = fs.readFileSync(`${t.dir}/state.json`, 'utf8')
+  const ledger = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
+  assert.match(t.cli('usage').out, /week: 90% used[\s\S]*mark: 75%\nat the mark/)
+  assert.equal(fs.readFileSync(`${t.dir}/state.json`, 'utf8'), paused)
+  assert.equal(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), ledger)
+  assert.equal(t.state().status, 'paused')
+  assert.equal(t.state().pausedReason, 'human')
+  assert.equal(wakeable(t.state()), false)
   assert.ok(!fs.existsSync(`${t.dir}/gate`))
   t.cli('resume')
   t.cli('usage')
