@@ -346,6 +346,10 @@ export function retryGate(gate, money, now) {
   return { ...gate, retryAt: next0800(now), retried: true }
 }
 
+export function quotaBilling(session, quota) {
+  return quota ? 'subscription' : session?.quotaSelection ? session.quotaDefaultBilling ?? 'unclear' : session?.billing ?? 'unclear'
+}
+
 /**
  * What one session.measure reading does to the session's billing and its spend record. A weekly figure settles a
  * subscription, whose spend is dropped; a reply (a cost above 0) without one settles an unclear session as
@@ -355,7 +359,7 @@ export function retryGate(gate, money, now) {
  */
 export function measureStep(session, rec, { weekly, cost, quota }, now) {
   const was = session?.billing ?? 'unclear'
-  const billing = quota ? 'subscription' : settle(was, { weekly, replied: cost > 0 })
+  const billing = quota ? 'subscription' : settle(quotaBilling(session, quota), { weekly, replied: cost > 0 })
   const changed = billing !== was
   if (billing === 'subscription') return { billing, changed, record: null, drop: rec !== null }
   const next = recordReading(rec, cost, now)

@@ -34,7 +34,9 @@ export function quotaWakeEvidence(gate: any, quota: import('../lib/quota.mjs').Q
 export function wakeDue(gate: { resetsAt?: string | null; unit?: string; retryAt?: number } | null | undefined, now: number,
   wokeFor: string | number | null | undefined, billing?: Billing | string, quota?: import('../lib/quota.mjs').QuotaView | null): boolean
 export function retryGate(gate: UsdGate, money: Money | null | undefined, now: number): UsdGate | null
-export function measureStep(session: { billing?: Billing } | null | undefined, rec: SpendRecord | null | undefined,
+type QuotaSession = { billing?: Billing; quotaSelection?: import('../lib/quota.mjs').QuotaSelection | null; quotaDefaultBilling?: Billing }
+export function quotaBilling(session: QuotaSession | null | undefined, quota: import('../lib/quota.mjs').QuotaView | null | undefined): Billing
+export function measureStep(session: QuotaSession | null | undefined, rec: SpendRecord | null | undefined,
   reading: { weekly: unknown; cost: number | undefined; quota?: import('../lib/quota.mjs').QuotaView | null }, now: number): { billing: Billing; changed: boolean; record: SpendRecord | null; drop: boolean }
 export function usdWakePrompt(root: string, markUsd: number | null): string
 export function wakeable(state: any): boolean

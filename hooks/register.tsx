@@ -14,7 +14,7 @@ import type { QuotaView } from '../lib/quota.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep,
   longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, resumePrompt, retryGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
-  wakeable, wakeDue, wakePrompt, quotaWakeEvidence,
+  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling,
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
@@ -144,7 +144,9 @@ async function spendName($: EngineInterface) {
 // cap, the session's mark, the run's own spend (this session's cost so far is its record's highest reading), and
 // the next try from a dollar gate. Nothing in ~/.lcw/spend is read for any other session.
 async function readMoney($: EngineInterface, session: any, state: any, gate: any, now: number) {
-  if (session?.billing !== 'payg' || await readQuota($, session, state?.markPercent ?? session?.markPercent ?? 100, now)) return null
+  const quota = await readQuota($, session, state?.markPercent ?? session?.markPercent ?? 100, now)
+  if (quotaBilling(session, quota) !== 'payg') return null
+  session = { ...session, billing: 'payg' }
   const home = await lcwHome($)
   const dir = spendDir(home)
   const names = ((await $.fs.list(dir).catch(() => [])) as { name: string; kind: string; mtimeMs: number }[])
@@ -217,7 +219,7 @@ async function refresh($: EngineInterface) {
     if (now - S.startedAt <= 10000 && !run.quota?.hold && reopenDue(run.state, run.gate, aliveAt, now)) submitSoon($, reopenPrompt($.plugin.root))
   }
   if (run.gate?.unit === 'quota') { await recoverQuota($, run, now); return }
-  if (!wakeDue(run.gate, now, S.wokeFor, run.session?.billing, run.quota)) return
+  if (!wakeDue(run.gate, now, S.wokeFor, quotaBilling(run.session, run.quota), run.quota)) return
   const gate = run.gate
   // Set before anything is awaited: refreshes overlap, and this try is made once.
   S.wokeFor = gate.unit === 'usd' ? gate.retryAt : gate.resetsAt
@@ -342,7 +344,7 @@ async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
   // When the week reached the mark, until it has been below it for a minute: a climb back is another occurrence of the mark box.
   S.mark = markSpell(S.mark, week.atMark, now)
   return {
-    now, mac: S.mac, billing: quota ? 'subscription' : (run?.session ?? session)?.billing, advisorModel, advisorFlag: !!session?.advisorFlag, capSet: Number(cap?.usd) > 0,
+    now, mac: S.mac, billing: quotaBilling(run?.session ?? session, quota), advisorModel, advisorFlag: !!session?.advisorFlag, capSet: Number(cap?.usd) > 0,
     spendCommandSet: !!command?.command, notices, dismissed: S.banner.dismissed, repoKey: S.repoKey ?? undefined,
     run: runF,
     usage: { ...week, since: S.mark.since || undefined },

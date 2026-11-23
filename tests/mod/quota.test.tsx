@@ -52,6 +52,26 @@ const filesFor = (externalDriver = true) => ({
 const start = ($: any) => $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
 const measure = ($: any) => $.session.measure({ context: { window: 200000 }, changed: ['rateLimits'], rateLimits: [{ kind: 'seven_day', percentUsed: 99, resetsAt }], cost: { usd: 10 } } as any)
 
+test('an explicitly disabled source restores the saved dollar display before the next Node hook', async ($, on) => {
+  const files: Record<string, string> = {
+    '/lcw/sessions/s1.json': JSON.stringify({ runDir: RUN, billing: 'subscription', quotaSelection: selection, quotaDefaultBilling: 'payg' }),
+    [RUN + '/state.json']: JSON.stringify({ id: 'x', status: 'paused', pausedReason: 'mark', stage: 'Build', driver: 's1' }),
+    [QUOTA]: JSON.stringify({ v: 1, sourceId: 'external-quota', revision: 'off', enabled: false }),
+  }
+  engine(on, files)
+  await start($)
+  const band = await $.ui.mount({
+    plugin: 'lcw', surface: 'terminal', component: 'AbovePrompt',
+    props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 20, bodyColumns: 100, scroll: { offset: 0, bodyRows: 19 }, view: {} },
+  } as any)
+  expect(await band.find({ type: 'Text', text: /paused at your \$3,000 mark/ })).toBeDefined()
+  await band.unmount()
+  await $.session.measure({ context: { window: 200000 }, changed: ['cost'], rateLimits: [], cost: { usd: 10 } } as any)
+  expect(JSON.parse(files['/lcw/sessions/s1.json']).billing).toBe('payg')
+  expect(JSON.parse(files['/lcw/spend/s1.json']).max).toBe(10)
+  expect(files['/lcw/usage.json']).toBe(undefined)
+})
+
 test('an external session never feeds proxy native-looking usage into the native cache', async ($, on) => {
   const native = JSON.stringify({ at: NOW - 1000, sevenDay: { percentUsed: 20, resetsAt } })
   const w = engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription', quotaSelection: selection }), '/lcw/usage.json': native, [QUOTA]: record() })

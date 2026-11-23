@@ -4,7 +4,7 @@ import { renderStatusRows } from '../../lib/status.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
 import { bannerFor } from '../../lib/banner.mjs'
 import { usageFact } from '../../hooks/boxes.mjs'
-import { wakeDue } from '../../hooks/lcw-mod.mjs'
+import { measureStep, wakeDue } from '../../hooks/lcw-mod.mjs'
 
 const NOW = Date.parse('2026-11-18T12:00:00Z')
 const resetsAt = '2026-11-22T12:00:00Z'
@@ -59,6 +59,17 @@ test('an external default mark stays at the evaluated 100 percent in facts and c
   const withoutMark = { ...state, markPercent: undefined }
   assert.equal(usageFact({ state: withoutMark, quota, now: NOW }).markPercent, 100)
   assert.equal(buildView({ state: withoutMark, quota, now: NOW }).mark, 100)
+})
+
+test('disabling external quota restores only its saved billing while a broken source remains subscription-backed', () => {
+  for (const billing of ['payg', 'subscription', 'unclear', undefined]) {
+    const session = { billing: 'subscription', quotaSelection: { sourceId: 'external-quota' }, quotaDefaultBilling: billing }
+    const restored = measureStep(session, null, { weekly: null, cost: undefined, quota: null }, NOW)
+    assert.equal(restored.billing, billing ?? 'unclear')
+    const held = measureStep(session, null, { weekly: null, cost: 10, quota: { ...quota, status: 'unavailable', hold: true } }, NOW)
+    assert.equal(held.billing, 'subscription')
+    assert.equal(held.record, null)
+  }
 })
 
 test('external recovery requires fresh allowable evidence rather than an expired reset', () => {
