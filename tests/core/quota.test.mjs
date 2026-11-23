@@ -16,6 +16,14 @@ test('endpoint matching canonicalizes URLs but rejects ambiguous selectors', () 
   assert.equal(selectQuota(undefined, state()), null)
 })
 
+test('a null configured endpoint neither selects sessions nor authorizes an existing selection', () => {
+  const invalid = { ...state(), endpoint: null }
+  assert.equal(selectQuota(undefined, invalid), null)
+  assert.equal(selectQuota(null, invalid), null)
+  assert.equal(evaluateQuota(selection, invalid, at, 80).hold, true)
+  assert.equal(evaluateQuota(selection, invalid, at, 80).code, 'config-unavailable')
+})
+
 test('wire validation accepts only complete bounded successes and allowlisted failures', () => {
   assert.deepEqual(parseQuotaResult(JSON.stringify({ ...ok, secret: 'discard' }), at), ok)
   assert.equal(parseQuotaResult(JSON.stringify({ ...ok, weekly: { percentUsed: 1, resetsAt: '2026-01-02T13:00:00+01:00' } }), at).weekly.resetsAt, ok.weekly.resetsAt)

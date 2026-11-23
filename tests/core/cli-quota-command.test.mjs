@@ -20,7 +20,11 @@ test('quota command configures, inspects and disables independently of dollars a
   const env = { ...process.env, HOME: dir, LCW_HOME: home, LCW_NOW: String(at) }
   const run = (...args) => spawnSync(process.execPath, [cli, ...args], { env, encoding: 'utf8', timeout: 5000 })
   const command = `${JSON.stringify(process.execPath)} -e ${JSON.stringify(`process.stdout.write(${JSON.stringify(JSON.stringify(ok))})`)}`
-  assert.equal(run('quota-command').status, 0)
+  const unset = run('quota-command')
+  assert.equal(unset.status, 0)
+  assert.equal(run('quota-command', 'http://localhost:8080/v1', 'printf credential-secret').status, 1)
+  assert.equal(fs.existsSync(path.join(home, 'quota-command.json')), false)
+  assert.equal(run('quota-command').stdout, unset.stdout)
   const set = run('quota-command', 'http://LOCALHOST:8080/v1/', command, '--session', 'test-session')
   assert.equal(set.status, 0, set.stdout + set.stderr)
   const state = JSON.parse(fs.readFileSync(path.join(home, 'quota-command.json'), 'utf8'))

@@ -110,11 +110,20 @@ test('a failed runner is stored only as a generic code, never its output', async
   assert.equal(fs.readFileSync(quotaFile(home), 'utf8').includes('credential-secret'), false)
 })
 
+test('an interrupted empty lock does not prevent disabling the source', async (t) => {
+  const home = fixture(t)
+  await setup(home)
+  fs.mkdirSync(`${quotaFile(home)}.lock`)
+  assert.deepEqual(await disableQuota(home), { ok: true })
+  assert.equal(readQuotaState(home).enabled, false)
+})
+
 test('real separate processes serialize claims for the same revision', async (t) => {
   const home = fixture(t)
   await setup(home)
   const url = new URL('../../scripts/lib/quota-command.mjs', import.meta.url).href
   const source = `import { claimRefresh } from ${JSON.stringify(url)}; console.log(JSON.stringify(await claimRefresh(process.argv[1], ${at + 300000})))`
+  fs.mkdirSync(`${quotaFile(home)}.lock`)
   const results = await Promise.all(Array.from({ length: 4 }, () => promisify(execFile)(process.execPath, ['--input-type=module', '-e', source, home])))
   assert.equal(results.map((r) => JSON.parse(r.stdout)).filter(Boolean).length, 1)
 })

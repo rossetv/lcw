@@ -14,10 +14,11 @@ const clock = () => process.env.LCW_NOW !== undefined && process.env.LCW_NOW !==
 
 export const readQuotaState = (home) => readJson(quotaFile(home))
 
-// A dead owner can be removed only by the caller that unlinks its unique marker.
+// Shared lock directories are populated before acquisition, so an empty one has no owner.
 function reap(lock) {
   try {
     const names = fs.readdirSync(lock)
+    if (!names.length) { fs.rmdirSync(lock); return }
     if (names.length !== 1 || !/^\d+-[a-f0-9-]+$/.test(names[0])) return
     const pid = Number(names[0].split('-')[0])
     try { process.kill(pid, 0); return } catch (e) { if (e.code !== 'ESRCH') return }
@@ -30,32 +31,34 @@ async function commit(home, fn) {
   const file = quotaFile(home)
   const lock = `${file}.lock`
   const marker = `${process.pid}-${randomUUID()}`
+  const prepared = `${lock}.${marker}`
   const until = Date.now() + 2000
   try {
     fs.mkdirSync(home, { recursive: true, mode: 0o700 })
-    for (;;) {
-      try { fs.mkdirSync(lock, { mode: 0o700 }); break } catch (e) {
-        if (e.code !== 'EEXIST' || Date.now() >= until) throw new Error('quota state unavailable')
-        reap(lock)
-        await new Promise((r) => setTimeout(r, 10))
-      }
-    }
-    fs.writeFileSync(`${lock}/${marker}`, '', { flag: 'wx', mode: 0o600 })
+    fs.mkdirSync(prepared, { mode: 0o700 })
     try {
-      const state = readQuotaState(home)
-      const { next, value } = fn(state)
-      if (next !== undefined) {
-        const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`
-        try {
-          fs.writeFileSync(tmp, JSON.stringify(next) + '\n', { mode: 0o600, flag: 'wx' })
-          fs.renameSync(tmp, file)
-        } finally { try { fs.unlinkSync(tmp) } catch {} }
+      fs.writeFileSync(`${prepared}/${marker}`, '', { flag: 'wx', mode: 0o600 })
+      for (;;) {
+        try { fs.renameSync(prepared, lock); break } catch (e) {
+          if (!['EEXIST', 'ENOTEMPTY'].includes(e.code) || Date.now() >= until) throw new Error('quota state unavailable')
+          reap(lock)
+          await new Promise((r) => setTimeout(r, 10))
+        }
       }
-      return value
-    } finally {
-      fs.unlinkSync(`${lock}/${marker}`)
-      fs.rmdirSync(lock)
-    }
+      try {
+        const state = readQuotaState(home)
+        const { next, value } = fn(state)
+        if (next === null) fs.rmSync(file, { force: true })
+        else if (next !== undefined) {
+          const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`
+          try {
+            fs.writeFileSync(tmp, JSON.stringify(next) + '\n', { mode: 0o600, flag: 'wx' })
+            fs.renameSync(tmp, file)
+          } finally { try { fs.unlinkSync(tmp) } catch {} }
+        }
+        return value
+      } finally { fs.renameSync(lock, prepared) }
+    } finally { fs.rmSync(prepared, { recursive: true, force: true }) }
   } catch { throw new Error('quota state unavailable') }
 }
 
@@ -122,11 +125,11 @@ export async function configureQuota(home, endpoint, command, { now = clock, run
     return await commit(home, (state) => {
       if (state?.setupRequestId !== requestId || (state.revision ?? null) !== expected) return { value: { ok: false, code: 'superseded' } }
       const { setupRequestId, ...old } = state
-      if (result.status !== 'ok') return { next: old, value: { ok: false, code: result.code } }
+      if (result.status !== 'ok') return { next: Object.keys(old).length ? old : null, value: { ok: false, code: result.code } }
       const revision = randomUUID()
       const completedAt = now()
       result = validateQuotaResult(result, completedAt)
-      if (result.status !== 'ok') return { next: old, value: { ok: false, code: result.code } }
+      if (result.status !== 'ok') return { next: Object.keys(old).length ? old : null, value: { ok: false, code: result.code } }
       return {
         next: { v: 1, enabled: true, sourceId: QUOTA_SOURCE_ID, revision, endpoint, command, setAt: completedAt, lastAttemptAt: startedAt, cache: { revision, requestId, attemptedAt: startedAt, completedAt, result } },
         value: { ok: true, revision, result },
