@@ -1,25 +1,31 @@
-# External subscription quota adapter
+# Billing and external quota
 
-Use this when your custom endpoint is backed by a subscription and you have a reader that can report its real weekly quota. LCW does not include a provider-specific adapter, identify your billing plan from the endpoint, or install one during the optional setup conversation. Keep dollar tracking or dismiss the offer if this does not apply.
+LCW tracks a Claude subscription by the week's usage, and API billing by estimated dollars. If your `ANTHROPIC_BASE_URL` points at a proxy backed by a subscription, and you have a program that reads its real weekly quota, LCW can track that instead. LCW ships no such reader and cannot tell your plan from the endpoint; without one, keep dollar tracking.
 
-After installing a release with `quota-command` (or running `claude plugin update lcw` and restarting), make your reader available on `PATH`, then configure its exact `ANTHROPIC_BASE_URL` endpoint:
+## Set it up
+
+Put your reader on `PATH`, then:
 
 ```sh
-lcw quota-command 'https://proxy.example/v1' 'quota-reader'
-lcw quota-command
-lcw quota-command off
+lcw quota-command 'https://proxy.example/v1' 'quota-reader'   # set it for this endpoint
+lcw quota-command                                             # show the setting
+lcw quota-command off                                         # turn it off
 ```
 
-The first command requires a successful reading; the second inspects the setting, and `off` disables it without changing the separate spend command. A failed replacement keeps the previous setting. Equivalent URLs normalize to the same endpoint, but another path or host does not match; selectors containing credentials, queries or fragments are rejected. Native sessions and other endpoints keep their own billing selection.
+Setting it needs one good reading; if that fails, the old setting stays. Only that endpoint matches (a trailing slash aside, another host or path does not), and an endpoint with credentials, a query or a fragment is refused. Keep credentials in the reader's own configuration, never in the command.
 
-The reader must exit successfully within 30 seconds and print one JSON object to stdout. A successful reading has this shape; values are illustrative, not a reset date to reuse:
+## What the reader prints
+
+Within 30 seconds, exit successfully and print one JSON object:
 
 ```json
 {"v":1,"status":"ok","accountKey":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","weekly":{"percentUsed":42,"resetsAt":"2026-12-01T12:00:00.000Z"},"blocked":false}
 ```
 
-`accountKey` is a stable, non-secret 64-character lowercase hex digest (optionally prefixed `sha256:`), never a raw identifier. `percentUsed` is finite and between 0 and 100; `resetsAt` must be the provider's actual future weekly reset in ISO date-time format, not an invented rolling date. `blocked` is a boolean. When no trustworthy weekly window exists, print `{"v":1,"status":"unavailable","code":"no-weekly-window"}`; for provider refusal, print `{"v":1,"status":"refused","code":"provider-refused"}`. Other accepted failure codes are `auth`, `network`, `timeout`, `invalid-response`, `ambiguous-weekly-window`, `account-changed`, and `command-failed`. Failure results may carry the same non-secret `accountKey`, but cannot configure the source.
+- `accountKey`: a stable 64-character lowercase hex digest, optionally prefixed `sha256:`, never a raw identifier.
+- `percentUsed`: 0 to 100. `resetsAt`: the provider's real next weekly reset, never an invented one.
+- On failure, print `{"v":1,"status":"unavailable","code":"no-weekly-window"}`, or `"status":"refused","code":"provider-refused"`. Other codes: `auth`, `network`, `timeout`, `invalid-response`, `ambiguous-weekly-window`, `account-changed`, `command-failed`.
 
-LCW refreshes about every five minutes. A failed, refused, blocked or stale reading, or a percentage at your mark, holds new work; an earlier good reading is history, not permission. A reset needs a fresh allowable reading to resume work, and does not clear a human pause. Percentages are **account-wide**, not attributable to this machine or repository, and provide no dollar estimate.
+## How LCW uses it
 
-Keep credentials in your reader's protected configuration, not in the saved command text, arguments or environment assignments. The reader runs only in a POSIX environment; native Windows fails closed as `command-failed`, while WSL provides a Linux environment.
+It reads about every five minutes. A failed, refused, blocked or stale reading holds new work, as does reaching your mark; after a reset, work resumes only on a fresh good reading, and never undoes a pause you asked for. The percentage is the whole account's, not this machine's, and gives no dollar figure. The reader needs a POSIX system: on native Windows it always fails; WSL works.
