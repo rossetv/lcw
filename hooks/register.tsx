@@ -816,6 +816,9 @@ export const register: Register = (on) => {
 
   // The main session's turn ended on an API error: carried on later if its kind clears on its own. A subagent's
   // error is its orchestrator's to deal with.
+  // The Artifact tool's definition is as large as every other tool's together and seldom used: it waits behind tool search, for the session and its agents.
+  on('tool.describe', { tool: 'Artifact' }, async ($, e, next) => ({ ...(await next(e)), isDeferred: true }))
+
   on('classic.StopFailure', async ($, e, next) => {
     const result = await next(e)
     try { if (!e.agent_id) setCarry($, carryFailed(S.carry, e.error, await $.clock.now())) } catch {}

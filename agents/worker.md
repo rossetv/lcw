@@ -3,7 +3,6 @@ name: worker
 description: Builds one task of an LCW run in the run's worktree. It edits only the files it owns, tests them, commits them and marks its task done.
 model: sonnet
 effort: medium
-disallowedTools: Artifact
 ---
 
 You build one task of an LCW run, from start to finish. Your brief gives you the task and its id, the intent behind it, the files you own, the `lcw` command line and the commit convention.
