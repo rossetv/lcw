@@ -4,7 +4,7 @@ LCW tracks a Claude subscription by the week's usage, and API billing by estimat
 
 ## Set it up
 
-Put your reader on `PATH`, then:
+Put your reader on `PATH`, then ask Claude to run these (`lcw` is Claude's command, not one on your `PATH`):
 
 ```sh
 lcw quota-command 'https://proxy.example/v1' 'quota-reader'   # set it for this endpoint
@@ -12,18 +12,19 @@ lcw quota-command                                             # show the setting
 lcw quota-command off                                         # turn it off
 ```
 
-Setting it needs one good reading; if that fails, the old setting stays. Only that endpoint matches (a trailing slash aside, another host or path does not), and an endpoint with credentials, a query or a fragment is refused. Keep credentials in the reader's own configuration, never in the command.
+Setting it needs one good reading; if that fails, the old setting stays. Only that endpoint matches (the same URL written another way, with a trailing slash, capital letters in the host or the default port, still does; another host or path does not), and an endpoint with credentials, a query or a fragment is refused. Keep credentials in the reader's own configuration, never in the command.
 
 ## What the reader prints
 
-Within 30 seconds, exit successfully and print one JSON object:
+Within 30 seconds, exit successfully and print one JSON object (values here are an example):
 
 ```json
 {"v":1,"status":"ok","accountKey":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","weekly":{"percentUsed":42,"resetsAt":"2026-12-01T12:00:00.000Z"},"blocked":false}
 ```
 
 - `accountKey`: a stable 64-character lowercase hex digest, optionally prefixed `sha256:`, never a raw identifier.
-- `percentUsed`: 0 to 100. `resetsAt`: the provider's real next weekly reset, never an invented one.
+- `percentUsed`: 0 to 100. `resetsAt`: the provider's real next weekly reset, never an invented one: an ISO 8601 date-time ending in `Z` or an offset, in the future.
+- `blocked`: required, `true` or `false`.
 - On failure, print `{"v":1,"status":"unavailable","code":"no-weekly-window"}`, or `"status":"refused","code":"provider-refused"`. Other codes: `auth`, `network`, `timeout`, `invalid-response`, `ambiguous-weekly-window`, `account-changed`, `command-failed`.
 
 ## How LCW uses it
