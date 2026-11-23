@@ -330,12 +330,17 @@ const commands = {
     const main = mainCheckout(cwd)
     const branchTaken = (nm) => { try { git(main, 'rev-parse', '--verify', '-q', `refs/heads/lcw/${nm}`); return true } catch { return false } }
     let id = base, runName = slug(name), n = 1
-    while (fs.existsSync(`${runsDir(home(), key)}/${id}`) || branchTaken(runName)) {
+    const before = machineRunCount()
+    fs.mkdirSync(runsDir(home(), key), { recursive: true })
+    // mkdir without recursive is the claim: of two starts at one instant, only one makes the folder
+    for (;;) {
+      if (!branchTaken(runName)) {
+        try { fs.mkdirSync(`${runsDir(home(), key)}/${id}`); break } catch (e) { if (e.code !== 'EEXIST') throw e }
+      }
       n++
       id = `${base}-${n}`
       runName = `${slug(name)}-${n}`
     }
-    const before = machineRunCount()
     const dir = `${runsDir(home(), key)}/${id}`
     const paths = runPaths(dir)
     fs.mkdirSync(paths.artifacts, { recursive: true })
