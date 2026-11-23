@@ -317,7 +317,7 @@ test('uninstall leaves no status line when the person deleted theirs before LCW 
 })
 
 test('uninstall does not restore a saved record that is not a status line', () => {
-  for (const bad of ['[1]', '"echo"', '5', '{}', '{"command":5}']) {
+  for (const bad of ['[1]', '"echo"', '5', '{}', '{"command":5}', '{"command":""}', '{"command":"  "}']) {
     const home = tmp('home'), settings = tmp('s') + '/settings.json'
     fs.writeFileSync(settings, JSON.stringify({ statusLine: { type: 'command', command: 'echo A' } }))
     setup(home, settings, 'install')
