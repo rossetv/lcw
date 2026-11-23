@@ -1095,3 +1095,9 @@ test('no row of any board is wider than the card, at any width from 20 to 200', 
     }
   }
 });
+
+test('a cut never leaves a separator before its "…"', () => {
+  const at = (board, width, start) => strip(toAnsi(card(board, { width, frame: false }), 'dark', width)).split('\n').find(l => l.startsWith(start));
+  assert.match(at('RunningA', 55, 'tasks'), /3 running…$/);
+  assert.match(at('StageSpec', 59, 'blind review'), /reviewer 1…/);
+});
