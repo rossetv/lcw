@@ -38,6 +38,17 @@ function load() {
   fail(`${settingsPath} is not valid JSON; left untouched.`)
 }
 
+/** Writes the settings file whole: through a link to the file it names (a dotfiles manager's), keeping the link and the file's mode. */
+function put(text) {
+  let target = settingsPath, mode
+  try { target = fs.realpathSync(settingsPath); mode = fs.statSync(target).mode & 0o777 } catch {}
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  const tmp = `${target}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, text, { mode: mode ?? 0o666 })
+  if (mode !== undefined) fs.chmodSync(tmp, mode) // the umask narrows a new file's mode
+  fs.renameSync(tmp, target)
+}
+
 /** Backs up, writes, re-reads; restores the backup if the result does not parse. */
 function save(settings) {
   let backup = null
@@ -53,9 +64,9 @@ function save(settings) {
       out(`backup: ${backup}`)
     }
   }
-  writeAtomic(settingsPath, JSON.stringify(settings, null, 2) + '\n')
+  put(JSON.stringify(settings, null, 2) + '\n')
   try { JSON.parse(fs.readFileSync(settingsPath, 'utf8')) } catch {
-    if (backup) fs.copyFileSync(backup, settingsPath)
+    if (backup) put(fs.readFileSync(backup, 'utf8'))
     fail('the written settings did not parse; restored the backup.')
   }
 }
