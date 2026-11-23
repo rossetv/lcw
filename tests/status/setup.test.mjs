@@ -303,3 +303,15 @@ test('uninstall drops the saved status line even when the person had replaced th
   setup(home, settings, 'uninstall')
   assert.deepEqual(read(settings).statusLine, cc)
 })
+
+test('uninstall leaves no status line when the person deleted theirs before LCW put its own back', () => {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ statusLine: { type: 'command', command: 'starship' } }))
+  setup(home, settings, 'install')
+  fs.writeFileSync(settings, '{}')
+  setup(home, settings, 'auto')
+  assert.equal(read(settings).statusLine.command, lcwLine(home).command)
+  setup(home, settings, 'uninstall')
+  assert.equal(read(settings).statusLine, undefined)
+  assert.ok(!fs.existsSync(home + '/previous-statusline.json'))
+})

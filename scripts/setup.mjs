@@ -102,7 +102,7 @@ function setStatusLine(s) {
   if (s.statusLine && !mine(s.statusLine)) {
     writeAtomic(prevFile, JSON.stringify(s.statusLine, null, 2) + '\n')
     out(`saved your previous statusLine to ${prevFile}`)
-  }
+  } else if (!s.statusLine) fs.rmSync(prevFile, { force: true }) // the person deleted the saved line: uninstall must not bring it back
   // every second, the shortest Claude Code allows: the mascot moves once a second. A padding of 0 starts the
   // rows two cells in and shows COLUMNS - 4 of them whole (seen in 2.1.327; the shim tells the script how much
   // room it has).
