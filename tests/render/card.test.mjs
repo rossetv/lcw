@@ -71,7 +71,7 @@ const SWEEP = {
     "● running · wave 2’s PR #42 merged: it met your charter’s rule                                     ≈ 12% of your week",
     "waves ▰▰▱▱▱▱  2 done · 4 queued                                           round 1 · 54 fixed · 14 parked · 22 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  › Ship",
-    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱  27 done · 1 dropped",
+    "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰  27 done · 1 dropped",
   ],
   "12-hunt-round-2-the-queue-ran-dry": [
     "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 5m in Hunt ─╮",
@@ -655,9 +655,11 @@ test('values lcw set stores as they come do not break the card', () => {
   assert.ok(renderCard(buildView({ state: { stage: 'Spec', status: 'running', blindReview: { done: 5 }, name: 'd' }, ...at }), { width: 100, frame: true }).length);
 });
 
-test('parked tasks count in the tasks bar', () => {
+test('parked tasks count in the tasks bar while work is left, which reads finished once nothing is running or left', () => {
   const row = (statuses) => plain(renderCard(buildView({ state: { stage: 'Build', status: 'running', name: 'd', tasks: statuses.map((status, i) => ({ id: 'T' + i, title: 't', status })) }, ...at }), { width: 100, frame: true })).find(t => t.includes('tasks'));
-  assert.match(row(['done', 'done', 'parked']), /▰{16}▱{8}  2 done · 1 parked/);
+  assert.match(row(['done', 'done', 'running', 'parked']), /▰{12}▰{6}▱{6}  2 done · 1 running · 1 parked/);
+  assert.match(row(['done', 'done', 'parked']), /▰{24}  2 done · 1 parked/);
+  assert.match(row(['done', 'done', 'done', 'parked', 'parked', 'dropped']), /▰{24}  3 done · 2 parked · 1 dropped/);
   assert.match(row(['parked', 'parked']), /▱{24}  2 parked/);
 });
 
@@ -775,6 +777,18 @@ test('a wave with every task done and still in Build says its review is next', (
   // A task still to start is work left in Build, so nothing is said of the review yet.
   const left = { ...built, tasks: [...built.tasks, { id: 'T4', title: 'T4', status: 'todo' }] };
   assert.match(laneOf(laneRows(withWave1(left)), 1), / 3 of  4 tasks done +34m$/);
+});
+
+test('a built wave with parked and dropped tasks reads finished and still names the parked ones', () => {
+  const tasks = (statuses) => statuses.map((status, k) => ({ id: 'T' + k, title: 't', status }));
+  const built = { stage: 'Build', round: 0, tasks: tasks(['done', 'done', 'done', 'parked', 'parked', 'dropped']) };
+  assert.match(laneOf(laneRows(withWave1(built)), 1), /^wave 1  ▰{6}  ▰{7}  ▱{8}  ▱{6} {4}3 of  3 tasks done · 2 parked · review next +34m$/);
+  // While work is left the parked ones still count, and are named.
+  const going = { ...built, tasks: tasks(['done', 'done', 'done', 'running', 'parked', 'parked']) };
+  assert.match(laneOf(laneRows(withWave1(going)), 1), / 3 of  6 tasks done · 1 running · 2 parked +34m$/);
+  // With nothing built there is no figure: the parked ones alone.
+  const none = { ...built, tasks: tasks(['parked', 'parked', 'dropped']) };
+  assert.match(laneOf(laneRows(withWave1(none)), 1), /^wave 1  ▰{6}  ▱{7}  ▱{8}  ▱{6} {4}2 parked +34m$/);
 });
 
 test('a wave shipped and waiting on its merge keeps its lane at Ship while the charter merges as it goes', () => {
