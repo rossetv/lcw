@@ -5,7 +5,7 @@ import { sessionFile, spendFile, spendDir, capFile, runsDir, runPaths, repoKey }
 import { moneyFrom, recordReading, spendFileCounts, readingOf } from '../../lib/spend.mjs'
 import { home, readJson, writeJson } from './store.mjs'
 import { readSetting, readReading } from './spend-command.mjs'
-import { sessionBilling } from './quota-session.mjs'
+import { sessionBilling, sessionIdentity } from './quota-session.mjs'
 
 /** The stated weekly cap ({usd, at}), or null when none is stated and $4,000 is assumed. */
 export function readCap() {
@@ -59,7 +59,7 @@ export function spendRecords(now) {
  * own count; it is read only here, after the billing check, so a subscription never sees it.
  */
 export function readMoney({ sessionId, now, state = null }) {
-  const ids = [].concat(sessionId ?? [])
+  const ids = [...new Set([].concat(sessionId ?? []).flatMap((id) => [sessionIdentity(id), id]))]
   const sessions = ids.map((id) => readJson(sessionFile(home(), id)) ?? {})
   if (sessions.some((s) => s.quotaSelection && sessionBilling(s) === 'subscription')) return null
   if (sessionBilling(sessions.find((s) => typeof s.billing === 'string' || s.quotaSelection)) !== 'payg') return null

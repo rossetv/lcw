@@ -8,7 +8,7 @@ import { home, readJson, writeJson, writeAtomic, git, mainCheckout, saveState, a
 import { findRun, bindSession, unbindSession, listRuns, open, runOf, lastShown, machineRunCount } from './lib/runs.mjs'
 import { sessionFolders } from './lib/cleanup.mjs'
 import { canHold, heldByOther, keptHold, startHold, releaseHold, alive, claudeAlive } from './lib/awake.mjs'
-import { readUsage, applyGate, atMark, sessionMark, setSessionMark, DEFAULT_MARK } from './lib/gate.mjs'
+import { readUsage, applyGate, atMark, sessionMark, setSessionMark, DEFAULT_MARK, driverMark } from './lib/gate.mjs'
 import { readMoney, readCap, writeCap, spendRecords } from './lib/money.mjs'
 import { gateExpired } from '../lib/usage.mjs'
 import { weekOf, weekShare } from '../lib/card.mjs'
@@ -382,11 +382,11 @@ const commands = {
     const p = run.paths
     const ledger = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean).slice(-15)
     const money = readMoney({ sessionId: s.driver ?? sessionId, now: now() })
-    const quota = readSessionQuota(s.driver ?? sessionId, now(), s.markPercent ?? DEFAULT_MARK)
+    const quota = readSessionQuota(s.driver ?? sessionId, now(), driverMark(s))
     out(
       `Run ${s.id}: ${s.title}`,
       `stage: ${s.stage}  status: ${s.status}${s.pausedReason ? ` (${s.pausedReason})` : ''}  health: ${s.health}`,
-      `mark: ${money ? moneyMark(money) : `${s.markPercent}%`}${s.worktree ? `  worktree: ${s.worktree}  branch: ${s.branch}` : ''}${s.base ? `  base: ${s.base}` : ''}`,
+      `mark: ${money ? moneyMark(money) : `${driverMark(s)}%`}${s.worktree ? `  worktree: ${s.worktree}  branch: ${s.branch}` : ''}${s.base ? `  base: ${s.base}` : ''}`,
       ...(quota ? [quotaLine(quota), ...(quota.hold ? ['new work held'] : [])] : []),
       'tasks:', ...(s.tasks.length ? s.tasks.map((t) => `  ${t.id} [${t.status}] ${t.title}`) : ['  none']),
       'asks:', ...(s.asks.length ? s.asks.map((a) => `  ${a.n}. ${a.text}${a.wave ? ` (wave ${a.wave})` : ''}`) : ['  none']),
@@ -627,10 +627,7 @@ const commands = {
       const on = applyGate(run.paths, run.state, null, at)
       return out(`mark ${pct}%`, quotaLine(quota), on ? 'new work held' : 'ok')
     }
-    if (gateExpired(readJson(run.paths.gate), at)) fs.rmSync(run.paths.gate, { force: true })
-    // on pay-per-token billing a dollar gate waits for its 08:00 try, so a mark raised over the spend lifts it here
-    if (view && !atMark(null, null, at, view)) fs.rmSync(run.paths.gate, { force: true })
-    const on = applyGate(run.paths, run.state, usage, at, view)
+    const on = applyGate(run.paths, run.state, usage, at, view, 'mark')
     if (confirm) return out(confirm, ...(on ? ['at the mark'] : []))
     out(`mark ${pct}%`, weekLine(usage), on ? 'at the mark' : 'ok')
   },
@@ -702,7 +699,7 @@ const commands = {
     const at = now()
     const usage = readUsage()
     const driver = run?.state.driver ?? sessionId
-    const mark = run?.state.markPercent ?? sessionMark(driver)
+    const mark = run ? driverMark(run.state) : sessionMark(driver)
     const quota = readSessionQuota(driver, at, mark)
     if (quota) {
       const on = run ? applyGate(run.paths, run.state, null, at) : quota.hold
@@ -735,9 +732,10 @@ const commands = {
     const w = usage?.sevenDay
     const lines = [weekLine(usage), `resets: ${w?.resetsAt ?? 'unknown'}`]
     if (run) {
-      lines.push(`mark: ${run.state.markPercent}%`)
+      const on = applyGate(run.paths, run.state, usage, at)
+      lines.push(`mark: ${driverMark(run.state)}%`)
       if (gateExpired(readJson(run.paths.gate), at)) lines.push('the limit has reset')
-      else lines.push(applyGate(run.paths, run.state, usage, at) ? 'at the mark' : 'ok')
+      else lines.push(on ? 'at the mark' : 'ok')
     } else if (sessionId) {
       const mark = sessionMark(sessionId)
       lines.push(`mark: ${mark}%`, atMark(mark, usage, at) ? 'at the mark' : 'ok')
@@ -755,15 +753,14 @@ const commands = {
 
   resume() {
     const run = need()
-    const quota = readSessionQuota(run.state.driver ?? sessionId, now(), run.state.markPercent ?? DEFAULT_MARK)
+    const quota = readSessionQuota(run.state.driver ?? sessionId, now(), driverMark(run.state))
     const ownQuota = readSessionQuota(sessionId, now(), sessionMark(sessionId))
     const heldQuota = quota?.hold ? quota : ownQuota?.hold ? ownQuota : null
     if (heldQuota) {
       applyGate(run.paths, run.state, null, now())
       fail(`${quotaLine(heldQuota)}. The run stays paused.`)
     }
-    if (quota && applyGate(run.paths, run.state, null, now())) fail('External quota control is unavailable; the run stays paused.')
-    fs.rmSync(run.paths.gate, { force: true })
+    if (applyGate(run.paths, run.state, readUsage(), now(), readMoney({ sessionId: run.state.driver, now: now(), state: run.state }), 'resume')) fail('Usage control is unavailable or holds new work; the run stays paused.')
     change(run, 'resumed', (s) => { s.status = withYou(s.stage) ? 'with-you' : 'running'; s.pausedReason = null; s.pausedAt = null })
     out('resumed')
   },
@@ -783,7 +780,7 @@ const commands = {
   finish() {
     const run = need()
     const written = readJson(`${run.dir}/totals.json`)
-    const share = readSessionQuota(run.state.driver, now(), run.state.markPercent ?? DEFAULT_MARK) ? null : weekShare(run.state, readUsage()?.sevenDay)
+    const share = readSessionQuota(run.state.driver, now(), driverMark(run.state)) ? null : weekShare(run.state, readUsage()?.sevenDay)
     const spent = readMoney({ sessionId: run.state.driver ?? sessionId, now: now(), state: run.state })?.runUsd
     const dropped = isSweep(run.state) ? endHunts(run.state) : null
     change(run, `finished${dropped ? `; ${dropped}` : ''}`, (s) => {
@@ -1531,7 +1528,7 @@ function adopt(run) {
   const s = run.state
   if (!sessionId || s.driver === sessionId) return
   const known = s.driver !== undefined && s.driver !== null
-  const fromQuota = readSessionQuota(s.driver, now(), s.markPercent ?? DEFAULT_MARK)
+  const fromQuota = readSessionQuota(s.driver, now(), driverMark(s))
   const toQuota = readSessionQuota(sessionId, now(), sessionMark(sessionId))
   if (fromQuota || toQuota) {
     const week = usageFor(sessionId)?.sevenDay
@@ -1574,7 +1571,7 @@ try {
     run.state = loadState(run.paths)
     if (byId) checkClaim(run) // before anything is saved, which would make the run look shown
     if (moveOldWave(run.state)) saveState(run.paths, run.state)
-    Object.assign(run.state, weekOf(run.state, usageFor(run.state.driver ?? sessionId, now(), run.state.markPercent ?? DEFAULT_MARK)?.sevenDay))
+    Object.assign(run.state, weekOf(run.state, usageFor(run.state.driver ?? sessionId, now(), driverMark(run.state))?.sevenDay))
     if (command !== 'abandon') adopt(run)
     held = run
     commands[command]()

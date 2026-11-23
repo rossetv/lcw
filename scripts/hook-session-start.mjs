@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { runsDir, repoKey } from '../lib/key.mjs'
 import { home, mainCheckout, writeAtomic, readJson, writeJson, sweepTemp } from './lib/store.mjs'
 import { findRun, listRuns } from './lib/runs.mjs'
-import { sessionIds, sessionMark, DEFAULT_MARK, applyGate } from './lib/gate.mjs'
+import { sessionIds, sessionMark, DEFAULT_MARK, driverMark, applyGate } from './lib/gate.mjs'
 import { readMoney, dropSpend } from './lib/money.mjs'
 import { paygLines } from './lib/payg-note.mjs'
 import { alive } from './lib/awake.mjs'
@@ -109,7 +109,7 @@ try {
   const money = billing === 'payg' ? readMoney({ sessionId: ids, now }) : null
   const mark = sessionMark(ids)
   const quota = readSessionQuota(ids, now, mark)
-  const driverQuota = run ? readSessionQuota(run.state.driver, now, run.state.markPercent ?? DEFAULT_MARK) : null
+  const driverQuota = run ? readSessionQuota(run.state.driver, now, driverMark(run.state)) : null
   if (driverQuota) {
     applyGate(run.paths, run.state, null, now)
     if (driverQuota.hold && !quota?.hold) lines.push(`LCW: STOP. This run's ${quotaLine(driverQuota)}. Launch nothing new; let running agents finish and pause the run at the mark.`)

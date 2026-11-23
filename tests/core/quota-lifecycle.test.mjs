@@ -1,9 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { tmp, makeRepo, run, lcw, START_HOOK, GATE_HOOK, LIMIT_HOOK, readJson } from './helpers.mjs'
 import { quotaFile, sessionFile, usageFile, spendFile } from '../../lib/key.mjs'
-import { applyGate } from '../../scripts/lib/gate.mjs'
+import { applyGate, setSessionMark, sessionMark, sessionIds } from '../../scripts/lib/gate.mjs'
+import { noteQuotaSession } from '../../scripts/lib/quota-session.mjs'
 import { readMoney, recordSpend, spendRecords } from '../../scripts/lib/money.mjs'
 
 const now = Date.parse('2026-02-02T12:00:00Z')
@@ -215,6 +217,169 @@ test('taking a native run preserves the new driver selection and applies its ext
   assert.equal(getSession(f.home, 'native').quotaSelection, undefined)
   assert.equal(readJson(`${dir}/gate`).status, 'refused')
   assert.match(lcw(['usage'], f.options).out, /refused/)
+})
+
+test('a resumed session uses the current explicit mark for both raises and lowerings', () => {
+  const f = fixture()
+  f.state.cache.result.weekly.percentUsed = 85
+  f.save()
+  put(sessionFile(f.home, 'old'), { billing: 'subscription', quotaSelection: selection, markPercent: 75 })
+  const options = { ...f.options, session: 'current' }
+  assert.match(lcw(['mark', '100'], options).out, /ok/)
+  const input = { transcript_path: '/tmp/old.jsonl' }
+  assert.equal(f.hook(GATE_HOOK, 'current', input).code, 0)
+  assert.equal(lcw(['mark', '70'], options).code, 0)
+  assert.equal(f.hook(GATE_HOOK, 'current', input).code, 2)
+  assert.match(f.hook(LIMIT_HOOK, 'current', { ...input, hook_event_name: 'UserPromptSubmit' }).out, /STOP/)
+})
+
+test('sequential resume identities share the current mark even when the run names a previous alias', () => {
+  const f = fixture()
+  f.state.cache.result.weekly.percentUsed = 85
+  f.save()
+  const first = { ...f.options, session: 'original' }
+  put(sessionFile(f.home, 'original'), { billing: 'subscription', quotaSelection: selection, markPercent: 75 })
+  const started = lcw(['start', 'aliases', '--title', 'Alias marks'], first)
+  const dir = /^folder: (.+)$/m.exec(started.out)[1]
+  f.hook(START_HOOK, 'middle', { transcript_path: '/tmp/original.jsonl' })
+  f.hook(START_HOOK, 'latest', { transcript_path: '/tmp/original.jsonl' })
+  const latest = { ...f.options, session: 'latest' }
+  assert.equal(lcw(['mark', '100'], latest).code, 0)
+  const state = readJson(`${dir}/state.json`)
+  put(`${dir}/state.json`, { ...state, driver: 'middle', markPercent: 75 })
+  assert.equal(f.hook(GATE_HOOK, 'latest', { transcript_path: '/tmp/original.jsonl' }).code, 0)
+  assert.match(lcw(['usage'], latest).out, /mark: 100%/)
+  assert.match(lcw(['status'], latest).out, /mark: 100%/)
+  const reconciled = run(fileURLToPath(new URL('../../scripts/gate-reconcile.mjs', import.meta.url)), [JSON.stringify({ sessionId: 'latest', action: 'sync', expectedGate: readJson(`${dir}/gate`) })], latest)
+  assert.equal(JSON.parse(reconciled.out).hold, false)
+  assert.equal(lcw(['mark', '70'], latest).code, 0)
+  assert.equal(f.hook(GATE_HOOK, 'middle', { transcript_path: '/tmp/original.jsonl' }).code, 2)
+})
+
+test('native alias marks clear the other unit and cyclic or live foreign identities stay separate', () => {
+  const f = fixture()
+  const original = { billing: 'payg', markPercent: 75 }
+  put(sessionFile(f.home, 'native'), original)
+  withHome(f.home, () => {
+    noteQuotaSession(['native', 'alias'], { endpoint: 'https://elsewhere.test' })
+    setSessionMark('alias', { usd: 5500 })
+    assert.equal(getSession(f.home, 'native').markPercent, undefined)
+    assert.equal(getSession(f.home, 'native').markUsd, 5500)
+    setSessionMark('native', 90)
+    assert.equal(sessionMark('alias'), 90)
+    assert.equal(readMoney({ sessionId: 'alias', now }).markUsd, 3600)
+    put(sessionFile(f.home, 'a'), { sessionCanonicalId: 'b', markPercent: 60 })
+    put(sessionFile(f.home, 'b'), { sessionCanonicalId: 'a', markPercent: 95 })
+    setSessionMark('a', 65)
+    assert.equal(getSession(f.home, 'b').markPercent, 95)
+    put(sessionFile(f.home, 'foreign'), { sessionCanonicalId: 'foreign', claudePid: process.pid, markPercent: 50 })
+    put(sessionFile(f.home, 'separate'), { sessionCanonicalId: 'foreign', markPercent: 80 })
+    setSessionMark('separate', 90)
+    assert.equal(getSession(f.home, 'foreign').markPercent, 50)
+    assert.deepEqual(sessionIds({ session_id: 'separate', transcript_path: '/tmp/foreign.jsonl' }), ['separate'])
+    put(sessionFile(f.home, 'driver-alias'), { sessionCanonicalId: 'foreign', claudePid: process.pid, markPercent: 95 })
+    const callerPid = process.env.CLAUDE_PID
+    process.env.CLAUDE_PID = '99999999'
+    try { assert.equal(sessionMark('driver-alias'), 50) }
+    finally { if (callerPid === undefined) delete process.env.CLAUDE_PID; else process.env.CLAUDE_PID = callerPid }
+  })
+  assert.equal(getSession(f.home, 'foreign').markPercent, 50)
+})
+
+test('positive startup billing replaces unknown history while genuinely unknown billing stays unknown', () => {
+  for (const [auth, expected] of [['{"authMethod":"api_key"}', 'payg'], ['fail', 'unclear']]) {
+    const f = fixture()
+    put(sessionFile(f.home, 'proxy'), { billing: 'unclear' })
+    f.options.env.LCW_AUTH_STATUS_JSON = auth
+    f.hook(START_HOOK)
+    assert.equal(getSession(f.home, 'proxy').quotaDefaultBilling, expected)
+    f.state.enabled = false
+    f.save()
+    f.options.env.LCW_AUTH_STATUS_JSON = 'fail'
+    f.hook(START_HOOK)
+    assert.equal(getSession(f.home, 'proxy').billing, expected)
+  }
+})
+
+test('conditional reconciliation retires only acknowledged obsolete gates and retains newer holds', () => {
+  const f = fixture()
+  put(sessionFile(f.home, 'proxy'), { billing: 'subscription', quotaSelection: selection, markPercent: 80 })
+  const started = lcw(['start', 'old-gate', '--title', 'Source transition'], f.options)
+  const dir = /^folder: (.+)$/m.exec(started.out)[1]
+  const gate = { reason: 'mark', unit: 'usd', markUsd: 100, usedUsd: 120, retryAt: now + 3600000, at: now - 1000 }
+  put(`${dir}/gate`, gate)
+  const script = fileURLToPath(new URL('../../scripts/gate-reconcile.mjs', import.meta.url))
+  const invoke = (action, expectedGate, expectedQuota) => {
+    const result = run(script, [JSON.stringify({ sessionId: 'proxy', action, expectedGate, expectedQuota })], f.options)
+    assert.equal(result.code, 0, result.err)
+    return JSON.parse(result.out)
+  }
+  assert.equal(invoke('sync', gate).hold, false)
+  assert.deepEqual(readJson(`${dir}/gate`), gate)
+  const evidence = { sourceId: selection.sourceId, revision: 'one', requestId: 'read-one', accountKey: 'a'.repeat(64), resetsAt: reset, observedAt: now }
+  assert.equal(invoke('ack', Object.fromEntries(Object.entries(gate).reverse()), evidence).ok, true)
+  assert.equal(fs.existsSync(`${dir}/gate`), false)
+  put(`${dir}/gate`, gate)
+  f.state.cache.result = { v: 1, status: 'refused', code: 'provider-refused' }
+  f.state.cache.requestId = 'new-refusal'
+  f.save()
+  assert.equal(invoke('ack', gate, evidence).hold, true)
+  assert.ok(fs.existsSync(`${dir}/gate`))
+  invoke('sync', gate)
+  const newer = readJson(`${dir}/gate`)
+  assert.equal(newer.requestId, 'new-refusal')
+  assert.equal(invoke('ack', gate, evidence).code, 'superseded')
+  assert.deepEqual(readJson(`${dir}/gate`), newer)
+  f.state.enabled = false
+  f.save()
+  assert.equal(invoke('sync', newer).hold, false)
+  assert.deepEqual(readJson(`${dir}/gate`), newer)
+  assert.equal(invoke('ack', newer, evidence).code, 'superseded')
+  assert.equal(invoke('ack', newer).ok, true)
+  assert.equal(fs.existsSync(`${dir}/gate`), false)
+})
+
+test('legacy retries are serialized and never change run status or trust unsafe helper input', () => {
+  const f = fixture()
+  const options = { ...f.options, session: 'native', env: { ...f.options.env, ANTHROPIC_BASE_URL: '' } }
+  put(sessionFile(f.home, 'native'), { billing: 'payg', markPercent: 75 })
+  const started = lcw(['start', 'retry', '--title', 'Retry gate'], options)
+  const dir = /^folder: (.+)$/m.exec(started.out)[1]
+  const state = readJson(`${dir}/state.json`)
+  const script = fileURLToPath(new URL('../../scripts/gate-reconcile.mjs', import.meta.url))
+  const invoke = (request) => JSON.parse(run(script, [JSON.stringify(request)], options).out)
+  const gate = { reason: 'mark', unit: 'usd', markUsd: 3000, usedUsd: 3500, retryAt: now - 1000, at: now - 5000 }
+  const record = (spent) => put(spendFile(f.home, 'native'), { v: 1, base: 0, max: spent, q: { [Math.floor(now / 900000)]: spent } })
+  record(3500)
+  put(`${dir}/gate`, gate)
+  const lock = `${dir}/gate.lock`
+  fs.mkdirSync(lock)
+  const marker = `${process.pid}-66666666-6666-4666-8666-666666666666`
+  fs.writeFileSync(`${lock}/${marker}`, '')
+  assert.equal(invoke({ sessionId: 'native', action: 'retry', expectedGate: gate }).code, 'gate-unavailable')
+  assert.deepEqual(readJson(`${dir}/gate`), gate)
+  fs.unlinkSync(`${lock}/${marker}`)
+  fs.rmdirSync(lock)
+  assert.equal(invoke({ sessionId: 'native', action: 'retry', expectedGate: gate }).hold, true)
+  const retried = readJson(`${dir}/gate`)
+  assert.equal(retried.retried, true)
+  assert.ok(retried.retryAt > now)
+  assert.equal(invoke({ sessionId: 'native', action: 'ack', expectedGate: retried }).hold, true)
+  record(2500)
+  for (const status of ['paused', 'finished']) {
+    put(`${dir}/state.json`, { ...state, status, pausedReason: 'human' })
+    const synced = invoke({ sessionId: 'native', action: 'sync', expectedGate: retried })
+    if (status === 'paused') assert.equal(synced.hold, false)
+    else assert.equal(synced.code, 'run-unavailable')
+    assert.deepEqual(readJson(`${dir}/gate`), retried)
+  }
+  put(`${dir}/state.json`, state)
+  assert.equal(invoke({ sessionId: 'native', action: 'retry', expectedGate: retried }).hold, false)
+  assert.equal(fs.existsSync(`${dir}/gate`), false)
+  assert.deepEqual(readJson(`${dir}/state.json`), state)
+  for (const sessionId of ['../native', '.', 'x'.repeat(257)]) {
+    assert.equal(invoke({ sessionId, action: 'sync', expectedGate: null }).code, 'invalid-request')
+  }
 })
 
 test('usage, marks and resume use the driver quota and retain a hold until an allowable observation', () => {

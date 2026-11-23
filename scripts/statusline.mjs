@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { usageFile, activityFile, sessionFile, runPaths, contextFile } from '../lib/key.mjs'
 import { home, readJson, writeJson, git, mainCheckout } from './lib/store.mjs'
 import { findRun } from './lib/runs.mjs'
-import { applyGate, sessionIds, sessionMark, DEFAULT_MARK } from './lib/gate.mjs'
+import { applyGate, sessionIds, sessionMark, DEFAULT_MARK, driverMark } from './lib/gate.mjs'
 import { maybeRefresh } from './lib/spend-command.mjs'
 import { readMoney, recordSpend, dropSpend, setBilling } from './lib/money.mjs'
 import { settle } from '../lib/billing.mjs'
@@ -137,7 +137,7 @@ export async function main({ margin = 5 } = {}) {
     let mark = DEFAULT_MARK
     try { mark = sessionMark(ids) } catch {}
     const quota = readSessionQuota(ids, now, mark)
-    const driverQuota = run ? readSessionQuota(run.state.driver, now, run.state.markPercent ?? DEFAULT_MARK) : null
+    const driverQuota = run ? readSessionQuota(run.state.driver, now, driverMark(run.state)) : null
     mapped = mapInput(inp, now, mark)
     if (quota) mapped.input.quota = quota
     // Claude Code hands each session the figure it saw at its own last reply, so two bars can differ. The newest
@@ -214,7 +214,7 @@ export async function main({ margin = 5 } = {}) {
         const { buildView, renderCard } = await import('../lib/card.mjs')
         const gate = readJson(run.paths.gate)
         const cardMoney = readMoney({ sessionId: run.state.driver ?? ids, now, state: run.state })
-        const view = buildView({ state: run.state, agents: run.state.agents ?? [], usage: driverQuota ? quotaUsage(driverQuota, now) : readJson(usageFile(home())), gate, money: cardMoney, quota: driverQuota, now, ui: { expanded: {}, moreOpen: false } })
+        const view = buildView({ state: { ...run.state, markPercent: driverMark(run.state) }, agents: run.state.agents ?? [], usage: driverQuota ? quotaUsage(driverQuota, now) : readJson(usageFile(home())), gate, money: cardMoney, quota: driverQuota, now, ui: { expanded: {}, moreOpen: false } })
         rows = rows.concat(renderCard(view, { width, theme }))
       }
     }

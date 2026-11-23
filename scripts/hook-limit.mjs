@@ -12,7 +12,7 @@ try {
   const inAgent = !!input.agent_id // a subagent finishes its task; the main loop is the one to stop
   if ((event === 'UserPromptSubmit' || event === 'PostToolUse') && !inAgent) {
     const { findRun } = await import('./lib/runs.mjs')
-    const { atMark, readUsage, sessionIds, sessionMark, lcwOnly, DEFAULT_MARK, applyGate } = await import('./lib/gate.mjs')
+    const { atMark, readUsage, sessionIds, sessionMark, lcwOnly, driverMark, applyGate } = await import('./lib/gate.mjs')
     const { noteQuotaSession, readSessionQuota, quotaLine } = await import('./lib/quota-session.mjs')
     const { readMoney } = await import('./lib/money.mjs')
     const { paygLines } = await import('./lib/payg-note.mjs')
@@ -30,7 +30,7 @@ try {
     }
     const mark = sessionMark(ids)
     const quota = readSessionQuota(ids, now, mark)
-    const driverQuota = run ? readSessionQuota(run.state.driver, now, run.state.markPercent ?? DEFAULT_MARK) : null
+    const driverQuota = run ? readSessionQuota(run.state.driver, now, driverMark(run.state)) : null
     if (driverQuota) applyGate(run.paths, run.state, null, now)
     const heldQuota = quota?.hold ? quota : driverQuota?.hold ? driverQuota : null
     const usage = readUsage()

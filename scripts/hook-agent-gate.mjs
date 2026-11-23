@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import { findRun } from './lib/runs.mjs'
-import { gateHolds, atMark, readUsage, sessionIds, sessionMark } from './lib/gate.mjs'
+import { gateHolds, atMark, readUsage, sessionIds, sessionMark, driverMark } from './lib/gate.mjs'
 import { readMoney } from './lib/money.mjs'
 import { readJson } from './lib/store.mjs'
 import { dollars } from '../lib/format.mjs'
@@ -23,7 +23,7 @@ try {
   }
   if (run) {
     if (gateHolds(run.paths, run.state, now)) {
-      const quota = readSessionQuota(run.state.driver, now, run.state.markPercent ?? sessionMark(run.state.driver))
+      const quota = readSessionQuota(run.state.driver, now, driverMark(run.state))
       if (quota) {
         process.stderr.write(`LCW: this run's ${quotaLine(quota)}. Launch no new agents. Let running agents finish, record the state, then run "lcw pause mark".\n`)
         process.exit(2)
