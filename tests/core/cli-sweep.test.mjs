@@ -78,6 +78,10 @@ fi
 if [ "$1 $2" = "pr checks" ]; then
   out=$(printf '%s' "$GH_CHECKS" | cut -d'|' -f"$(grep -c '^pr checks' "${log}")")
   [ -n "$out" ] || out=$(printf '%s' "$GH_CHECKS" | awk -F'|' '{print $NF}')
+  case "$out" in
+    NONE) echo "no checks reported on the 'lcw/tidy-wave-1' branch" >&2; exit 1;;
+    ERR) echo "connection reset by peer" >&2; exit 1;;
+  esac
   echo "$out"
   case "$out" in *pending*) exit 8;; *fail*) exit 1;; esac
 fi
@@ -638,37 +642,98 @@ test('merge readies a draft, merges it with a merge commit on the GitHub remote,
 })
 
 const checks = (...buckets) => JSON.stringify(buckets.map((bucket, i) => ({ name: `job${i}`, bucket })))
+/** A fake gh whose pull request shows these checks, one entry for each look; a wait's minute lasts 40 ms, and it looks twice a minute. */
+const waiting = (list, more = {}) => fakeGh({ GH_CHECKS: list, GH_STATE: 'OPEN,OPEN,MERGED', LCW_CHECKS_MINUTE_MS: '40', ...more })
+const wrote = (gh) => gh.calls().some((c) => c.startsWith('pr merge') || c.startsWith('pr ready'))
 
-test('merge --wait waits while a check is pending and merges once they pass', () => {
+test('merge --wait waits while a check is pending, notes the wait in the ledger and merges once they pass', () => {
   const t = shippedWaves()
-  const gh = fakeGh({ GH_CHECKS: [checks('pass', 'pending'), checks('pass', 'skipping')].join('|'), LCW_CHECKS_POLL_SECONDS: '0.05' })
+  const gh = waiting([checks('pass', 'pending'), checks('pass', 'skipping')].join('|'))
   const r = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: gh.env })
   assert.equal(r.code, 0, r.out)
   assert.equal(gh.calls().filter((c) => c.startsWith('pr checks')).length, 2)
   assert.ok(gh.calls().includes('pr merge 12 -R acme/widgets --merge'), gh.calls().join('\n'))
   assert.equal(t.state().sweep.waves[0].merged, true)
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1: waiting up to 5 minutes for the checks of #12/)
 })
 
-test('merge --wait merges nothing when a check failed or every check was skipped', () => {
-  for (const [list, said] of [[checks('pass', 'fail'), /did not pass: job1/], [checks('skipping'), /all skipped/]]) {
+test('merge --wait merges nothing once a check fails or is cancelled, whatever else still runs, or when every check was skipped', () => {
+  for (const [list, said] of [[checks('pending', 'fail'), /did not pass: job1/], [checks('pass', 'cancel'), /did not pass: job1/], [checks('skipping'), /all skipped/]]) {
     const t = shippedWaves()
-    const gh = fakeGh({ GH_CHECKS: list })
+    const gh = waiting(list)
     const r = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: gh.env })
     assert.equal(r.code, 1, r.out)
     assert.match(r.out, said)
-    assert.ok(!gh.calls().some((c) => c.startsWith('pr merge') || c.startsWith('pr ready')), gh.calls().join('\n'))
+    assert.equal(gh.calls().filter((c) => c.startsWith('pr checks')).length, 1, 'settled at the first look')
+    assert.ok(!wrote(gh), gh.calls().join('\n'))
     assert.equal(t.state().sweep.waves[0].merged, false)
   }
 })
 
-test('merge --wait takes 1 to 60 minutes', () => {
+test('merge --wait gives up when GitHub shows no checks, or when they still run as its minutes end', () => {
+  for (const [list, said] of [['NONE', /reports no checks on #12/], [checks('pass', 'pending'), /still running after 1 minutes/]]) {
+    const t = shippedWaves()
+    const gh = waiting(list)
+    const r = lcw(['merge', '1', '--wait', '1'], { ...t.o, env: gh.env })
+    assert.equal(r.code, 1, r.out)
+    assert.match(r.out, said)
+    assert.ok(!wrote(gh), gh.calls().join('\n'))
+  }
+})
+
+test('merge --wait rides out two failed reads of the checks and ends on the third in a row', () => {
   const t = shippedWaves()
-  const gh = fakeGh({ GH_CHECKS: checks('pass') })
+  const twice = waiting(['ERR', 'ERR', checks('pass')].join('|'))
+  const r = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: twice.env })
+  assert.equal(r.code, 0, r.out)
+  assert.equal(t.state().sweep.waves[0].merged, true)
+  const u = shippedWaves()
+  const always = waiting('ERR')
+  const lost = lcw(['merge', '1', '--wait', '5'], { ...u.o, env: always.env })
+  assert.equal(lost.code, 1, lost.out)
+  assert.match(lost.out, /could not read the checks of #12, three times running: connection reset by peer/)
+  assert.equal(always.calls().filter((c) => c.startsWith('pr checks')).length, 3)
+  assert.ok(!wrote(always), always.calls().join('\n'))
+})
+
+test('merge --wait waits for nothing that lcw merge refuses anyway, and takes 1 to 60 minutes', () => {
+  const t = shippedWaves()
+  const gh = waiting(checks('pending'))
   for (const m of ['0', '61', 'soon']) assert.equal(lcw(['merge', '1', '--wait', m], { ...t.o, env: gh.env }).code, 1, m)
-  assert.deepEqual(gh.calls(), [])
-  const early = lcw(['merge', '2', '--wait', '5'], { ...t.o, env: gh.env })
-  assert.match(early.out, /Wave 1 is not merged yet/, 'a wave out of order is refused before any wait')
-  assert.deepEqual(gh.calls(), [])
+  assert.match(lcw(['merge', '2', '--wait', '5'], { ...t.o, env: gh.env }).out, /Wave 1 is not merged yet/)
+  assert.deepEqual(gh.calls(), [], 'neither asked GitHub anything')
+  const based = waiting(checks('pending'), { GH_BASE: 'lcw/tidy-wave-0' })
+  const b = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: based.env })
+  assert.equal(b.code, 1, b.out)
+  assert.match(b.out, /based on lcw\/tidy-wave-0.*gh pr edit 12/)
+  assert.ok(!based.calls().some((c) => c.startsWith('pr checks')), based.calls().join('\n'))
+  const o = { home: tmp('home'), cwd: makeRepo(), session: 'b1' }
+  lcw(['start', 'x', '--title', 'X'], o)
+  assert.match(lcw(['merge', '1', '--wait', '5'], { ...o, env: gh.env }).out, /^lcw merge is for a sweep/)
+})
+
+test('merge --wait ends, merging nothing, for a run paused before it or stopped while it waits', async () => {
+  const t = shippedWaves()
+  t.cli('pause', 'human')
+  const quiet = waiting(checks('pending'))
+  const held = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: quiet.env })
+  assert.equal(held.code, 1, held.out)
+  assert.match(held.out, /is paused, so lcw merge --wait ends here for #12/)
+  assert.match(lcw(['merge', '2', '--wait', '5'], { ...t.o, env: quiet.env }).out, /is paused, so lcw merge --wait ends here for #13/, 'checked again once the wait is over')
+  assert.deepEqual(quiet.calls(), [])
+
+  const u = shippedWaves()
+  const gh = waiting(checks('pending'), { LCW_CHECKS_MINUTE_MS: '200' })
+  const p = spawn('node', [CLI, 'merge', '1', '--wait', '60'], { cwd: u.o.cwd, env: { ...process.env, ...gh.env, LCW_HOME: u.o.home, CLAUDE_CODE_SESSION_ID: u.o.session } })
+  let out = ''
+  p.stdout.on('data', (d) => { out += d })
+  const done = new Promise((res) => p.on('close', (code) => res(code)))
+  while (!gh.calls().some((c) => c.startsWith('pr checks'))) await new Promise((r) => setTimeout(r, 20))
+  assert.equal(u.cli('stop').code, 0)
+  assert.equal(await done, 1, out)
+  assert.match(out, /is stopped, so lcw merge --wait ends here for #12/)
+  assert.ok(!wrote(gh), gh.calls().join('\n'))
+  assert.equal(u.state().sweep.waves[0].merged, false)
 })
 
 test('a pull request the merge only queued is not recorded and keeps its branch, and a later merge records it once GitHub shows it merged', () => {
