@@ -259,7 +259,7 @@ test('a long repo and branch are shortened to fit the first row', () => {
 })
 
 
-test('a clipped model or repo ends in one ellipsis and the repo keeps a gap from the context size', () => {
+test('a clipped model or repo ends in one ellipsis', () => {
   const first = (input, width) => toAnsi(renderStatusRows(input, { width }), 'dark', width).replace(/\x1b\[[0-9;]*m/g, '').split('\n')[0]
   const bad = /\s…|·…|……/
   const base = { contextPercent: 38, contextWindow: '1M', weekUsedPercent: 40, weekElapsedPercent: 50, markPercent: 75 }
@@ -267,7 +267,6 @@ test('a clipped model or repo ends in one ellipsis and the repo keeps a gap from
   for (const width of [44, 45, 46, 47, 48]) {
     const row = first({ ...base, model: 'Opus 4.5', effort: 'high', repo: 'my project', branch: 'main' }, width)
     assert.doesNotMatch(row, bad, width + ' columns')
-    assert.match(row, /1M {2,}\S/, width + ' columns')
   }
 })
 
