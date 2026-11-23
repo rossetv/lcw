@@ -63,7 +63,10 @@ const S = {
   ui: { expanded: {} as Record<string, true>, moreOpen: false },
   hideRows: false,
   collapsed: false,
-  drawnAt: 0,
+  // The box's last answer held the run's card; the status line draws the card itself while mod-alive is stale.
+  holdsCard: false,
+  // The run whose mod-alive this process last wrote, and when.
+  alive: { runDir: '', at: 0 },
   shownSince: 0,
   dirty: false,
   wokeFor: null as string | number | null,
@@ -918,11 +921,17 @@ async function pressBanner($: EngineInterface, id: string, drawn: Banner | null)
   await readBanner($).catch(() => {})
 }
 
+function writeAlive($: EngineInterface, run: Run, now: number) {
+  S.alive = { runDir: run.runDir, at: now }
+  return $.fs.write(run.paths.modAlive, String(now))
+}
+
+// Kept up while the box is hidden (a dialog over the prompt does not draw it), so the card comes back without a twin.
 async function heartbeat($: EngineInterface) {
   if (!S.run) return
   const now = await $.clock.now()
   S.theme = themeFrom(await $.config.list())
-  if (now - S.drawnAt < 5000) await $.fs.write(S.run.paths.modAlive, String(now))
+  if (S.holdsCard) await writeAlive($, S.run, now)
 }
 
 async function checkpoint($: EngineInterface) {
@@ -1133,6 +1142,7 @@ export const register: Register = (on) => {
       let drawn = shown && !e.props.hasSurvey ? bannerRows(shown, cols, !!run) : []
       let banner = drawn
       if ((!run && !banner.length) || e.props.hasSurvey) {
+        S.holdsCard = false
         if (S.hideRows) { S.hideRows = false; S.dirty = true }
         return next(e)
       }
@@ -1170,7 +1180,7 @@ export const register: Register = (on) => {
           }
         } else if (drawn.length) card = draw(left, markBox)
       }
-      if (!card.length && !banner.length) return next(e)
+      if (!card.length && !banner.length) { S.holdsCard = false; return next(e) }
       // The band's focus ring is a place in its list of buttons, not a button: when the focused one goes and another
       // of this mod's takes its place, the ring stays there, so Enter would press a button of the next box the person
       // never chose. So when the box drawn changes, the band is drawn for a moment with no buttons at all, which makes
@@ -1186,7 +1196,8 @@ export const register: Register = (on) => {
       const rows: Row[] = banner.length && below.length ? [...banner, [{ t: ' ' }], ...below] : [...banner, ...below]
       const hide = !S.collapsed && rows.some((row) => row.some((s) => /^(view|toggle):/.test(s.id ?? '')))
       if (hide !== S.hideRows) { S.hideRows = hide; S.dirty = true }
-      S.drawnAt = now
+      S.holdsCard = !!run
+      if (run && (now - S.alive.at >= 5000 || S.alive.runDir !== run.runDir)) void writeAlive($, run, now).catch(() => {})
 
       const press = async (id: string) => {
         if (id.startsWith('banner:')) return void (await pressBanner($, id, banner.length ? shown : null).catch(() => {}))
@@ -1226,6 +1237,7 @@ export const register: Register = (on) => {
       }
       return <Box flexDirection="column" marginTop={TOP_GAP}>{rows.map(draw)}</Box>
     } catch {
+      S.holdsCard = false
       return next(e)
     }
   })
