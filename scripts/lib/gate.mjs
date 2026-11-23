@@ -88,7 +88,7 @@ function updateDefaultGate(paths, state, usage, now, money, intent) {
   if (previous?.unit === 'quota' && !on && !intent) return false
   if (previous?.unit === 'quota' || (previous?.unit === 'usd' && !money && on)) fs.rmSync(paths.gate, { force: true })
   if (intent === 'mark' && (gateExpired(readJson(paths.gate), now) || (money && !atMark(null, null, now, money)))) fs.rmSync(paths.gate, { force: true })
-  if (on && state.status === 'paused' && state.pausedReason === 'human') return false // the human paused it; resume evaluates the mark again
+  if (on && state.status === 'paused' && state.pausedReason === 'human') return on // the human paused it, so no gate: resume evaluates the mark again
   const has = fs.existsSync(paths.gate)
   if (has && gateExpired(readJson(paths.gate), now)) return false // the mod wakes the session; only resume and mark remove it
   const repair = !money && previous && !previous.unit && !Number.isFinite(Date.parse(previous.resetsAt ?? '')) && Date.parse(usage?.sevenDay?.resetsAt ?? '') > now
