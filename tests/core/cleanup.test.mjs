@@ -395,3 +395,17 @@ test('a skip-worktree path that is not on disk, as in a sparse checkout, does no
   fs.rmSync(`${wt}/a.txt`)
   assert.deepEqual(names(candidates(repo, tmp('home'))), [`branch:done`, `worktree:${fs.realpathSync(wt)}`].sort())
 })
+
+test('a merged worktree of a repository with over 1 MB of tracked paths is still listed', () => {
+  const repo = makeRepo()
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: repo, input: 'x\n', encoding: 'utf8' }).trim()
+  const dir = 'd'.repeat(200)
+  const index = Array.from({ length: 3000 }, (_, i) => `100644 ${blob}\t${dir}/${String(i).padStart(4, '0')}${'f'.repeat(200)}\n`).join('')
+  execFileSync('git', ['update-index', '--index-info'], { cwd: repo, input: index })
+  git(repo, 'commit', '-q', '-m', 'many long paths')
+  git(repo, 'reset', '-q', '--hard')
+  branch(repo, 'done', { merge: true })
+  const wt = worktree(repo, 'done')
+  assert.ok(execFileSync('git', ['ls-files', '-v', '-z'], { cwd: wt, maxBuffer: 1 << 28 }).length > 1024 * 1024)
+  assert.ok(names(candidates(repo, tmp('home'))).includes(`worktree:${fs.realpathSync(wt)}`))
+})
