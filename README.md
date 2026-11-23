@@ -33,7 +33,7 @@ Click an agent on the card to talk to it, or press ctrl+x then Tab to reach the 
 
 ### External subscription quota
 
-If a proxy uses a separate subscription, opt in for its exact `ANTHROPIC_BASE_URL` endpoint after installing a release that supports `quota-command` (update an existing installation with `claude plugin update lcw` and restart). Native sessions and endpoints that do not match keep their usual usage and billing; no global switch is needed.
+If a proxy uses a separate subscription, opt in for its exact `ANTHROPIC_BASE_URL` endpoint after installing a release that supports `quota-command` (update an existing installation with `claude plugin update lcw` and restart). Native sessions and endpoints that do not match keep their usual usage and billing; no global switch is needed. External quota commands require a POSIX environment; native Windows is unsupported and fails closed (`command-failed`), while WSL provides a Linux environment.
 
 ```sh
 lcw quota-command 'https://proxy.example/v1' 'quota-reader'
