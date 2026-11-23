@@ -743,6 +743,19 @@ test('hideMarkHint drops only the say-run-up-to row of a paused card', () => {
   assert.match(hidden, /nothing new starts/);
 });
 
+test('askInBox leaves the open asks to the answer box: the card keeps only its needs-you head', () => {
+  for (const board of ['13-needs-you-one-question', '14-needs-you-two-questions']) {
+    const v = buildView(inputsOf(board));
+    for (const width of [100, 40]) {
+      const shown = toPlain(renderCard(v, { width })), boxed = toPlain(renderCard(v, { width, askInBox: true }));
+      assert.ok(shown.includes(v.asks[0].text.slice(0, 12)), board + ' keeps the text without it');
+      assert.doesNotMatch(boxed, /GitHub|Docker|Stripe|answer in plain words/, board);
+      assert.match(boxed, board.startsWith('13') ? /⚑ needs you · 12m/ : /⚑ needs you · 2/, board);
+      assert.equal(boxed.split('\n').length, shown.split('\n').length - (width < 44 ? 1 : board.startsWith('13') ? 4 : 3), board + ' drops the text rows');
+    }
+  }
+});
+
 // ---------------------------------------------------------------- a sweep
 
 test("each sweep state, and a build's, is drawn row for row as approved", () => {
