@@ -785,12 +785,13 @@ async function autoSetup($: EngineInterface) {
   for (const line of String(r.stdout ?? '').split('\n').map((l) => l.trim()).filter(Boolean)) $.ui.toast(line, { timeoutMs: 8000 })
 }
 
-// Answer now: the oldest open ask's number at the start of the prompt, keeping what is typed there.
+// Answer now: the oldest open ask's number at the start of the prompt, keeping what is typed there; a draft
+// that already starts with a number answers that ask and is left as typed.
 async function fillAnswer($: EngineInterface, n: number | undefined) {
   if (!Number.isFinite(n)) return false
   const head = `${n}: `
   const typed = (await $.prompt.read().catch(() => ({ text: '' }))).text ?? ''
-  const filled = await $.prompt.fill({ text: typed.startsWith(head) ? typed : head + typed }).catch(() => null)
+  const filled = await $.prompt.fill({ text: /^\d+:\s/.test(typed) ? typed : head + typed }).catch(() => null)
   return !!filled?.isFilled
 }
 

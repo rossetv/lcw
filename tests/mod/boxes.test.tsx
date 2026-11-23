@@ -269,6 +269,15 @@ test('Answer now puts the oldest question\'s number in the prompt, keeping what 
   await band.unmount()
 })
 
+test('Answer now leaves a draft that already names a question as typed', async ($, on) => {
+  const w = engine(on, asking([{ n: 1, text: 'a' }, { n: 2, text: 'b' }]), { draft: '2: use csv' })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:answer:now' })
+  expect(w.filled).toEqual(['2: use csv'])
+  await band.unmount()
+})
+
 test('where Answer now cannot fill the prompt, the box says to type the answer there', async ($, on) => {
   const w = engine(on, asking([{ n: 1, text: 'Which format?' }, { n: 2, text: 'And the name?' }]), { fills: false })
   await start($)
