@@ -402,6 +402,16 @@ const sweepWith = (question) => runFact({ id: 'r', name: 'r', shape: 'sweep', st
 const filled = (rows) => rows.flat().filter((s) => s.id && s.bg === 'Fable').map((s) => s.id)
 const QUESTION = { id: 'Q82', text: 'Keep the 409, or answer a 422?', why: 'a 409 names the owner', status: 'open', options: [{ key: 'a', label: 'Answer 422', meaning: 'a small fix' }, { key: 'b', label: 'Keep the 409', meaning: 'closed as decided' }] }
 
+test('a question put off with Later stays put off while an ask open at the press is answered, and returns for a newer ask', () => {
+  const withAsks = (...ats) => ({ run: runFact({ id: 'r', name: 'r', shape: 'sweep', stage: 'Build', status: 'running', asks: ats.map((at, i) => ({ n: i + 1, text: 'q' + i, at })), questions: [QUESTION] }, false), now: 0 })
+  const pressed = bannerFor(withAsks(1000, 2000))
+  assert.equal(pressed.kind, 'question')
+  const dismissed = new Set(['question:' + pressed.key])
+  assert.equal(bannerFor({ ...withAsks(1000, 2000), dismissed }).kind, 'answer', 'the ask box shows after Later')
+  assert.equal(bannerFor({ ...withAsks(1000), dismissed }).kind, 'answer', 'newest ask answered, older stays open')
+  assert.equal(bannerFor({ ...withAsks(1000, 3000), dismissed }).kind, 'question', 'an ask opened after the press')
+})
+
 test('the question box fills the option Claude recommends, wherever it stands, and none when no option was named', () => {
   const box = (q) => bannerFor({ run: sweepWith(q), now: 0 })
   assert.deepEqual(filled(bannerRows(box({ ...QUESTION, recommend: 'b' }), 92)), ['banner:question:b'])
