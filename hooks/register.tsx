@@ -366,11 +366,15 @@ async function recoverQuota($: EngineInterface, run: Run, now: number) {
   try {
     const ackFile = `${run.runDir}/quota-woke`
     if ((await readJson($, ackFile))?.gate === proof.gate) { S.wokeFor = key; S.quotaWaking = false; return }
+    // A binding left behind when another open session took the run over: that session wakes it, not this one too.
+    if (await driverOpen($, run.state.driver)) { S.quotaWaking = false; return }
     $.clock.after(700, () => void (async () => {
       const at = await $.clock.now()
       const current = await readRun($, at)
       const fresh = current && await recoveryProof($, current, at)
       if (!current || !wakeable(current.state) || current.runDir !== run.runDir || !fresh || fresh.gate !== proof.gate) return
+      // Another session may have woken the run while this one waited.
+      if ((await readJson($, ackFile))?.gate === proof.gate) { S.wokeFor = key; return }
       const own = await readSession($, await $.session.id())
       const quota = await readQuota($, own, own?.markPercent ?? TH.usageMarkPercent, at)
       const money = await readMoney($, own, null, null, at)

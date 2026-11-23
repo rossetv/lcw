@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { gateFor } from '../../hooks/lcw-mod.mjs'
+import { gateFor, gateIdentity } from '../../hooks/lcw-mod.mjs'
 
 declare const setTimeout: (fn: (value?: unknown) => void, ms: number) => unknown
 
@@ -12,7 +12,7 @@ const state = (status: string, pausedReason: string | null = status === 'paused'
 const gate = (resetsAt: number) => JSON.stringify({ reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt: new Date(resetsAt).toISOString(), at: NOW })
 
 // The world beneath the mod: files in memory, a clock that moves only when the test moves it, and the prompts it submits.
-function engine(on: any, files: Record<string, string>, opts: { rmWorks?: boolean; clock?: false; drops?: number } = {}) {
+function engine(on: any, files: Record<string, string>, opts: { rmWorks?: boolean; clock?: false; drops?: number; ps?: string } = {}) {
   const clock = opts.clock === false ? null! : mock.clock(on, { now: NOW })
   const prompts: string[] = []
   let drops = opts.drops ?? 0
@@ -38,6 +38,7 @@ function engine(on: any, files: Record<string, string>, opts: { rmWorks?: boolea
       }
       return { value: { exitCode: 0, stdout: '{"ok":true}', stderr: '' } }
     }
+    if (e.argv[0] === 'ps') return { value: { exitCode: 0, stdout: opts.ps ?? '', stderr: '' } }
     if (opts.rmWorks !== false && e.argv[0] === 'rm') delete files[e.argv[e.argv.length - 1]]
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
   })
@@ -78,6 +79,24 @@ test('a wake the engine drops keeps the gate, and is made again later and sent o
   expect(w.prompts[0]).toMatch(/limit has reset/)
   await w.clock.advance(60000)
   expect(w.prompts.length).toBe(1)
+})
+
+test('a session whose run another open session now drives does not wake it', async ($, on) => {
+  const driven = JSON.stringify({ ...JSON.parse(state('paused')), driver: 's2' })
+  const w = engine(on, {
+    ...BIND, '/lcw/sessions/s2.json': JSON.stringify({ runDir: RUN, claudePid: 4242 }), [RUN + '/state.json']: driven, [RUN + '/gate']: gate(NOW - DAY),
+  }, { ps: 'claude --resume\n' })
+  await start($)
+  await w.clock.advance(10000)
+  expect(w.prompts.length).toBe(0)
+})
+
+test('a wake another session sent while this one waited to send its own is not sent again', async ($, on) => {
+  const w = engine(on, { ...BIND, [RUN + '/state.json']: state('paused'), [RUN + '/gate']: gate(NOW - DAY) })
+  await start($)
+  w.files[RUN + '/quota-woke'] = JSON.stringify({ gate: gateIdentity(JSON.parse(gate(NOW - DAY))) })
+  await w.clock.advance(1000)
+  expect(w.prompts.length).toBe(0)
 })
 
 test('a gate that cannot be removed still wakes the session only once', async ($, on) => {
