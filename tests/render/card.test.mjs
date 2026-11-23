@@ -944,6 +944,12 @@ test('outside the lanes the waves row keeps its label and cells, and its counts 
   for (let w = 44; w <= 90; w++) assert.match(row(w, none), /^waves none queued yet( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?$/, w + ': ' + row(w, none));
 });
 
+test('the requirements bar stays twenty cells when one failing of many rounds to a cell of its own', () => {
+  const requirements = [...Array.from({ length: 39 }, (_, k) => ({ id: 'R' + k, name: 'x', status: 'pass' })), { id: 'R39', name: 'retry policy', status: 'failing' }];
+  const row = plain(renderCard(buildView({ state: { name: 'd', stage: 'Review', status: 'running', requirements }, ...at }), { width: 120 })).find(t => t.startsWith('requirements'));
+  assert.match(row, /^requirements ▰{20}  39 pass · 1 failing/);
+});
+
 test('just after the weekly reset the week row gives no pace, until enough of the week has passed for it to mean something', () => {
   const right = (weekElapsedPercent, weekUsedPercent) => {
     const r = renderStatusRows({ ...inputsOf('Main').status, weekElapsedPercent, weekUsedPercent }, { width: 126 })[1];
