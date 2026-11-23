@@ -55,6 +55,8 @@ const S = {
   wokeFor: null as string | number | null,
   startedAt: 0,
   reopenChecked: false,
+  // The id of the run a Resume press on the unfinished-run box takes over: no reopened session's, so no reopen prompt.
+  taken: '',
   // The banner pinned above the card until the person picks an option; dismissed is Not now, for this session
   // ('kind:key', or the bare kind of the three old boxes); answerFill the asks Answer now could not put in the prompt.
   banner: { shown: null as Banner | null, dismissed: new Set<string>(), answerFill: '' },
@@ -182,7 +184,7 @@ async function refresh($: EngineInterface) {
   if (firstSight) {
     await $.fs.write(run.paths.modAlive, String(now)).catch(() => {})
     // Within ten seconds of start: the session-start hook that binds a resumed session can run after us.
-    if (now - S.startedAt <= 10000 && reopenDue(run.state, run.gate, aliveAt, now)) submitSoon($, reopenPrompt($.plugin.root))
+    if (now - S.startedAt <= 10000 && run.state.id !== S.taken && reopenDue(run.state, run.gate, aliveAt, now)) submitSoon($, reopenPrompt($.plugin.root))
   }
   if (!wakeDue(run.gate, now, S.wokeFor, run.session?.billing)) return
   const gate = run.gate
@@ -555,6 +557,8 @@ async function pressBanner($: EngineInterface, id: string, drawn: Banner | null)
       root: $.plugin.root, sessionId: await $.session.id(), repoKey: S.repoKey ?? undefined,
       cleanupPath: S.repoKey ? cleanupFile(await lcwHome($), S.repoKey) : undefined,
     })
+    // Before its steps run: a refresh may see the run bound before the press has finished.
+    if (kind === 'unfinished' && option === 'resume') S.taken = String(facts.unfinished?.id ?? '')
     if (plan) await carryOut($, fresh!, plan)
   } finally {
     S.pressing = false

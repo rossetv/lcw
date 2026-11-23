@@ -284,6 +284,20 @@ test('a run left halfway shows to a session driving none; Resume takes it over a
   await band.unmount()
 })
 
+test('Resume pressed seconds after the session started hands Claude the run once, with no reopen prompt on top', async ($, on) => {
+  const w = engine(on, leftHalfway(), {
+    answer: (a) => { if (a[2] === 'take') w.files['/lcw/sessions/s1.json'] = JSON.stringify({ billing: 'subscription', runDir: OLD }); return undefined },
+  })
+  await start($)
+  await w.clock.advance(2000)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:unfinished:resume' })
+  await w.clock.advance(5000)
+  expect(w.prompts.length).toBe(1)
+  expect(w.prompts[0]?.text).toMatch(/pressed Resume/)
+  await band.unmount()
+})
+
 test('Abandon runs lcw abandon and says what it did', async ($, on) => {
   const w = engine(on, leftHalfway(), { answer: (a) => (a[2] === 'abandon' ? { exitCode: 0, stdout: 'abandoned r2: stopped for good\nbranch kept: lcw/old-run' } : undefined) })
   await start($)
