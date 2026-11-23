@@ -8,6 +8,7 @@ import { quotaFile } from '../../lib/key.mjs'
 import { QUOTA_SOURCE_ID, REFRESH_MS, MAX_AGE_MS, CLAIM_MS, activeQuota, normalizeEndpoint, parseQuotaResult, validateQuotaResult } from '../../lib/quota.mjs'
 
 const RUNNER = fileURLToPath(new URL('../quota-refresh.mjs', import.meta.url))
+const WATCHDOG = fileURLToPath(new URL('../quota-watchdog.mjs', import.meta.url))
 const KEEP_BYTES = 64 * 1024
 const failure = (code) => ({ v: 1, status: 'unavailable', code })
 const clock = () => process.env.LCW_NOW !== undefined && process.env.LCW_NOW !== '' && Number.isFinite(Number(process.env.LCW_NOW)) ? Number(process.env.LCW_NOW) : Date.now()
@@ -27,21 +28,27 @@ function reap(lock) {
   } catch {}
 }
 
-function reapPrepared(home, lock) {
+function reapAbandoned(home, file) {
   let entries
   try { entries = fs.readdirSync(home, { withFileTypes: true }) } catch { return }
   for (const entry of entries) {
-    const dir = `${home}/${entry.name}`
-    if (!entry.isDirectory() || !dir.startsWith(`${lock}.`)) continue
-    const marker = dir.slice(lock.length + 1)
-    const match = /^([1-9]\d*)-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.exec(marker)
+    const target = `${home}/${entry.name}`
+    const prepared = entry.isDirectory() && target.startsWith(`${file}.lock.`)
+    const temp = entry.isFile() && target.startsWith(`${file}.`)
+    if (!prepared && !temp) continue
+    const prefix = prepared ? `${file}.lock.` : `${file}.`
+    const marker = target.slice(prefix.length)
+    const match = prepared
+      ? /^([1-9]\d*)-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.exec(marker)
+      : /^([1-9]\d*)\.[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.tmp$/.exec(marker)
     if (!match || !Number.isSafeInteger(Number(match[1]))) continue
     try {
       try { process.kill(Number(match[1]), 0); continue } catch (e) { if (e.code !== 'ESRCH') continue }
-      const names = fs.readdirSync(dir)
-      if (names.length === 1 && names[0] === marker && fs.lstatSync(`${dir}/${marker}`).isFile()) fs.unlinkSync(`${dir}/${marker}`)
+      if (temp) { fs.unlinkSync(target); continue }
+      const names = fs.readdirSync(target)
+      if (names.length === 1 && names[0] === marker && fs.lstatSync(`${target}/${marker}`).isFile()) fs.unlinkSync(`${target}/${marker}`)
       else if (names.length) continue
-      fs.rmdirSync(dir)
+      fs.rmdirSync(target)
     } catch {}
   }
 }
@@ -54,7 +61,7 @@ async function commit(home, fn) {
   const until = Date.now() + 2000
   try {
     fs.mkdirSync(home, { recursive: true, mode: 0o700 })
-    reapPrepared(home, lock)
+    reapAbandoned(home, file)
     fs.mkdirSync(prepared, { mode: 0o700 })
     try {
       fs.writeFileSync(`${prepared}/${marker}`, '', { flag: 'wx', mode: 0o600 })
@@ -83,6 +90,29 @@ async function commit(home, fn) {
 }
 
 export function runQuotaCommand(command, { timeoutMs = 30000, now = clock } = {}) {
+  // Descendant termination needs POSIX process groups, not an optional external executable.
+  if (process.platform === 'win32' || typeof command !== 'string' || !command.trim()) return Promise.resolve(failure('command-failed'))
+  return new Promise((resolve) => {
+    let child, done = false
+    const finish = (result) => {
+      if (done) return
+      done = true
+      try { if (child?.connected) child.disconnect() } catch {}
+      resolve(result)
+    }
+    try {
+      child = spawn(process.execPath, [WATCHDOG], { detached: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], env: process.env })
+      child.on('error', () => finish(failure('command-failed')))
+      child.on('close', () => finish(failure('command-failed')))
+      child.on('message', (result) => {
+        try { finish(validateQuotaResult(result, now())) } catch { finish(failure('command-failed')) }
+      })
+      child.send({ command, timeoutMs, validationNow: now() }, (error) => { if (error) finish(failure('command-failed')) })
+    } catch { finish(failure('command-failed')) }
+  })
+}
+
+export function executeQuotaCommand(command, { timeoutMs = 30000, now = clock } = {}) {
   if (typeof command !== 'string' || !command.trim()) return Promise.resolve(failure('command-failed'))
   return new Promise((resolve) => {
     let child, done = false, timer, drain
@@ -105,10 +135,11 @@ export function runQuotaCommand(command, { timeoutMs = 30000, now = clock } = {}
       unhook()
       resolve(result)
     }
+    for (const [s, h] of handlers) process.on(s, h)
+    timer = setTimeout(() => finish(failure('timeout')), Number.isFinite(timeoutMs) ? Math.max(1, Math.min(30000, timeoutMs)) : 30000)
     try {
       child = spawn(command, { shell: true, cwd: os.homedir(), env: process.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
     } catch { return finish(failure('command-failed')) }
-    for (const [s, h] of handlers) process.on(s, h)
     child.stdout.on('data', (chunk) => {
       size += chunk.length
       if (size > KEEP_BYTES) return finish(failure('invalid-response'))
@@ -118,7 +149,6 @@ export function runQuotaCommand(command, { timeoutMs = 30000, now = clock } = {}
       errSize += chunk.length
       if (errSize > KEEP_BYTES) finish(failure('invalid-response'))
     })
-    timer = setTimeout(() => finish(failure('timeout')), Number.isFinite(timeoutMs) ? Math.max(1, Math.min(30000, timeoutMs)) : 30000)
     const settle = (code) => {
       if (done) return
       finish(code === 0 ? parseQuotaResult(Buffer.concat(chunks).toString('utf8'), now()) : failure('command-failed'))

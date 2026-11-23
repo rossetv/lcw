@@ -3,16 +3,18 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
+import { once } from 'node:events'
 import { promisify } from 'node:util'
 import { configureQuota, disableQuota, readQuotaState, claimRefresh, recordQuotaResult, refreshQuota, runQuotaCommand } from '../../scripts/lib/quota-command.mjs'
-import { evaluateQuota } from '../../lib/quota.mjs'
+import { evaluateQuota, selectQuota } from '../../lib/quota.mjs'
 import { quotaFile } from '../../lib/key.mjs'
 
 const at = Date.parse('2026-01-01T12:00:00.000Z')
 const accountKey = 'a'.repeat(64)
 const ok = { v: 1, status: 'ok', accountKey, weekly: { percentUsed: 42, resetsAt: '2026-01-02T12:00:00.000Z' }, blocked: false }
 const endpoint = 'http://localhost:8080/v1'
+const selection = { sourceId: 'external-quota', endpoint }
 function fixture(t) { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quota-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir }
 const setup = (home, result = ok) => configureQuota(home, endpoint, 'adapter', { now: () => at, run: async () => result })
 const node = (source) => `${JSON.stringify(process.execPath)} -e ${JSON.stringify(source)}`
@@ -29,6 +31,22 @@ test('setup requires success, preserves working settings on failure and accepts 
   assert.equal((await configureQuota(home, 'https://user:secret@host', 'bad')).code, 'invalid-endpoint')
   assert.equal((await setup(home, { ...ok, blocked: true })).ok, true)
   assert.notEqual(readQuotaState(home).revision, before.revision)
+})
+
+test('endpoint replacement cannot lend another source allowance to an existing selection', async (t) => {
+  const home = fixture(t)
+  await setup(home, { ...ok, weekly: { ...ok.weekly, percentUsed: 95 } })
+  const selected = selectQuota(endpoint, readQuotaState(home))
+  assert.equal(evaluateQuota(selected, readQuotaState(home), at, 80).hold, true)
+  const lower = { ...ok, accountKey: 'b'.repeat(64), weekly: { ...ok.weekly, percentUsed: 10 } }
+  const before = readQuotaState(home).revision
+  await configureQuota(home, 'https://other.example/v1', 'adapter', { now: () => at, run: async () => lower })
+  const mismatched = evaluateQuota(selected, readQuotaState(home), at, 80)
+  assert.equal(mismatched.hold, true)
+  for (const field of ['accountKey', 'requestId', 'percentUsed', 'historical']) assert.equal(mismatched[field], undefined)
+  await configureQuota(home, endpoint, 'adapter', { now: () => at, run: async () => lower })
+  assert.notEqual(readQuotaState(home).revision, before)
+  assert.equal(evaluateQuota(selected, readQuotaState(home), at, 80).hold, false)
 })
 
 test('shared claims throttle across windows and fence late refreshes through replacement and off ABA', async (t) => {
@@ -78,13 +96,13 @@ test('failed attempts hold immediately and history never crosses accounts or res
   await setup(home)
   const claim = await claimRefresh(home, at + 300000)
   await recordQuotaResult(home, claim, { v: 1, status: 'unavailable', code: 'network' }, at + 300001)
-  let view = evaluateQuota({ sourceId: 'external-quota' }, readQuotaState(home), at + 300002, 80)
+  let view = evaluateQuota(selection, readQuotaState(home), at + 300002, 80)
   assert.equal(view.hold, true)
   assert.equal(view.historical.percentUsed, 42)
   const next = await claimRefresh(home, at + 600000)
   await recordQuotaResult(home, next, { v: 1, status: 'refused', code: 'provider-refused', accountKey: 'b'.repeat(64) }, at + 600001)
   assert.equal(readQuotaState(home).cache.lastGood, undefined)
-  assert.equal(evaluateQuota({ sourceId: 'external-quota' }, readQuotaState(home), at + 600002, 80).historical, undefined)
+  assert.equal(evaluateQuota(selection, readQuotaState(home), at + 600002, 80).historical, undefined)
   const newer = await claimRefresh(home, at + 900000)
   const reset = { ...ok, weekly: { percentUsed: 5, resetsAt: '2026-01-03T12:00:00.000Z' } }
   await recordQuotaResult(home, newer, reset, at + 900001)
@@ -98,7 +116,7 @@ test('observed account rotation discards history even when the new weekly data i
     const claim = await claimRefresh(home, at + 300000)
     await recordQuotaResult(home, claim, result, at + 300001)
     assert.equal(readQuotaState(home).cache.lastGood, undefined)
-    assert.equal(evaluateQuota({ sourceId: 'external-quota' }, readQuotaState(home), at + 300002, 80).hold, true)
+    assert.equal(evaluateQuota(selection, readQuotaState(home), at + 300002, 80).hold, true)
   }
 })
 
@@ -165,6 +183,83 @@ for (const phase of ['preparation', 'release']) test(`abandoned directories from
   assert.equal(fs.readFileSync(`${unexpected}/keep`, 'utf8'), 'unrelated')
   assert.equal(fs.lstatSync(link).isSymbolicLink(), true)
   assert.equal(fs.readFileSync(`${target}/${deadPid}-${uuid(4)}`, 'utf8'), 'keep')
+})
+
+test('dead-owned quota commit files are reclaimed without touching live, symlink or unrelated paths', async (t) => {
+  const home = fixture(t)
+  const file = quotaFile(home)
+  const url = new URL('../../scripts/lib/quota-command.mjs', import.meta.url).href
+  const source = `
+    import fs from 'node:fs'
+    import { disableQuota } from ${JSON.stringify(url)}
+    const write = fs.writeFileSync
+    fs.writeFileSync = (target, ...args) => {
+      const value = write(target, ...args)
+      if (String(target).startsWith(${JSON.stringify(file + '.')}) && String(target).endsWith('.tmp')) process.kill(process.pid, 'SIGKILL')
+      return value
+    }
+    await disableQuota(${JSON.stringify(home)})
+  `
+  await assert.rejects(promisify(execFile)(process.execPath, ['--input-type=module', '-e', source], { timeout: 3000 }), { signal: 'SIGKILL' })
+  const leaked = fs.readdirSync(home).find((name) => name.endsWith('.tmp'))
+  assert.ok(leaked)
+  const deadPid = leaked.slice(path.basename(file).length + 1).split('.')[0]
+  const uuid = '00000000-0000-4000-8000-000000000001'
+  const live = `${file}.${process.pid}.${uuid}.tmp`
+  const unrelated = `${home}/other.json.${deadPid}.${uuid}.tmp`
+  const malformed = `${file}.${deadPid}.not-a-uuid.tmp`
+  for (const name of [live, unrelated, malformed]) fs.writeFileSync(name, 'keep')
+  const target = path.join(home, 'target')
+  fs.writeFileSync(target, 'keep')
+  const link = `${file}.${deadPid}.${uuid}.tmp`
+  fs.symlinkSync(target, link)
+  const directory = `${file}.${deadPid}.00000000-0000-4000-8000-000000000002.tmp`
+  fs.mkdirSync(directory)
+  assert.deepEqual(await disableQuota(home), { ok: true })
+  assert.equal(fs.existsSync(path.join(home, leaked)), false)
+  for (const name of [live, unrelated, malformed, target]) assert.equal(fs.readFileSync(name, 'utf8'), 'keep')
+  assert.equal(fs.lstatSync(link).isSymbolicLink(), true)
+  assert.equal(fs.lstatSync(directory).isDirectory(), true)
+})
+
+test('the adapter group remains bounded when its runner is killed abruptly', async (t) => {
+  const home = fixture(t)
+  const pidFile = path.join(home, 'adapter-pids')
+  const runnerFile = new URL('../../scripts/quota-refresh.mjs', import.meta.url).pathname
+  const adapter = `const fs=require('node:fs'); const {spawn}=require('node:child_process'); const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'}); fs.writeFileSync(${JSON.stringify(pidFile)},JSON.stringify([process.pid,c.pid])); setInterval(()=>{},1000)`
+  const command = node(adapter)
+  assert.equal((await configureQuota(home, endpoint, command, { now: () => at, run: async () => ok })).ok, true)
+  let pids = []
+  let timer
+  let watcher
+  const ready = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('adapter did not start')), 3000)
+    watcher = fs.watch(home, () => {
+      try {
+        pids = JSON.parse(fs.readFileSync(pidFile, 'utf8'))
+        if (pids.length === 2) resolve()
+      } catch {}
+    })
+  })
+  const runner = spawn(process.execPath, [runnerFile], { stdio: 'ignore', env: { ...process.env, LCW_HOME: home, LCW_NOW: String(at + 300000) } })
+  const exited = once(runner, 'exit', { signal: AbortSignal.timeout(3000) })
+  t.after(() => {
+    clearTimeout(timer)
+    watcher.close()
+    try { runner.kill('SIGKILL') } catch {}
+    for (const pid of pids) { try { process.kill(pid, 'SIGKILL') } catch {} }
+  })
+  await ready
+  clearTimeout(timer)
+  watcher.close()
+  runner.kill('SIGKILL')
+  await exited
+  const running = (pid) => {
+    try { return !fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1].startsWith('Z') } catch { return false }
+  }
+  const until = Date.now() + 750
+  while (pids.some(running) && Date.now() < until) await new Promise((r) => setImmediate(r))
+  assert.equal(pids.some(running), false)
 })
 
 test('real separate processes serialize claims for the same revision', async (t) => {

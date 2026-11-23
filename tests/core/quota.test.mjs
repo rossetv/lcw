@@ -5,7 +5,7 @@ import { normalizeEndpoint, parseQuotaResult, selectQuota, evaluateQuota } from 
 const at = Date.parse('2026-01-01T12:00:00.000Z')
 const accountKey = 'a'.repeat(64)
 const ok = { v: 1, status: 'ok', accountKey, weekly: { percentUsed: 42, resetsAt: '2026-01-02T12:00:00.000Z' }, blocked: false }
-const selection = { sourceId: 'external-quota' }
+const selection = { sourceId: 'external-quota', endpoint: 'http://localhost:8080/v1' }
 const state = (result = ok) => ({ v: 1, enabled: true, sourceId: selection.sourceId, revision: 'r1', endpoint: 'http://localhost:8080/v1', command: 'adapter', cache: { revision: 'r1', requestId: 'q1', attemptedAt: at, completedAt: at, result } })
 
 test('endpoint matching canonicalizes URLs but rejects ambiguous selectors', () => {
@@ -22,6 +22,15 @@ test('a null configured endpoint neither selects sessions nor authorizes an exis
   assert.equal(selectQuota(null, invalid), null)
   assert.equal(evaluateQuota(selection, invalid, at, 80).hold, true)
   assert.equal(evaluateQuota(selection, invalid, at, 80).code, 'config-unavailable')
+})
+
+test('missing or noncanonical endpoint bindings hold without borrowing global cache evidence', () => {
+  for (const binding of [{ sourceId: selection.sourceId }, { ...selection, endpoint: `${selection.endpoint}/` }, { ...selection, endpoint: null }]) {
+    const view = evaluateQuota(binding, state(), at, 80)
+    assert.equal(view.hold, true)
+    assert.equal(view.code, 'config-unavailable')
+    for (const field of ['accountKey', 'requestId', 'percentUsed', 'historical']) assert.equal(view[field], undefined)
+  }
 })
 
 test('wire validation accepts only complete bounded successes and allowlisted failures', () => {
