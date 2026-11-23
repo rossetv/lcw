@@ -58,6 +58,44 @@ const filesFor = (externalDriver = true) => ({
 const start = ($: any) => $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
 const measure = ($: any) => $.session.measure({ context: { window: 200000 }, changed: ['rateLimits'], rateLimits: [{ kind: 'seven_day', percentUsed: 99, resetsAt }], cost: { usd: 10 } } as any)
 
+for (const owner of ['driver', 'current']) {
+  test(`a ${owner} dollar mark never raises the external percentage allowance`, async ($, on) => {
+    const files: Record<string, string> = filesFor()
+    files['/lcw/sessions/s1.json'] = JSON.stringify({ runDir: RUN, billing: 'subscription', quotaSelection: selection, ...(owner === 'current' ? { markUsd: 3500 } : { markPercent: 95 }) })
+    files['/lcw/sessions/driver.json'] = JSON.stringify({ runDir: RUN, billing: 'subscription', quotaSelection: selection, ...(owner === 'driver' ? { markUsd: 3500 } : { markPercent: 95 }) })
+    files[QUOTA] = record(result(85))
+    const w = engine(on, files)
+    await start($)
+    await w.clock.advance(3000)
+    expect(w.prompts.length).toBe(0)
+    expect(files[RUN + '/quota-woke']).toBe(undefined)
+  })
+}
+
+for (const external of [false, true]) {
+  test(`canonical ${external ? 'external' : 'pay-per-token'} billing governs a cost-only measurement through a stale alias`, async ($, on) => {
+    const files: Record<string, string> = {
+      '/lcw/sessions/s1.json': JSON.stringify({ sessionCanonicalId: 'anchor', billing: external ? 'payg' : 'subscription', claudePid: 100, history: 'kept' }),
+      '/lcw/sessions/anchor.json': JSON.stringify({ sessionCanonicalId: 'anchor', billing: external ? 'subscription' : 'payg', quotaSelection: external ? selection : null, quotaDefaultBilling: 'payg', claudePid: 100 }),
+      [QUOTA]: record({ v: 1, status: 'refused', code: 'provider-refused' }),
+    }
+    engine(on, files)
+    await start($)
+    await $.session.measure({ context: { window: 200000 }, changed: ['cost'], cost: { usd: 10 } } as any)
+    const spend = files['/lcw/spend/s1.json']
+    if (external) expect(spend).toBe(undefined)
+    else {
+      if (spend === undefined) throw new Error('cost measurement was not recorded')
+      expect(JSON.parse(spend).max).toBe(10)
+    }
+    const session = JSON.parse(files['/lcw/sessions/s1.json'] ?? 'null')
+    expect(session.billing).toBe(external ? 'subscription' : 'payg')
+    expect(session.claudePid).toBe(100)
+    expect(session.history).toBe('kept')
+    expect(session.sessionCanonicalId).toBe('anchor')
+  })
+}
+
 for (const external of [false, true]) {
   test(`canonical ${external ? 'external' : 'default'} selection overrides an older alias in the card and recovery`, async ($, on) => {
     const files: Record<string, string> = filesFor()

@@ -7,7 +7,7 @@ import { answerKey, bannerFor, bannerRows } from '../lib/banner.mjs'
 import type { Banner, BannerFacts } from '../lib/banner.mjs'
 import { moneyFrom, readingOf, spendFileCounts } from '../lib/spend.mjs'
 import { buildView, renderCard } from '../lib/card.mjs'
-import { hex } from '../lib/theme.mjs'
+import { hex, thresholds as TH } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import { activeQuota, CLAIM_MS, evaluateQuota, quotaOff, REFRESH_MS } from '../lib/quota.mjs'
 import type { QuotaView } from '../lib/quota.mjs'
@@ -153,8 +153,8 @@ async function readRun($: EngineInterface, now: number): Promise<Run | null> {
   if (!isShown(state, now)) return null
   const session = state.driver && state.driver !== await $.session.id()
     ? await readSession($, state.driver) : binding
-  state = { ...state, markPercent: session?.markPercent ?? (session?.markUsd != null ? 100 : state.markPercent) }
-  const quota = await readQuota($, session, state.markPercent ?? 100, now)
+  state = { ...state, markPercent: session?.markPercent ?? (session?.markUsd != null ? TH.usageMarkPercent : state.markPercent) }
+  const quota = await readQuota($, session, state.markPercent ?? TH.usageMarkPercent, now)
   return {
     runDir: binding.runDir, paths, state, gate: await readJson($, paths.gate), usage: quota ? null : await readJson($, usageFile(home)), session, money: null, quota,
   }
@@ -190,7 +190,7 @@ async function spendName($: EngineInterface) {
 // cap, the session's mark, the run's own spend (this session's cost so far is its record's highest reading), and
 // the next try from a dollar gate. Nothing in ~/.lcw/spend is read for any other session.
 async function readMoney($: EngineInterface, session: any, state: any, gate: any, now: number) {
-  const quota = await readQuota($, session, state?.markPercent ?? session?.markPercent ?? 100, now)
+  const quota = await readQuota($, session, state?.markPercent ?? session?.markPercent ?? TH.usageMarkPercent, now)
   if (quotaBilling(session, quota) !== 'payg') return null
   session = { ...session, billing: 'payg' }
   const home = await lcwHome($)
@@ -252,7 +252,7 @@ async function recoverQuota($: EngineInterface, run: Run, now: number) {
       const fresh = current && await recoveryProof($, current, at)
       if (!current || !wakeable(current.state) || current.runDir !== run.runDir || !fresh || fresh.gate !== proof.gate) return
       const own = await readSession($, await $.session.id())
-      const quota = await readQuota($, own, own?.markPercent ?? 100, at)
+      const quota = await readQuota($, own, own?.markPercent ?? TH.usageMarkPercent, at)
       const money = await readMoney($, own, null, null, at)
       const usage = await readJson($, usageFile(await lcwHome($)))
       if (usageFact({ session: own, quota, money, usage, now: at }).atMark) return
@@ -275,7 +275,7 @@ async function recoverQuota($: EngineInterface, run: Run, now: number) {
 async function refresh($: EngineInterface) {
   const now = await $.clock.now()
   const own = await readSession($, await $.session.id())
-  await readQuota($, own, own?.markPercent ?? 100, now)
+  await readQuota($, own, own?.markPercent ?? TH.usageMarkPercent, now)
   const run = await readRun($, now)
   // Before the run is shown: a card drawn without its money view would count percentages.
   if (run) run.money = await readMoney($, run.session, run.state, run.gate, now)
@@ -383,9 +383,9 @@ async function measureSpend($: EngineInterface, e: { cost?: { usd: number } }, r
   const spent = spendFile(home, await spendName($))
   const [session, rec] = await Promise.all([readParsed($, sessionFile(home, id)), readParsed($, spent)])
   const control = await readSession($, id)
-  const quota = await readQuota($, control, control?.markPercent ?? 100, now)
-  const step = measureStep(session, rec, { weekly: quota ? null : reading, cost: e.cost?.usd, quota }, now)
-  if (step.changed && session !== undefined) await $.fs.write(sessionFile(home, id), JSON.stringify({ ...session, billing: step.billing }))
+  const quota = await readQuota($, control, control?.markPercent ?? TH.usageMarkPercent, now)
+  const step = measureStep(control, rec, { weekly: quota ? null : reading, cost: e.cost?.usd, quota }, now)
+  if ((step.changed || control?.billing !== session?.billing) && session !== undefined) await $.fs.write(sessionFile(home, id), JSON.stringify({ ...session, billing: step.billing }))
   if (step.drop) await $.process.run(['rm', '-f', spent]).catch(() => {})
   // A record caught mid-write is left for the next reading rather than started again from this one.
   if (step.record && rec !== undefined) await $.fs.write(spent, JSON.stringify(step.record))
@@ -415,7 +415,7 @@ async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
   const money = run ? run.money : await readMoney($, session, null, null, now)
   const runF = runFact(run?.state, S.sleep?.kept)
   const asked = runF?.asks?.length ? answerKey(runF) : ''
-  const quota = run ? run.quota : await readQuota($, session, session?.markPercent ?? 100, now)
+  const quota = run ? run.quota : await readQuota($, session, session?.markPercent ?? TH.usageMarkPercent, now)
   const week = usageFact({ state: run?.state, session: run?.session ?? session, usage: run ? run.usage : usage, money, quota, now })
   // When the week reached the mark, until it has been below it for a minute: a climb back is another occurrence of the mark box.
   S.mark = markSpell(S.mark, week.atMark, now)
@@ -815,7 +815,7 @@ export const register: Register = (on) => {
       const now = await $.clock.now()
       const home = await lcwHome($)
       const session = await readSession($, await $.session.id())
-      const quota = await readQuota($, session, session?.markPercent ?? 100, now)
+      const quota = await readQuota($, session, session?.markPercent ?? TH.usageMarkPercent, now)
       const reading = quota ? null : usageFrom(e.rateLimits, now)
       // Its own failure must not keep a subscriber's figure and gate from being written below.
       const billing = await measureSpend($, e, reading, now).catch(() => null)

@@ -77,7 +77,7 @@ export const awakeApplies = (state) => state?.status === 'running' && !!state.st
  */
 export function usageFact({ state, session, usage, money, quota, now }) {
   const own = state ? state.markPercent : session?.markPercent
-  const markPercent = typeof own === 'number' ? own : quota ? 100 : TH.usageMarkPercent
+  const markPercent = typeof own === 'number' ? own : TH.usageMarkPercent
   if (quota) return {
     quota, markPercent, atMark: quota.hold,
     usedPercent: quota.status === 'ok' ? quota.percentUsed : undefined,

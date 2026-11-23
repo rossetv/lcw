@@ -55,10 +55,10 @@ test('a recovered external driver ignores its retained hold gate but never inven
   assert.equal(native.share, 94)
 })
 
-test('an external default mark stays at the evaluated 100 percent in facts and card', () => {
+test('an external default mark stays at the native percentage reserve in facts and card', () => {
   const withoutMark = { ...state, markPercent: undefined }
-  assert.equal(usageFact({ state: withoutMark, quota, now: NOW }).markPercent, 100)
-  assert.equal(buildView({ state: withoutMark, quota, now: NOW }).mark, 100)
+  assert.equal(usageFact({ state: withoutMark, quota, now: NOW }).markPercent, 75)
+  assert.equal(buildView({ state: withoutMark, quota, now: NOW }).mark, 75)
 })
 
 test('disabling external quota restores only its saved billing while a broken source remains subscription-backed', () => {
