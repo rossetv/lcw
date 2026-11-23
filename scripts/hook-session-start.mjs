@@ -36,7 +36,8 @@ function settleBilling(id, signedIn) {
   const file = sessionFile(home(), id)
   const session = readJson(file)
   const had = session?.billing
-  const kind = had === 'subscription' ? had : signedIn // a settled subscription is never downgraded
+  // a settled subscription yields only to a plainly per-token sign-in, and never while a subscription quota is selected
+  const kind = had === 'subscription' && (signedIn !== 'payg' || session.quotaSelection) ? had : signedIn
   const billing = kind === 'unclear' ? had ?? 'unclear' : kind
   const change = {}
   if (billing !== (had ?? 'unclear')) change.billing = billing
@@ -98,8 +99,7 @@ try {
     if (run) break
   }
   const now = Number(process.env.LCW_NOW) || Date.now()
-  const prior = ids.map((id) => readJson(sessionFile(home(), id))).find((s) => s?.billing)
-  const signedIn = prior?.billing === 'subscription' && !prior.quotaSelection ? 'subscription' : signIn()
+  const signedIn = signIn()
   noteQuotaSession(ids, { startup: true, defaultBilling: signedIn })
   const billing = ids.length ? settleBilling(ids[0], signedIn) : 'unclear'
   for (const id of ids.slice(1)) {
