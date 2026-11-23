@@ -526,6 +526,17 @@ test('a resumed per-token session told at its start is not told again at its fir
   assert.ok(!/turned out/.test(prompt ?? ''), prompt)
 })
 
+test('a resumed per-token session is not told again at its first prompt when the sign-in cannot be read', () => {
+  const home = tmp('home')
+  const repo = makeRepo()
+  writeSession(home, 'A', { sessionCanonicalId: 'A', billing: 'payg', toldPayg: true })
+  writeSession(home, 'B', { sessionCanonicalId: 'A', billing: 'payg' })
+  spent(home, 'A', 100)
+  assert.match(startNote(home, repo, { LCW_AUTH_STATUS_JSON: 'fail' }, 'B'), /billed per token/)
+  const prompt = limit(home, repo, { hook_event_name: 'UserPromptSubmit' }, 'B')
+  assert.ok(!/turned out/.test(prompt ?? ''), prompt)
+})
+
 test('a session that turns out to be billed per token is told once, with the commands, and a subscriber is never stopped by dollars', () => {
   const home = tmp('home')
   const repo = makeRepo()
