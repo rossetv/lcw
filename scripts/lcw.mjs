@@ -1031,6 +1031,9 @@ const commands = {
       if (wave.step !== 'merging') fail(`Wave ${wave.n}'s final checks have not passed${wave.step ? ` (it is at ${wave.step})` : ''}: lcw wave step "final checks" when they start, then lcw wave step merging. Nothing was changed.`)
       const before = w.waves.find((x) => x.n < wave.n && x.status !== 'shipped')
       if (before) fail(`Wave ${before.n} has not shipped yet, and waves land in order. Nothing was changed.`)
+      // a verdict changed after the wave entered Ship would ship uncounted
+      const unsettled = (wave.requirements ?? []).filter((r) => r.status === 'todo' || r.status === 'failing')
+      if (unsettled.length) fail(`Wave ${wave.n} cannot ship with ${unsettled.map((r) => `${r.id} ${r.status}`).join(', ')}: send it back, lcw stage Build --wave ${wave.n}, or record each fix as it stands. Nothing was changed.`)
       if (flags.pr !== undefined && s.sweep.prs === 'end') fail('The charter chose one pull request at the end, so a wave has no pull request of its own. Nothing was changed.')
       const pr = flags.pr === undefined ? null : prOf(flags.pr).number || fail(`--pr takes the pull request's number, not ${flags.pr}. Nothing was changed.`)
       const root = s.repoRoot
@@ -1265,7 +1268,7 @@ function sweepStatus(run) {
   const s = run.state
   const w = s.sweep
   return [
-    `pull requests: ${PR_CHOICES[w.prs] ?? 'not chosen yet'}  round: ${w.round}${s.stage === 'Hunt' && w.early?.length ? ` (early: wave ${w.early.join(', ')} was short of Ship when it started, so it cannot end the sweep)` : ''}  fixed: ${w.fixed}  ${w.partial ? `partly fixed: ${w.partial}  ` : ''}parked: ${w.parked}  dropped: ${w.dropped}`,
+    `pull requests: ${PR_CHOICES[w.prs] ?? 'not chosen yet'}  round: ${w.round}${s.stage === 'Hunt' && w.early?.length ? ` (early: wave ${w.early.join(', ')} was short of Ship during it, so it cannot end the sweep)` : ''}  fixed: ${w.fixed}  ${w.partial ? `partly fixed: ${w.partial}  ` : ''}parked: ${w.parked}  dropped: ${w.dropped}`,
     'waves:', ...(w.waves.length ? w.waves.map((x) => `  ${x.n} [${x.status}] ${fixesIn(x)} fixes  branch: ${x.branch ?? 'none yet'}  ${x.pr ? `PR #${x.pr} ${x.merged ? 'merged' : 'not merged'}` : x.empty ? 'empty, no PR' : 'no PR'}`) : ['  none queued']),
     ...openWaves(s).flatMap((x) => waveStatus(run, x)),
     // a hunt round reads its own worktree of every open wave's work; otherwise the newest wave's worktree holds the latest
@@ -1516,8 +1519,8 @@ function adopt(run) {
 
 // the lock's limits are LCW_LOCK_WAIT_MS and LCW_LOCK_HUNG_MS when they are set, so tests need not wait on the clock
 const msFrom = (name, ms) => (Number(process.env[name]) > 0 ? Number(process.env[name]) : ms)
-// how long a call waits for the lock before it gives up
-const LOCK_WAIT_MS = msFrom('LCW_LOCK_WAIT_MS', 8000)
+// how long a call waits for the lock before it gives up: longer than a fetch or a merge holds it, since a slow holder is no longer robbed
+const LOCK_WAIT_MS = msFrom('LCW_LOCK_WAIT_MS', 30000)
 // a holder that still runs is never robbed for being slow, only once it has held the lock this long, far past any real command
 const LOCK_HUNG_MS = msFrom('LCW_LOCK_HUNG_MS', 10 * 60000)
 // a lock with no holder on record was taken by an older lcw, which itself takes one this old
