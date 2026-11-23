@@ -434,3 +434,9 @@ test('the usage mark box fills no button, since a raise is the person\'s own cho
 test('a box of LCW\'s own keeps its first option filled', () => {
   assert.deepEqual(filled(bannerRows({ kind: 'update', key: 'k', title: 't', lines: [], bullets: [], options: [['now', 'Update now'], ['later', 'Not now']] }, 92)), ['banner:update:now'])
 })
+
+test('an open question shows before an open ask, so its options are not hidden behind the answer box', () => {
+  const run = runFact({ id: 'r', name: 'r', shape: 'sweep', stage: 'Build', status: 'running', asks: [{ n: 1, text: 'Push where?', at: 1 }], questions: [{ ...QUESTION, recommend: 'a' }] }, false)
+  assert.equal(bannerFor({ run, now: 0 })?.kind, 'question')
+  assert.equal(bannerFor({ run, now: 0, dismissed: new Set(['question:r:Q82']) })?.kind, 'answer')
+})
