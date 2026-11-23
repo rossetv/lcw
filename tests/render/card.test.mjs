@@ -1143,4 +1143,12 @@ test('a cut inside a span ahead of a separator drops the separator too', () => {
   }
   const l = strip(toAnsi(card('RunningA', { width: 46, frame: true }), 'dark', 46)).split('\n')[1];
   assert.equal(cols(l), 46);
+  // An agent description clipped and padded already ends in "…": the cut keeps one.
+  const views = [['StageBrainstorm', buildView(inputsOf('StageBrainstorm'))], ['08-build-a-very-large-wave', buildView(inputsOf('08-build-a-very-large-wave'))]];
+  for (const [name, view] of views) for (const w of [45, 46, 47, 48]) for (const frame of [true, false]) {
+    for (const r of strip(toAnsi(renderCard(view, { width: w, frame }), 'dark', w)).split('\n')) {
+      assert.ok(!/……|… …/.test(r), name + ' at ' + w + ': ' + r);
+      assert.ok(cols(r) <= w, name + ' at ' + w + ': ' + r);
+    }
+  }
 });
