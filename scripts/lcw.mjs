@@ -1204,7 +1204,13 @@ function waveStage(run, wave, stage) {
     const busy = openWaves(run.state).filter((x) => x !== wave && x.status === 'running' && BUSY.includes(x.stage))
     if (busy.length >= 2) fail(`Waves ${busy.map((x) => `${x.n} (${x.stage})`).join(' and ')} are being built or reviewed, and at most two are at once; wave ${wave.n} goes back to ${stage} once one of them holds in Ship. Nothing was changed.`)
   }
-  change(run, `wave ${wave.n} stage: ${stage}`, (s) => {
+  // the round running now may read code this wave's review will change again, as a round started with it short of Ship would
+  const sw = run.state.sweep
+  const early = run.state.stage === 'Hunt' && wave.stage === 'Ship' && BUSY.includes(stage) && !(sw.early ?? []).includes(wave.n)
+    ? `round ${sw.round} is now an early one: wave ${wave.n} left Ship during it, so if it finds nothing to fix the sweep does not end on it: one more round follows once every open wave holds in Ship`
+    : null
+  change(run, `wave ${wave.n} stage: ${stage}${early ? `; ${early}` : ''}`, (s) => {
+    if (early) (s.sweep.early ??= []).push(wave.n)
     if (stage === 'Review' && !wave.round) wave.round = 1 // a later round is raised by lcw wave round
     // its final checks no longer count, and nor do those of the waves after it, which ran on top of it
     if (wave.step === 'final checks' || wave.step === 'merging') clearLater(s, wave)
@@ -1214,7 +1220,7 @@ function waveStage(run, wave, stage) {
     if (was === 'Hunt') Object.assign(s, { stage: was, stageSince: since })
     mirror(s)
   }, wave)
-  out(`wave ${wave.n} stage ${stage}`)
+  out(`wave ${wave.n} stage ${stage}`, ...(early ? [early] : []))
 }
 
 /** The branches a wave must hold, directly or through the wave before it: the sweep's own, which holds the shipped waves, and every earlier open wave's. */
