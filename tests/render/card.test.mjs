@@ -834,8 +834,8 @@ test('at 100 columns nothing is lost, at 80 the longer words go first, and below
   assert.match(full.find(l => l.startsWith('waves ')), /▰▰▱ {2}1 queued +round 1 · 2 parked$/);
   const eighty = at(80);
   // The later review round goes before the failing fix, the last to lose.
-  assert.match(laneOf(eighty, 1), /18 of 23 pass · 1 failing +34m$/);
-  assert.match(laneOf(eighty, 2), /7 of 12 done +22m$/);
+  assert.match(laneOf(eighty, 1), /18 of 23 pass · 1 failing … +34m$/);
+  assert.match(laneOf(eighty, 2), /7 of 12 done … +22m$/);
   const fifty = at(50);
   assert.match(fifty.find(l => l.startsWith('waves ')), /^waves {3}▰▰▱ {2}2 in progress · 1 queued/);
   assert.equal(laneOf(fifty, 1), 'wave 1  ▰▰▰ ▰▰▰ ▰▰▰ ▱▱▱  Review');
@@ -843,7 +843,7 @@ test('at 100 columns nothing is lost, at 80 the longer words go first, and below
   const long = (w) => laneRows(inputsOf('28-lanes-a-long-sweep'), w).find(l => l.startsWith('waves '));
   assert.match(long(115), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +round 3 · 61 fixed · 170 parked$/);
   assert.match(long(80), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued$/);
-  assert.match(long(70), /Ship {4}▰{7}▱{2} +61 fixed$/);
+  assert.match(long(70), /Ship {4}▰{7}▱{2} {2}… +61 fixed$/);
   for (const board of Object.keys(LANES)) for (const w of [140, 100, 80, 70, 60, 50, 44, 43, 36, 30]) {
     laneRows(inputsOf(board), w).forEach(l => assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l));
   }
@@ -862,7 +862,7 @@ test('a narrow waves row drops whole counts and never cuts a word or leaves a da
     const rows = strip(toAnsi(card('28-lanes-a-long-sweep', { width: w, frame: true }), 'dark', w)).split('\n').filter(l => l.startsWith('│ waves '));
     for (const row of rows) {
       seen++;
-      const after = row.slice(2, -2).trim().replace(/^waves\s+/, '').replace(/[▰▱]+|[✓›○] (Plan|Build|Review|Ship)/gu, '').trim();
+      const after = row.slice(2, -2).trim().replace(/^waves\s+/, '').replace(/[▰▱]+|[✓›○] (Plan|Build|Review|Ship)/gu, '').replace(/ *…/, "").trim();
       if (!after) continue;
       for (const part of after.split(/ {2,}/).join(' · ').split(' · ')) {
         assert.match(part, /^(\d+ (done|in progress|queued|fixed|parked|dropped)|round \d+)$/, w + ': ' + row);
@@ -1009,7 +1009,7 @@ test("the lanes' heading keeps its wave cells to the room left, so none is cut w
       { n: 2, status: 'running', stage: 'Ship', step: 'merging', stageSince: NOW - 6e5, requirements: [], tasks: [] }, ...queued] } };
   for (const width of [60, 62, 64, 66]) {
     const rows = laneRows({ state, now: NOW }, width);
-    assert.match(rows.find(l => l.startsWith('waves ')), /^waves {3}✓ Plan {2}✓ Build {2}✓ Review {2}› Ship {4}▰+▱+$/, width + ': ' + rows.join('\n'));
+    assert.match(rows.find(l => l.startsWith('waves ')), /^waves {3}✓ Plan {2}✓ Build {2}✓ Review {2}› Ship {4}▰+▱+(?: {2}…)?$/, width + ': ' + rows.join('\n'));
     assert.equal(rows.find(l => l.startsWith('waves ')).length, width);
     assert.match(laneOf(rows, 2), / {4}merging +10m$/);
   }
@@ -1094,6 +1094,18 @@ test('no row of any board is wider than the card, at any width from 20 to 200', 
       }
     }
   }
+});
+
+test('a lane or heading that drops what it said ends in "…", and a row that fits whole has none', () => {
+  const rows = (board, width, frame) => strip(toAnsi(card(board, { width, frame }), 'dark', width)).split('\n');
+  for (const width of [60, 70]) {
+    assert.match(rows('06-build-wave-2-fixes-in-parallel', width, false).find(l => l.startsWith('wave 2')), /9 of 28( done)? … +22m$/, String(width));
+  }
+  assert.ok(!rows('06-build-wave-2-fixes-in-parallel', 80, false).find(l => l.startsWith('wave 2')).includes('…'));
+  for (const width of [60, 70]) {
+    assert.match(rows('28-lanes-a-long-sweep', width, false).find(l => l.startsWith('waves ')), /▰▱*  …/, String(width));
+  }
+  assert.match(rows('28-lanes-a-long-sweep', 44, true).find(l => l.startsWith('│ waves ')), /2 queued …/);
 });
 
 test('a cut never leaves a separator before its "…"', () => {
