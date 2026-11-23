@@ -528,3 +528,12 @@ test('the carry-on prompt says what went wrong, that the reply may have stopped 
   assert.match(carryPrompt('server_error', 3), /connection was lost.*part-way.*Carry on from where it stopped.*try 3\b/)
   assert.match(carryPrompt('overloaded', 1), /overloaded.*try 1\b/)
 })
+
+test('a row with wide characters is laid out to the width in terminal cells', async () => {
+  const { len } = await import('../../lib/format.mjs')
+  const row = [{ t: '→ ' }, { t: '再試行ポリシーのテストを書く 🧪', id: 'view:a' }, { t: ' Sonnet' }, { t: '12m', r: true }]
+  const { left, gap, right } = layout(row, 30)
+  const wide = (spans) => len(spans.map((s) => s.t).join(''))
+  assert.equal(wide(left) + gap + wide(right), 30)
+  assert.match(left[1].t, /…$/)
+})

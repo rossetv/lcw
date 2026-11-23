@@ -4,7 +4,7 @@ import { gateExpired } from '../lib/usage.mjs'
 import { thresholds as TH } from '../lib/theme.mjs'
 import { recordReading, next0800 } from '../lib/spend.mjs'
 import { settle } from '../lib/billing.mjs'
-import { dollars, tokens as tokenCount } from '../lib/format.mjs'
+import { clip, dollars, len, tokens as tokenCount } from '../lib/format.mjs'
 
 const LIVE = ['pending', 'running', 'waiting']
 const TEN_MINUTES = 10 * 60 * 1000
@@ -214,7 +214,7 @@ export function buttons(row) {
   return out
 }
 
-const cells = (spans) => [...spans.map((s) => String(s.t ?? '')).join('')].length
+const cells = (spans) => len(spans.map((s) => String(s.t ?? '')).join(''))
 
 /**
  * Splits a row as lib/paint.mjs does: the span with r: true starts the group pushed to the right
@@ -228,10 +228,9 @@ export function layout(row, cols) {
   const short = cells(left) + cells(right) + 2 - cols
   const d = left.findLastIndex((s) => /^view:/.test(s.id ?? ''))
   if (short > 0 && d >= 0) {
-    const t = [...String(left[d].t ?? '')]
-    const pad = t.length - t.join('').trimEnd().length
-    const keep = t.length - short
-    const shorter = short <= pad ? t.slice(0, keep).join('') : t.slice(0, Math.max(0, keep - 1)).join('') + '…'
+    const t = String(left[d].t ?? '')
+    const pad = t.length - t.trimEnd().length
+    const shorter = short <= pad ? t.slice(0, t.length - short) : clip(t, Math.max(1, len(t) - short))
     left = left.map((s, j) => (j === d ? { ...s, t: shorter } : s))
   }
   return { left, gap: Math.max(2, cols - cells(left) - cells(right)), right }
