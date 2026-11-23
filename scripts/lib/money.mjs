@@ -25,13 +25,19 @@ export function writeCap(usd, now) {
   writeJson(capFile(home()), { usd, at: new Date(now).toISOString() })
 }
 
+const MID_WRITE_MS = 60_000
+function damagedAndFresh(file, now) {
+  try { return now - fs.statSync(file).mtimeMs < MID_WRITE_MS } catch { return false }
+}
+
 /** Folds a cost reading into the session's spend record; writes only when the record changed. */
 export function recordSpend(sessionId, rawCost, now) {
   if (billingFor(sessionsFor(sessionId)) === 'subscription') return null
   const file = spendFile(home(), sessionId)
   const rec = readJson(file)
-  // A file that exists but does not parse is caught mid-write by another writer: starting afresh would overwrite its spend.
-  if (rec === null && fs.existsSync(file)) return null
+  // A file that does not parse and was written a moment ago is caught mid-write by another writer: starting afresh would
+  // overwrite its spend. One that stays damaged is replaced, or every later dollar would go uncounted.
+  if (rec === null && damagedAndFresh(file, now)) return null
   const next = recordReading(rec, rawCost, now)
   if (next && next !== rec) writeJson(file, next)
   return next
