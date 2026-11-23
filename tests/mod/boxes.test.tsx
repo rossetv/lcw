@@ -337,6 +337,20 @@ test("an answer pressed whose prompt the engine refuses still reaches the run, s
   await band.unmount()
 })
 
+test('an answer pressed while a reopen prompt still waits to be sent reaches the run with it', async ($, on) => {
+  const w = engine(on, { ...asking([REMOTE]), [RUN + '/mod-alive']: String(NOW - 60000) }, { drops: 1 })
+  await start($)
+  await w.clock.advance(5000)
+  expect(w.prompts.length).toBe(0)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:answer:b' })
+  await w.clock.advance(40000)
+  const all = w.prompts.map((p) => p.text).join('\n')
+  expect(all).toMatch(/reopened/)
+  expect(all).toMatch(/answered ask 1/)
+  await band.unmount()
+})
+
 test("an ask's Other puts its number in the prompt, as Answer now does", async ($, on) => {
   const w = engine(on, asking([REMOTE]))
   await start($)

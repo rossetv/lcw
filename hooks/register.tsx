@@ -877,7 +877,8 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
     }
     last = r
   }
-  if (plan.owe && S.run) owe($, S.run.runDir, plan.owe, 0)
+  // A prompt still owed to the run (a reopen, a resume) is sent with it, not dropped for it.
+  if (plan.owe && S.run) owe($, S.run.runDir, S.owed?.runDir === S.run.runDir ? S.owed.text + '\n\n' + plan.owe : plan.owe, 0)
   if (plan.prompt) {
     if (!(await submit($, plan.prompt))) return $.ui.toast(plan.promptFailed ?? 'Clear the prompt or wait for the turn to end, then press it again.')
   }
