@@ -4,41 +4,42 @@
 
 <h1 align="center">LCW: Large Change Workflow</h1>
 
-<p align="center">A Claude Code plugin that takes any large change, or an open goal such as a whole backlog, from what you intend to a draft pull request.</p>
+<p align="center">Tell Claude what you want built. Come back to a pull request.</p>
 
 <p align="center">
-  <img src="overview.svg" width="830" alt="How LCW works, in two shapes. You say what you want, and the main orchestrator, advised by Fable, picks the shape; a small change gets no run. A Build is for a defined change: Brainstorm with you, your one approval, then Spec. A Sweep is for an open goal: a Charter with you, your one approval, then a Hunt where probes find what to fix and the fixes queue up in waves. Both share Plan, Build, Review and Ship: once in a Build, once for each wave in a Sweep, which goes back to Hunt for the next wave or a new round until none is left. You review the pull request.">
+  <img src="hero.svg" width="830" alt="One LCW run in a terminal: you ask Claude to add shared lists to a to-do app, Claude plays back what it understood and you approve once, agents build it while a card above the prompt shows the stage, the tasks and each agent with its model and tokens and two rows below show the mascot, the model, the context and the week's usage against the mark, and then a draft pull request opens and the card shows the run finished.">
 </p>
-
-<p align="center"><a href="lcw-shapes.svg">The full picture: every agent, and the records each stage keeps</a></p>
-
-## Two shapes
-
-A Build takes a defined change, such as "add shared lists to the to-do app", to one draft pull request.
-A Sweep takes an open goal, such as "fix all the backlog items" or "find and fix the bugs in the API": it hunts for what to fix, then plans, builds, reviews and ships the fixes in waves, until a round finds nothing left.
-
-Claude picks the shape from what you ask; if you name one, that wins.
-A Sweep's one approval is its charter, where you agree its goals, its limits and how its pull requests land: stacked, one for each wave, which you merge in order with merge commits; merged by Claude as it goes, when a wave meets the rules you gave; or one at the end.
-
-## The status bar
-
-<p align="center">
-  <img src="statusbar.svg" width="783" alt="The LCW status bar in a terminal, followed through one run that builds a to-do app for web and mobile: you ask, then brainstorm, spec, a build with three orchestrators and their workers, a question for you, a pause at the usage mark, and the finished run. A card above the prompt shows the run, its stage, its tasks and its agents; two rows under the prompt show a small mascot, a different creature in each scene with the face that scene calls for, and beside it the model, the context and the week's usage against the mark.">
-</p>
-
-The card above the prompt follows the run: its stage, its tasks, each agent with its model and tokens, and anything waiting on you.
-The two rows under the prompt are always there: the model, the context, and your week's usage against the mark.
-
-Click an agent on the card to talk to it, or press ctrl+x then Tab to reach the card, Tab to the agent, and Enter.
-
-### Billing
-
-LCW tracks Claude subscriptions by weekly usage percentage, and API billing by estimated dollars. For custom subscription-backed AI proxies, such as Codex proxies, it can track account-wide quota percentages through your own adapter; a custom endpoint alone does not establish its billing plan. LCW may offer a setup conversation for a custom endpoint: choose Set up quota check, Keep dollar tracking, or Dismiss. Setup does not configure an adapter automatically. See [external subscription quota setup](docs/quota-command.md).
 
 ## Install
 
 ```
-/plugin install lcw --marketplace rossetv/lcw
+/plugin marketplace add rossetv/lcw
+/plugin install lcw@lcw
 ```
 
-It runs on macOS and Linux, and needs Node 18 or later and git.
+Then say "set up LCW" to turn on the status rows. Needs macOS or Linux, Node 18 or later, and git.
+
+## Then just ask
+
+"Add shared lists to the to-do app" is one change, so Claude runs a Build.
+
+"Find and fix the bugs in the API" is an open goal, so Claude runs a Sweep.
+
+## How it works
+
+<p align="center">
+  <img src="how.svg" width="830" alt="How LCW works. You say what you want. For one change, a Build: in Brainstorm Claude plays your intent back and you approve once, then a reviewer that saw nothing else reads the Spec cold and explains it back. For an open goal, a Sweep: you approve a Charter once, then probes hunt for problems, and nothing is fixed until a recipe shows it is real. Both then go on their own through Plan, Build, Review and Ship. Each task owns its files, each milestone is checked blind, and fresh reviewers check every requirement while the full suites run. It ends at a draft pull request for you to review. A Sweep goes back to Hunt until a round finds nothing. It stops at your usage mark, 75% of the week unless you raise it.">
+</p>
+
+The card above the prompt shows the stage, the tasks, each agent with its model and tokens, and anything waiting on you; the two rows under the prompt show the model, the context and the week's usage against the mark. Click an agent on the card to talk to it, or press ctrl+x then Tab to reach the card.
+
+<details>
+<summary><b>The full architecture</b></summary>
+<br>
+<p align="center">
+  <img src="architecture.svg" width="830" alt="LCW's full architecture: around your session, the mod draws the run's card and the pink box, the status line shows the mascot, model, context and usage against the mark, the hooks tell Claude the run at start and stop it at the mark, and the main session records everything in a run folder outside the repository; then each stage with its agents, their models and the records it keeps, ending at a draft pull request.">
+</p>
+Every stage, its agents and their models, and the records each keeps in a run folder outside your repository.
+</details>
+
+On API billing, usage is counted in estimated dollars. [Billing and external quota](docs/quota-command.md) · [License](LICENSE)
