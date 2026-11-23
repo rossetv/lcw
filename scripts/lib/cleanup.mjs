@@ -111,7 +111,9 @@ function survey(cwd, lcwHome) {
     const t = { type: 'worktree', path: w.path, branch: w.branch, head: w.head }
     // A live sweep's waves keep their worktrees: an open one is being worked in, a shipped one holds the latest work.
     const holds = (s) => [s.worktree, ...(Array.isArray(s.sweep?.waves) ? s.sweep.waves.map((x) => x?.worktree) : [])].some((p) => p && real(p) === w.path)
-    const liveRun = live.find(holds)
+    // a live sweep's hunt reads its <name>-latest worktree, even when that sits at a commit already in the default branch
+    const hunted = (s) => s.shape === 'sweep' && typeof s.name === 'string' && w.path === real(`${main}/.claude/worktrees/${s.name}-latest`)
+    const liveRun = live.find((s) => holds(s) || hunted(s))
     const endedRun = runs.find((s) => ended(s) && holds(s))
     // The folder was deleted by hand: only git's record of it is left. A branch keeps its commits when that record
     // goes; a detached commit that is nowhere else would be lost with it, so that worktree stays.

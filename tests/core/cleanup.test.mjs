@@ -376,6 +376,23 @@ test('a live sweep keeps every wave worktree, open or shipped; an ended one free
   assert.ok(!listed.includes(`worktree:${open}`) && !listed.includes(`worktree:${shipped}`))
 })
 
+test('a live sweep keeps its detached -latest hunt worktree even at a tip already in main; a sweep that is over frees it', () => {
+  const repo = makeRepo()
+  const h = tmp('home')
+  const latest = (name) => {
+    const dir = `${repo}/.claude/worktrees/${name}-latest`
+    git(repo, 'worktree', 'add', '-q', '--detach', dir, 'main')
+    return fs.realpathSync(dir)
+  }
+  const live = latest('s')
+  const over = latest('t')
+  runState(h, repo, 'r-live', { status: 'running', shape: 'sweep', name: 's', repoRoot: repo, worktree: null, sweep: { waves: [] } })
+  runState(h, repo, 'r-over', { status: 'finished', shape: 'sweep', name: 't', repoRoot: repo, sweep: { waves: [] } })
+  const listed = names(candidates(repo, h))
+  assert.ok(!listed.includes(`worktree:${live}`))
+  assert.ok(listed.includes(`worktree:${over}`))
+})
+
 test('a worktree with a skip-worktree or assume-unchanged edit is not listed, nor its branch', () => {
   for (const flag of ['--skip-worktree', '--assume-unchanged']) {
     const repo = makeRepo()
