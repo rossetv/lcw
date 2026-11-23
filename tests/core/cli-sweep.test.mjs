@@ -753,7 +753,7 @@ test('a command that waits on a slow lcw merge does not lose its change, however
   // a lock this old was once taken from its holder while the holder still ran
   const old = new Date(Date.now() - 60000)
   fs.utimesSync(`${t.dir}/lock`, old, old)
-  const q = t.cli('question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it')
+  const q = t.cli('question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it', '--recommend', 'a')
   assert.equal(q.code, 0, q.out)
   const m = await merging
   assert.equal(m.code, 0, m.out)
@@ -765,7 +765,7 @@ test('a command whose lock was taken from it as hung saves nothing over the newe
   const gh = fakeGh({ GH_SLEEP: '1' })
   const { done: merging } = await slowMerge(t, gh)
   await new Promise((r) => setTimeout(r, 200))
-  const q = lcw(['question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it'], { ...t.o, env: { LCW_LOCK_HUNG_MS: '100' } })
+  const q = lcw(['question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it', '--recommend', 'a'], { ...t.o, env: { LCW_LOCK_HUNG_MS: '100' } })
   assert.equal(q.code, 0, q.out)
   const m = await merging
   assert.equal(m.code, 1, m.out)
@@ -1213,8 +1213,15 @@ test('a question is added with its choices, picked once, answered in words or us
   const t = hunting()
   const add = (...a) => t.cli('question', 'add', ...a)
   assert.equal(add('Q1', '--text', 'Allow a 422?', '--a', 'Answer 422').code, 1, 'two choices, each with what it means')
-  assert.equal(add('Q1', '--text', 'Allow a 422?', '--why', 'a 409 names the owner', '--a', 'Answer 422: fixed next wave', '--b', 'Keep the 409: closed as decided').code, 0)
-  assert.equal(add('Q1', '--text', 'again', '--a', 'x: y', '--b', 'z: w').code, 1)
+  const bare = add('Q1', '--text', 'Allow a 422?', '--a', 'Answer 422: fixed next wave', '--b', 'Keep the 409: closed as decided')
+  assert.equal(bare.code, 1, 'a question names the option Claude recommends')
+  assert.match(bare.out, /^lcw question add needs --recommend <a\|b>/)
+  assert.equal(bare.out.trim().split('\n').length, 1)
+  assert.equal(add('Q1', '--text', 'Allow a 422?', '--a', 'Answer 422: fixed next wave', '--b', 'Keep the 409: closed as decided', '--recommend', 'c').code, 1, 'one of the options given')
+  assert.equal(add('Q1', '--text', 'Allow a 422?', '--why', 'a 409 names the owner', '--a', 'Answer 422: fixed next wave', '--b', 'Keep the 409: closed as decided', '--recommend', 'b').code, 0)
+  assert.equal(t.state().questions[0].recommend, 'b')
+  assert.match(t.cli('question').out, /Q1 \[open, recommended b\] Allow a 422\?/)
+  assert.equal(add('Q1', '--text', 'again', '--a', 'x: y', '--b', 'z: w', '--recommend', 'a').code, 1)
   assert.equal(t.cli('question', 'Q1', 'used').code, 1, 'only an answered question is used')
   assert.equal(t.cli('question', 'Q1', 'pick', 'd').code, 1)
   assert.equal(t.cli('question', 'Q1', 'pick', 'a').code, 0)
@@ -1223,7 +1230,7 @@ test('a question is added with its choices, picked once, answered in words or us
   assert.match(t.cli('status').out, /Q1 \[answered: a, Answer 422\] Allow a 422\?/)
   assert.equal(t.cli('question', 'Q1', 'used').code, 0)
 
-  add('Q2', '--text', 'Which cutoff?', '--a', '30 days: x', '--b', '90 days: y')
+  add('Q2', '--text', 'Which cutoff?', '--a', '30 days: x', '--b', '90 days: y', '--recommend', 'a')
   assert.equal(t.cli('question', 'Q2', 'pick', 'other').code, 1, 'their own words come through answer')
   t.cli('question', 'Q2', 'answer', '60 days')
   assert.deepEqual([t.state().questions[1].status, t.state().questions[1].words], ['answered', '60 days'])
@@ -1232,7 +1239,7 @@ test('a question is added with its choices, picked once, answered in words or us
 test('a question used with an answer settles one parked item, never below none, and one left parked does not', () => {
   const t = hunting()
   t.cli('hunt', '--fix', '0', '--park', '2', '--drop', '0')
-  const ask = (id) => t.cli('question', 'add', id, '--text', `${id}?`, '--a', 'Yes: fix it', '--b', 'No: leave it')
+  const ask = (id) => t.cli('question', 'add', id, '--text', `${id}?`, '--a', 'Yes: fix it', '--b', 'No: leave it', '--recommend', 'a')
   for (const id of ['Q1', 'Q2', 'Q3', 'Q4']) ask(id)
   t.cli('question', 'Q1', 'pick', 'a')
   assert.match(t.cli('question', 'Q1', 'used').out, /Q1: used/)
@@ -1254,7 +1261,7 @@ test('questions are a sweep\'s own', () => {
   const home = tmp('home')
   const o = { home, cwd: makeRepo(), session: 's1' }
   lcw(['start', 'b', '--title', 'B'], o)
-  const r = lcw(['question', 'add', 'Q1', '--text', 't', '--a', 'x: y', '--b', 'z: w'], o)
+  const r = lcw(['question', 'add', 'Q1', '--text', 't', '--a', 'x: y', '--b', 'z: w', '--recommend', 'a'], o)
   assert.equal(r.code, 1)
   assert.match(r.out, /is for a sweep/)
 })

@@ -43,7 +43,7 @@ export function runFact(state, kept) {
 function questionsOf(state) {
   const all = OPEN(state) && Array.isArray(state.questions) ? state.questions.filter((q) => q?.id && Array.isArray(q.options)) : []
   const open = all.filter((q) => q.status === 'open').map((q) => ({
-    id: String(q.id), text: String(q.text ?? ''), why: String(q.why ?? ''),
+    id: String(q.id), text: String(q.text ?? ''), why: String(q.why ?? ''), ...(q.recommend == null ? {} : { recommend: String(q.recommend) }),
     options: q.options.map((o) => ({ key: String(o.key), label: String(o.label ?? ''), meaning: String(o.meaning ?? '') })),
   }))
   return open.length ? { open, asked: all.length, answered: all.length - open.length } : undefined
@@ -58,7 +58,7 @@ function approvalOf(state) {
   if (state.stage !== (sweep ? 'Charter' : 'Brainstorm') || state.status !== 'with-you' || !Number.isFinite(a?.at)) return undefined
   const go = (Array.isArray(a.go) ? a.go : []).map((g) => String(g ?? '').replace(/\s+/g, ' ').trim().slice(0, 20)).filter(Boolean).slice(0, 3)
   const meaning = String(a.meaning ?? '').replace(/\s+/g, ' ').trim()
-  return { go: go.length ? go : ['Go'], meaning: meaning || (sweep ? 'starts the hunt' : 'build it as played back'), at: a.at }
+  return { go: go.length ? go : ['Go'], meaning: meaning || (sweep ? 'starts the hunt' : 'build it as played back'), at: a.at, ...(Number(a.recommend) ? { recommend: Number(a.recommend) } : {}) }
 }
 
 /** What a reply on the approval box puts in the prompt: Go's label as it is, the other two ready for the person's words. */

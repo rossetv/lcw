@@ -93,7 +93,7 @@ lcw approval
 
 Once the box is shown, `lcw set health="waiting for your yes on the charter"`. After a "yes, but", `lcw set health="asking you: <what you are reworking, in a few words>"` while you rework the charter; the waiting words return once the box is shown again.
 
-It takes Go labels and `--meaning` as in Brainstorm. Run it again whenever you send the playback again. The box can be hidden, so the message still ends with the question and the three replies.
+It takes Go labels, `--recommend` and `--meaning` as in Brainstorm. Run it again whenever you send the playback again. The box can be hidden, so the message still ends with the question and the three replies.
 
 A typed reply counts, a number or their own words, and so does one the box put in their prompt and they sent with Enter. A button never approves: never put the approval in a question dialog. Send nothing else until they answer. If something you learn meanwhile changes the playback, send the whole playback again with what changed marked.
 

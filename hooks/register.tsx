@@ -957,7 +957,8 @@ export const register: Register = (on) => {
           <Box key={'row' + i}>
             {buttons(parts).map((g) => {
               const id = g.id
-              if (id) return <Button key={keyOf(id)} plain onPress={() => press(id)}>{g.spans.map(text)}</Button>
+              // the keyboard lands on the filled button, the recommended one, wherever it stands
+              if (id) return <Button key={keyOf(id)} plain autoFocus={g.spans.some((s) => s.bg === 'Fable') || undefined} onPress={() => press(id)}>{g.spans.map(text)}</Button>
               return g.spans.map((s) => (s.href ? <Link href={s.href} label={String(s.t ?? '')} /> : text(s)))
             })}
           </Box>

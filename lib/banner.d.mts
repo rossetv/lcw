@@ -18,6 +18,8 @@ export interface Banner {
   note?: string
   /** The question box: the question it puts. */
   questionId?: string
+  /** The option drawn filled as the one recommended: its id, or null for none. Absent on a box whose first option is the one filled. */
+  recommended?: string | null
 }
 
 /** A time as milliseconds, or an ISO string. */

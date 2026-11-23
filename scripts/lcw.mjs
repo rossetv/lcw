@@ -25,8 +25,8 @@ const now = () => (Number.isFinite(Number(process.env.LCW_NOW)) && process.env.L
 // flags each command takes (all take a value); --session is accepted everywhere
 const COMMAND_FLAGS = {
   start: ['title', 'shape'], task: ['model', 'effort', 'wave'], req: ['wave'], set: ['wave'], stage: ['wave'], ledger: ['wave'], ask: ['waiting', 'wave'],
-  approval: ['meaning'], finish: ['pr', 'branch'], stop: ['pr'],
-  hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr', 'wave'], checkpoint: ['keep'], question: ['text', 'why', 'a', 'b', 'c'],
+  approval: ['meaning', 'recommend'], finish: ['pr', 'branch'], stop: ['pr'],
+  hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr', 'wave'], checkpoint: ['keep'], question: ['text', 'why', 'a', 'b', 'c', 'recommend'],
 }
 // flags that take no value
 const SWITCHES = { where: ['json'], awake: ['check'], checkpoint: ['compact'] }
@@ -51,12 +51,12 @@ In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (qu
 hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>), once that wave has reached Review and while fewer than two waves are in Plan, Build or Review (a wave sent back from Ship waits on the same cap); it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, leaving out a wave at merging, whose head is settled; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first; stage Review, stage Ship and the final checks need all of them, and stage Ship, from any stage, needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round, and wave round <r> sets it. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
 --wave <n> names the wave that stage Plan|Build|Review|Ship, task, req, set plan.* or milestone, ledger, ask and wave round|step|take|defer|shipped act on. Without it they act on the open wave whose worktree lcw runs in, else the only open wave; with several open they refuse, but ledger writes the run's ledger only and ask is the run's own, as they are during a hunt. ask --wave marks the wave waiting until its asks are answered. ledger --wave may name a shipped wave, and set takes --wave with any key. A flag and its value may be one word, --wave=<n>.
 req <id> rename "<name>" and req <id> drop change a requirement when what is built changes; in a sweep's running wave req <id> park takes a fix out of the wave for the person, and req <id> partial marks a fix that was built but leaves the charter's done line unmet: it is not counted as fixed. req <id> drop --wave <n> drops a fix a shipped wave parked.
-approval ["<Go label>" ...] [--meaning "<what Go builds>"] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. Asked again, it replaces the last; a new stage clears it.
+approval ["<Go label>" ...] [--meaning "<what Go builds>"] [--recommend <n>] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. With several Go labels, --recommend <n> is needed: the one Claude recommends, which the box draws in pink. Asked again, it replaces the last; a new stage clears it.
 take <runId> makes this session take over a run of this repository that no session has shown for 15 minutes; abandon <runId> stops such a run for good and removes its worktree when nothing in it is uncommitted, keeping its branch.
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
-flags: --session <id> (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --wave; approval --meaning; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; where --json; awake --check
+flags: --session <id> (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --wave; approval --meaning --recommend; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
-question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] puts a short question to the person in LCW's box, in a sweep; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
+question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> puts a short question to the person in LCW's box, in a sweep, the recommended option drawn in pink; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
 checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
 const refuse = (msg) => { console.log(msg); process.exit(1) }
@@ -230,7 +230,7 @@ const QUESTION_KEYS = ['a', 'b', 'c']
 /** "  Q82 [answered: a, Answer 422] Trade the friendly 409 for a generic 422?" */
 function questionLine(q) {
   const picked = q.options.find((o) => o.key === q.pick)
-  const said = q.status === 'open' ? '' : q.words ? `: ${q.words}` : q.pick === 'park' ? ': leave it parked' : picked ? `: ${q.pick}, ${picked.label}` : ''
+  const said = q.status === 'open' ? (q.recommend ? `, recommended ${q.recommend}` : '') : q.words ? `: ${q.words}` : q.pick === 'park' ? ': leave it parked' : picked ? `: ${q.pick}, ${picked.label}` : ''
   return `  ${q.id} [${q.status}${said}] ${q.text}`
 }
 
@@ -502,8 +502,12 @@ const commands = {
     if (go.length > 3) fail('At most 3 Go labels, such as "Go (a)" "Go (b)"')
     if (go.some((g) => [...g].length > 20)) fail('A Go label is at most 20 characters, such as "Go (a)"; say what it builds with --meaning')
     const meaning = String(flags.meaning ?? '').replace(/\s+/g, ' ').trim()
-    change(run, `approval asked${go.length ? ': ' + go.join(' / ') : ''}${meaning ? ' (' + meaning + ')' : ''}`, (s) => {
-      s.approval = { go, meaning, at: now() }
+    // of several Go labels the box draws one in pink: the one Claude recommends
+    const several = go.length > 1
+    const recommend = /^\d+$/.test(String(flags.recommend ?? '')) ? Number(flags.recommend) : 0
+    if ((several || flags.recommend !== undefined) && (recommend < 1 || recommend > Math.max(1, go.length))) fail(`lcw approval ${several ? 'with several Go labels needs' : 'takes'} --recommend <${several ? `1-${go.length}` : '1'}>: the Go label you recommend, which the box draws in pink. Nothing was changed.`)
+    change(run, `approval asked${go.length ? ': ' + go.join(' / ') : ''}${several ? `, recommending ${go[recommend - 1]}` : ''}${meaning ? ' (' + meaning + ')' : ''}`, (s) => {
+      s.approval = { go, meaning, at: now(), ...(several ? { recommend } : {}) }
       if (s.sweep) s.sweep.approvedAt = s.approval.at
     })
     out('approval: the box shows above the prompt until the person replies')
@@ -559,9 +563,11 @@ const commands = {
         const [label, ...meaning] = String(flags[key]).split(': ')
         return { key, label: label.trim(), meaning: meaning.join(': ').trim() }
       })
-      if (!id || !flags.text || options.length < 2 || options.some((o) => !o.label || !o.meaning)) fail('Usage: lcw question add <id> --text "<question>" [--why "<line>"] --a "<label>: <what it means>" --b "<label>: <what it means>" [--c ...]')
+      if (!id || !flags.text || options.length < 2 || options.some((o) => !o.label || !o.meaning)) fail('Usage: lcw question add <id> --text "<question>" [--why "<line>"] --a "<label>: <what it means>" --b "<label>: <what it means>" [--c ...] --recommend <a|b|c>')
+      const keys = options.map((o) => o.key)
+      if (!keys.includes(flags.recommend)) fail(`lcw question add needs --recommend <${keys.join('|')}>: the option you recommend, which the box draws in pink. Nothing was changed.`)
       if (list.some((q) => q.id === id)) fail(`Question ${id} exists. Nothing was changed.`)
-      change(run, `question ${id} added: ${flags.text}`, (s) => { s.questions.push({ id, text: flags.text, why: flags.why ?? '', options, status: 'open', pick: null, at: now() }) })
+      change(run, `question ${id} added: ${flags.text}`, (s) => { s.questions.push({ id, text: flags.text, why: flags.why ?? '', options, recommend: flags.recommend, status: 'open', pick: null, at: now() }) })
       return out(`${id} added; LCW's box puts it to the person`)
     }
     const q = list.find((x) => x.id === first) || fail(`No question ${first}. Nothing was changed.`)
