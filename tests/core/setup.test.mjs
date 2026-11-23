@@ -74,3 +74,73 @@ test('uninstall removes the agent depth only when install set it', () => {
   assert.deepEqual(read(settings).env, own.env, 'the person set it themselves')
   assert.ok(!/removed env\.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH/.test(u.out), u.out)
 })
+
+test('uninstall leaves an attribution the person changed after install, and keeps the keys they added', () => {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ model: 'opus' }))
+  setup(home, settings, 'install')
+  const s = read(settings)
+  s.attribution = { commit: 'Reviewed-by: me', pr: '' }
+  fs.writeFileSync(settings, JSON.stringify(s))
+  assert.equal(setup(home, settings, 'uninstall').code, 0)
+  assert.deepEqual(read(settings).attribution, { commit: 'Reviewed-by: me', pr: '' })
+  assert.ok(!fs.existsSync(`${home}/previous-attribution.json`), 'the record is dropped')
+
+  fs.writeFileSync(settings, JSON.stringify({ attribution: { commit: 'Co-Authored-By: x' } }))
+  setup(home, settings, 'install')
+  const t = read(settings)
+  t.attribution.sessionUrl = false
+  fs.writeFileSync(settings, JSON.stringify(t))
+  setup(home, settings, 'uninstall')
+  assert.deepEqual(read(settings).attribution, { commit: 'Co-Authored-By: x', sessionUrl: false }, 'a key added since is kept')
+})
+
+test('uninstall with a damaged attribution record leaves attribution, says so, and finishes the rest', () => {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ model: 'opus' }))
+  setup(home, settings, 'install')
+  fs.writeFileSync(`${home}/previous-attribution.json`, '{"commit":')
+  const r = setup(home, settings, 'uninstall')
+  assert.equal(r.code, 0, r.err)
+  assert.equal(read(settings).statusLine, undefined)
+  assert.deepEqual(read(settings).attribution, { commit: '', pr: '' })
+  assert.match(r.out, /attribution/)
+  assert.equal(setup(home, settings, 'uninstall').code, 0, 'a second run does not trip on it')
+})
+
+test('setup writes through a settings link whose file is not there yet, and keeps the link', () => {
+  const home = tmp('home'), dir = tmp('s'), dotfiles = tmp('dotfiles')
+  fs.symlinkSync(`${dotfiles}/sub/settings.json`, `${dir}/settings.json`)
+  const r = setup(home, `${dir}/settings.json`, 'install')
+  assert.equal(r.code, 0, r.err)
+  assert.ok(fs.lstatSync(`${dir}/settings.json`).isSymbolicLink())
+  assert.deepEqual(read(`${dotfiles}/sub/settings.json`).attribution, { commit: '', pr: '' })
+
+  fs.symlinkSync('rel/target.json', `${dir}/other.json`)
+  assert.equal(setup(home, `${dir}/other.json`, 'install').code, 0)
+  assert.ok(fs.lstatSync(`${dir}/other.json`).isSymbolicLink())
+  assert.ok(read(`${dir}/rel/target.json`).statusLine, 'a relative link resolves against its own folder')
+})
+
+test('setup resolves a missing link target against the real folder of a linked settings folder', () => {
+  const home = tmp('home'), root = tmp('root')
+  fs.mkdirSync(`${root}/dotfiles/claude`, { recursive: true })
+  fs.symlinkSync(`${root}/dotfiles/claude`, `${root}/dot-claude`)
+  fs.symlinkSync('../shared/settings.json', `${root}/dotfiles/claude/settings.json`)
+  const r = setup(home, `${root}/dot-claude/settings.json`, 'install')
+  assert.equal(r.code, 0, r.err)
+  assert.ok(fs.lstatSync(`${root}/dotfiles/claude/settings.json`).isSymbolicLink())
+  assert.ok(read(`${root}/dotfiles/shared/settings.json`).statusLine, 'the file is where the link points, not beside the folder link')
+  assert.equal(fs.existsSync(`${root}/shared`), false, 'no stray file where the link folder sits')
+})
+
+test('setup keeps every link of a chain whose last file is not there yet', () => {
+  const home = tmp('home'), dir = tmp('s')
+  fs.symlinkSync(`${dir}/b.json`, `${dir}/a.json`)
+  fs.symlinkSync('real/c.json', `${dir}/b.json`)
+  const r = setup(home, `${dir}/a.json`, 'install')
+  assert.equal(r.code, 0, r.err)
+  assert.ok(fs.lstatSync(`${dir}/a.json`).isSymbolicLink())
+  assert.ok(fs.lstatSync(`${dir}/b.json`).isSymbolicLink(), 'the middle link is not replaced by a file')
+  assert.ok(read(`${dir}/real/c.json`).statusLine)
+})

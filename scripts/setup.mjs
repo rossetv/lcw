@@ -44,7 +44,17 @@ function load() {
 /** Writes the settings file whole: through a link to the file it names (a dotfiles manager's), keeping the link and the file's mode. */
 function put(text) {
   let target = settingsPath, mode
-  try { target = fs.realpathSync(settingsPath); mode = fs.statSync(target).mode & 0o777 } catch {}
+  try { target = fs.realpathSync(settingsPath); mode = fs.statSync(target).mode & 0o777 } catch {
+    // a link (or a chain of them) to a file that is not there yet: write where the last one points
+    for (let hop = 0; hop < 8; hop++) {
+      try {
+        const dir = path.dirname(target)
+        let base = dir
+        try { base = fs.realpathSync(dir) } catch {}
+        target = path.resolve(base, fs.readlinkSync(target))
+      } catch { break }
+    }
+  }
   fs.mkdirSync(path.dirname(target), { recursive: true })
   const tmp = `${target}.${process.pid}.tmp`
   fs.writeFileSync(tmp, text, { mode: mode ?? 0o666 })
@@ -202,10 +212,16 @@ if (cmd === 'install') {
   }
   done.push(addedDirFile)
   if (fs.existsSync(attributionFile)) {
-    const prev = JSON.parse(fs.readFileSync(attributionFile, 'utf8'))
-    if (prev === undefined || prev === null) delete s.attribution
-    else s.attribution = prev
-    out('restored your previous attribution setting')
+    let prev
+    try { prev = JSON.parse(fs.readFileSync(attributionFile, 'utf8')) } catch { prev = undefined }
+    // only while it is still as LCW set it; what the person has set beside commit and pr wins over the record
+    if (prev === undefined) out('left your attribution setting: LCW\'s record of the old one is unreadable')
+    else if (attributionOff(s)) {
+      const { commit, pr, ...kept } = s.attribution
+      s.attribution = { ...(prev && typeof prev === 'object' ? prev : {}), ...kept }
+      if (!Object.keys(s.attribution).length) delete s.attribution
+      out('restored your previous attribution setting')
+    } else out('left your attribution setting: it has changed since LCW set it')
     done.push(attributionFile)
   }
   if (fs.existsSync(advisorFile) && s.advisorModel === 'fable') { delete s.advisorModel; out('removed advisorModel') }

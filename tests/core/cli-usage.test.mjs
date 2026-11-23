@@ -134,6 +134,15 @@ test('no gate is written for a run the human paused; resume lets it be evaluated
   assert.ok(fs.existsSync(`${t.dir}/gate`))
 })
 
+test('mark says at the mark for a run the human paused when the week is already over it', () => {
+  const t = started()
+  fs.writeFileSync(`${t.home}/usage.json`, JSON.stringify({ at: 1, sevenDay: { percentUsed: 70, resetsAt: new Date(Date.now() + 1e8).toISOString() }, source: 'statusline' }))
+  t.cli('stage', 'Spec')
+  t.cli('pause', 'human')
+  assert.match(t.cli('mark', '60').out, /at the mark/)
+  assert.doesNotMatch(t.cli('mark', '80').out, /at the mark/)
+})
+
 test('a mark set with no run belongs to that session alone, and a run started there begins with it', () => {
   const home = tmp('home')
   const repo = makeRepo()
