@@ -396,11 +396,15 @@ const commands = {
       // a repeat changes nothing, except after an early round that was sorted and found nothing to fix: once every
       // open wave holds in Ship, the round that follows it starts
       const sw = run.state.sweep
+      // each repeat that starts nothing says so, so it is never taken for a new round to hunt and record
       if (run.state.stage === 'Hunt') {
-        if (!sw.early?.length || sw.hunt.fix) return out('stage Hunt')
-        if (!sw.sorted) return out(`stage Hunt: round ${sw.round} stands, an early one. Once it is sorted, record its counts (lcw hunt --fix <n> --park <n> --drop <n>); with nothing to fix, the round that follows it starts here`)
+        const stands = `stage Hunt: round ${sw.round} stands`
+        const fix = sw.hunt.fix
+        if (fix) return out(`${stands}; no new round was started. It found ${fix} to fix, ${fix > 1 ? 'which go to waves; the next round starts once they are built' : 'which goes to a wave; the next round starts once it is built'}.`)
+        if (!sw.early?.length) return out(`${stands}; no new round was started. It is not an early round, so if it finds nothing to fix the sweep ends as the stop line says.`)
+        if (!sw.sorted) return out(`${stands}, an early one; no new round was started. Once it is sorted, record its counts (lcw hunt --fix <n> --park <n> --drop <n>); with nothing to fix, the round that follows it starts here`)
         const still = openWaves(run.state).filter((x) => x.status === 'running' && x.stage !== 'Ship')
-        if (still.length) return out(`stage Hunt: round ${sw.round} stands; the round that follows this early one starts once ${still.length > 1 ? 'waves' : 'wave'} ${still.map((x) => x.n).join(', ')} ${still.length > 1 ? 'hold' : 'holds'} in Ship`)
+        if (still.length) return out(`${stands}; no new round was started. The round that follows this early one starts once ${still.length > 1 ? 'waves' : 'wave'} ${still.map((x) => x.n).join(', ')} ${still.length > 1 ? 'hold' : 'holds'} in Ship`)
       }
       const queued = run.state.sweep.waves.filter((x) => x.status === 'queued')
       if (queued.length) fail(`Waves ${queued.map((x) => x.n).join(', ')} are still queued; a new hunt starts once none is. Nothing was changed.`)
