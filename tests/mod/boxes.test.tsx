@@ -308,9 +308,32 @@ test("an ask's option pressed records the answer and tells the run, with no prom
   await start($)
   const band = await $.ui.mount(BAND)
   await band.press({ key: 'banner:answer:b' })
+  await w.clock.advance(100)
   expect(lcwCalls(w.runs, 'answer')).toEqual(['answer 1 fork: push to your fork --session s1'])
   expect(w.prompts.map((p) => p.text).join(' ')).toMatch(/answered ask 1 .*fork: push to your fork/)
   expect(w.filled).toEqual([])
+  await band.unmount()
+})
+
+test("Later on a sweep's question shown before an ask brings up the ask's buttons", async ($, on) => {
+  const question = { id: 'Q1', text: 'Keep the 409?', why: 'w', status: 'open', recommend: 'a', options: [{ key: 'a', label: 'Keep', meaning: 'm' }, { key: 'b', label: 'Change', meaning: 'n' }] }
+  const w = engine(on, bound({ shape: 'sweep', questions: [question], asks: [{ ...REMOTE, at: NOW - HOUR }] }))
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:question:later' })
+  await w.clock.advance(1000)
+  expect(await band.find({ type: 'Button', key: 'banner:answer:b' })).toBeDefined()
+  await band.unmount()
+})
+
+test("an answer pressed whose prompt the engine refuses still reaches the run, sent again later", async ($, on) => {
+  const w = engine(on, asking([REMOTE]), { submitFails: 1 })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:answer:b' })
+  await w.clock.advance(40000)
+  expect(lcwCalls(w.runs, 'answer')).toEqual(['answer 1 fork: push to your fork --session s1'])
+  expect(w.prompts.filter((p) => /answered ask 1/.test(p.text)).length).toBe(1)
   await band.unmount()
 })
 

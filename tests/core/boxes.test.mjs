@@ -402,8 +402,8 @@ const REMOTE = { n: 2, text: 'Which remote?', at: NOW, recommend: 'b', options: 
 test("an ask's option records the answer with its words and tells the run; Other puts the ask's number in the prompt", () => {
   const plan = press(choosing([REMOTE]), 'b')
   assert.deepEqual(plan.steps.map((s) => s.argv.slice(2)), [['answer', '2', 'fork: push to your fork', '--session', 's1']])
-  assert.match(plan.prompt.text, /ask 2/)
-  assert.match(plan.prompt.text, /fork: push to your fork/)
+  assert.match(plan.owe, /ask 2/)
+  assert.match(plan.owe, /fork: push to your fork/)
   assert.equal(plan.dismiss, undefined, 'the next open ask shows once this one is answered')
   assert.deepEqual(press(choosing([REMOTE]), 'other'), { fill: 2, dismiss: true })
 })

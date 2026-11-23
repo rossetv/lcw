@@ -866,7 +866,7 @@ async function fillReply($: EngineInterface, text: string, setup?: Banner) {
 }
 
 // A press's plan carried out: its commands in order (the first that fails says why and the box stays), then the
-// prompt (one that cannot be sent keeps the box), the notices, the fill, and the box hidden for this occurrence.
+// prompt owed to the run, the prompt (one that cannot be sent keeps the box), the notices, the fill, and the box hidden for this occurrence.
 async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
   let last: { stdout?: string; stderr?: string } | null = null
   for (const step of plan.steps ?? []) {
@@ -877,6 +877,7 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
     }
     last = r
   }
+  if (plan.owe && S.run) owe($, S.run.runDir, plan.owe, 0)
   if (plan.prompt) {
     if (!(await submit($, plan.prompt))) return $.ui.toast(plan.promptFailed ?? 'Clear the prompt or wait for the turn to end, then press it again.')
   }

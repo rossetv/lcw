@@ -277,6 +277,7 @@ export function discussPrompt(root, cleanup, cleanupPath) {
  * - steps: commands run one after another; the first that fails (or whose output matches its halt) ends the plan,
  *   its output said in a toast, and the box stays;
  * - prompt: submitted ({ text, asUser }); when it cannot be, the box stays and the person is told;
+ * - owe: a prompt that carries the run on, sent until it goes through (the steps have already changed the run);
  * - notices: written into notices.json (the machine's "never again" choices);
  * - fill: the ask number Answer now (an ask's Other) puts in the prompt;
  * - fillText: the reply put in an empty prompt, never sent (the person presses Enter);
@@ -306,10 +307,7 @@ export function pressPlan(banner, option, facts, ctx) {
       if (a.n !== banner.askN) return null
       // Not dismissed: once this ask is answered the box shows the next one, if any.
       const words = o.meaning ? o.label + ': ' + o.meaning : o.label
-      return {
-        steps: [lcw('answer', String(a.n), words)], prompt: { text: answeredPrompt(run, a, words) },
-        promptFailed: `LCW recorded your answer to ask ${a.n}. Say "carry on" so the run acts on it.`,
-      }
+      return { steps: [lcw('answer', String(a.n), words)], owe: answeredPrompt(run, a, words) }
     }
     case 'question': {
       const q = run?.questions?.open?.[0]
