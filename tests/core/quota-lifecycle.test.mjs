@@ -10,7 +10,7 @@ import { readMoney, recordSpend, spendRecords } from '../../scripts/lib/money.mj
 
 const now = Date.parse('2026-02-02T12:00:00Z')
 const reset = '2026-02-05T12:00:00.000Z'
-const selection = { sourceId: 'external-quota' }
+const selection = { sourceId: 'external-quota', endpoint: 'https://proxy.test' }
 const put = (file, value) => { fs.mkdirSync(file.slice(0, file.lastIndexOf('/')), { recursive: true }); fs.writeFileSync(file, JSON.stringify(value)) }
 const getSession = (h, id) => readJson(sessionFile(h, id))
 function withHome(home, fn) {
@@ -207,6 +207,76 @@ test('launches check both the launching session and driver even without a prior 
     put(usageFile(f.home), { sevenDay: { percentUsed: 90, resetsAt: reset }, at: now })
     assert.equal(f.hook(GATE_HOOK, launcher).code, 2)
   }
+})
+
+test('the stop hook checks native and dollar driver holds independently of an external launching session', () => {
+  for (const billing of ['subscription', 'payg']) {
+    const f = fixture()
+    f.state.cache.result.weekly.percentUsed = 10
+    f.save()
+    put(sessionFile(f.home, 'driver'), { billing, markPercent: 75 })
+    put(sessionFile(f.home, 'proxy'), { billing: 'subscription', quotaSelection: selection, markPercent: 75 })
+    const spend = (usd) => put(spendFile(f.home, 'driver'), { v: 1, base: 0, max: usd, q: { [Math.floor(now / 900000)]: usd } })
+    if (billing === 'payg') spend(3500)
+    else put(usageFile(f.home), { sevenDay: { percentUsed: 90, resetsAt: reset }, at: now })
+    const started = lcw(['start', 'driver-stop', '--title', 'Driver controls'], { ...f.options, session: 'driver', env: { ...f.options.env, ANTHROPIC_BASE_URL: '' } })
+    const dir = /^folder: (.+)$/m.exec(started.out)[1]
+    put(sessionFile(f.home, 'proxy'), { ...getSession(f.home, 'proxy'), runDir: dir })
+    for (const hook_event_name of ['UserPromptSubmit', 'PostToolUse']) {
+      const stopped = f.hook(LIMIT_HOOK, 'proxy', { hook_event_name })
+      assert.match(stopped.out, /STOP/)
+      assert.match(stopped.out, billing === 'payg' ? /\$3,500/ : /90%/)
+      assert.doesNotMatch(stopped.out, /10%/)
+    }
+    if (billing === 'payg') spend(2000)
+    else put(usageFile(f.home), { sevenDay: { percentUsed: 5, resetsAt: reset }, at: now })
+    for (const hook_event_name of ['UserPromptSubmit', 'PostToolUse']) assert.equal(f.hook(LIMIT_HOOK, 'proxy', { hook_event_name }).out, '')
+    f.state.cache.result.weekly.percentUsed = 95
+    f.save()
+    assert.match(f.hook(LIMIT_HOOK, 'proxy', { hook_event_name: 'UserPromptSubmit' }).out, /STOP.*95%/)
+  }
+})
+
+test('replacing the configured endpoint cannot transfer permission to an already selected session', () => {
+  const f = fixture()
+  f.state.cache.result.weekly.percentUsed = 95
+  f.save()
+  f.hook(START_HOOK)
+  assert.equal(f.hook(GATE_HOOK).code, 2)
+  f.state.endpoint = 'https://other.test'
+  f.state.revision = 'two'
+  f.state.cache.revision = 'two'
+  f.state.cache.requestId = 'new-endpoint'
+  f.state.cache.result.weekly.percentUsed = 10
+  f.save()
+  assert.equal(f.hook(GATE_HOOK).code, 2)
+  assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, selection)
+  assert.match(lcw(['usage'], f.options).out, /held/)
+  f.hook(START_HOOK)
+  assert.equal(f.hook(GATE_HOOK).code, 2)
+  assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, selection)
+  f.state.endpoint = selection.endpoint
+  f.state.revision = 'three'
+  f.state.cache.revision = 'three'
+  f.state.cache.requestId = 'same-endpoint-replacement'
+  f.save()
+  assert.equal(f.hook(GATE_HOOK).code, 0)
+})
+
+test('an unbound saved selection holds until its own startup observes a matching endpoint', () => {
+  const f = fixture()
+  const legacy = { sourceId: selection.sourceId }
+  put(sessionFile(f.home, 'proxy'), { quotaSelection: legacy, billing: 'subscription', quotaDefaultBilling: 'payg' })
+  assert.equal(f.hook(GATE_HOOK).code, 2)
+  assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, legacy)
+  f.options.env.ANTHROPIC_BASE_URL = ''
+  f.hook(START_HOOK)
+  assert.equal(f.hook(GATE_HOOK).code, 2)
+  assert.equal(getSession(f.home, 'proxy').billing, 'subscription')
+  f.options.env.ANTHROPIC_BASE_URL = 'https://PROXY.test:443/'
+  f.hook(START_HOOK)
+  assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, selection)
+  assert.equal(f.hook(GATE_HOOK).code, 0)
 })
 
 test('refusal and reset expiry hold hooks independently of the native cache and percentage mark', () => {

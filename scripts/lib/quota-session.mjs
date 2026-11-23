@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import { sessionFile, spendFile } from '../../lib/key.mjs'
-import { activeQuota, selectQuota, quotaOff, evaluateQuota } from '../../lib/quota.mjs'
+import { activeQuota, selectQuota, quotaOff, evaluateQuota, normalizeEndpoint } from '../../lib/quota.mjs'
 import { home, readJson, writeJson } from './store.mjs'
 import { readQuotaState, maybeRefreshQuota } from './quota-command.mjs'
 import { alive } from './awake.mjs'
@@ -49,8 +49,11 @@ export function noteQuotaSession(ids, { startup = false, endpoint = process.env.
   const state = readQuotaState(home())
   const saved = rows.find(({ session }) => Object.hasOwn(session, 'quotaSelection'))?.session
   let selection = saved?.quotaSelection ?? null
-  if (quotaOff(state) || (startup && activeQuota(state))) selection = selectQuota(endpoint, state)
-  else if (!selection) selection = selectQuota(endpoint, state)
+  if (quotaOff(state)) selection = null
+  else if (startup && activeQuota(state)) {
+    const matched = selectQuota(endpoint, state)
+    if (matched || !selection || (selection.endpoint && normalizeEndpoint(endpoint) !== selection.endpoint)) selection = matched
+  } else if (!selection) selection = selectQuota(endpoint, state)
   if (!selection && !saved?.quotaSelection) return
   const history = saved?.quotaDefaultBilling ?? rows.find(({ session }) => session.billing)?.session.billing
   const prior = !history || history === 'unclear' ? defaultBilling ?? 'unclear' : history

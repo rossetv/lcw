@@ -177,7 +177,10 @@ test('without a money view the percent gate is written and checked as before', (
   assert.equal(gateHolds(run.paths, run.state, at(10)), true)
   // Paused at the mark and under it again: the percent gate goes, as today.
   const under = { sevenDay: { ...usage.sevenDay, percentUsed: 70 } }
-  assert.equal(applyGate(run.paths, { ...run.state, status: 'paused', pausedReason: 'mark' }, under, at(10)), false)
+  assert.equal(applyGate(run.paths, run.state, under, at(10)), true)
+  assert.equal(json(run.paths.gate).usedPercent, 80)
+  fs.writeFileSync(`${home}/usage.json`, JSON.stringify(under))
+  assert.equal(applyGate(run.paths, { ...run.state, status: 'paused', pausedReason: 'mark' }, usage, at(10)), false)
   assert.equal(fs.existsSync(run.paths.gate), false)
 })
 
