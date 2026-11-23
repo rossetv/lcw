@@ -689,7 +689,8 @@ const commands = {
     const lines = [weekLine(usage), `resets: ${w?.resetsAt ?? 'unknown'}`]
     if (run) {
       lines.push(`mark: ${run.state.markPercent}%`)
-      if (gateExpired(readJson(run.paths.gate), at)) lines.push('the limit has reset')
+      // an expired gate stays for the mod to wake the session, but the new week may be at the mark already
+      if (gateExpired(readJson(run.paths.gate), at)) lines.push(atMark(run.state.markPercent ?? DEFAULT_MARK, usage, at) ? 'at the mark' : 'the limit has reset')
       else lines.push(applyGate(run.paths, run.state, usage, at) ? 'at the mark' : 'ok')
     } else if (sessionId) {
       const mark = sessionMark(sessionId)
