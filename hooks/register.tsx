@@ -937,7 +937,8 @@ async function heartbeat($: EngineInterface) {
   if (!S.run) return
   const now = await $.clock.now()
   S.theme = themeFrom(await $.config.list())
-  if (S.holdsCard) await writeAlive($, S.run, now)
+  // Only for the run whose card was drawn: one bound since is not drawn until the box comes back.
+  if (S.holdsCard && S.alive.runDir === S.run.runDir) await writeAlive($, S.run, now)
 }
 
 async function checkpoint($: EngineInterface) {
@@ -1202,8 +1203,8 @@ export const register: Register = (on) => {
       const rows: Row[] = banner.length && below.length ? [...banner, [{ t: ' ' }], ...below] : [...banner, ...below]
       const hide = !S.collapsed && rows.some((row) => row.some((s) => /^(view|toggle):/.test(s.id ?? '')))
       if (hide !== S.hideRows) { S.hideRows = hide; S.dirty = true }
-      S.holdsCard = !!run
-      if (run && (now - S.alive.at >= 5000 || S.alive.runDir !== run.runDir)) void writeAlive($, run, now).catch(() => {})
+      S.holdsCard = !!run && card.length > 0
+      if (S.holdsCard && run && (now - S.alive.at >= 5000 || S.alive.runDir !== run.runDir)) void writeAlive($, run, now).catch(() => {})
 
       const press = async (id: string) => {
         if (id.startsWith('banner:')) return void (await pressBanner($, id, banner.length ? shown : null).catch(() => {}))
