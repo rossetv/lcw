@@ -4,7 +4,7 @@ import { buildView, renderCard, weekOf, weekShare } from '../../lib/card.mjs';
 import { renderStatusRows } from '../../lib/status.mjs';
 import { toPlain, toAnsi } from '../../lib/paint.mjs';
 import { hex } from '../../lib/theme.mjs';
-import { inputsOf, NOW } from './boards.mjs';
+import { inputsOf, fixtures, NOW } from './boards.mjs';
 
 // A sweep's card in each of its states, and a build's beside them, as approved: every row but the agents', the rules
 // and the bottom border, each the text inside the frame. The last but one is drawn 40 cells wide, with no frame.
@@ -1065,4 +1065,33 @@ test('a cut on the edge of a span leaves no dangling dot and says it cut', () =>
   const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), 80).find(l => l.includes('areas '));
   assert.ok(row.includes('…') && !/·\s+23 findings/.test(row), row);
   assert.match(row, /…\s+23 findings so far/, row);
+});
+
+test('a cut that drops whole spans always shows "…", even where what is left ends on a word', () => {
+  for (const width of [65, 77]) {
+    const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), width).find(l => l.includes('areas '));
+    assert.match(row, /14 hunt.*…\s+23 findings so far/, width + ': ' + row);
+    assert.ok(!row.includes('16 left'), row);
+  }
+  const plain = strip(toAnsi(card('03-hunt-round-1-probes-at-work', { width: 61 }), 'dark', 61)).split('\n').find(l => l.startsWith('areas '));
+  assert.match(plain, /…\s+23 findings so far/, plain);
+});
+
+test('a cut leaves no dangling "›" before its "…"', () => {
+  for (const [width, frame] of [[80, true], [76, false]]) {
+    const row = strip(toAnsi(card('StageSpec', { width, frame }), 'dark', width)).split('\n').find(l => l.includes('blind review  '));
+    assert.ok(row.includes('…') && !/[›·]\s*…/.test(row), row);
+  }
+});
+
+test('no row of any board is wider than the card, at any width from 20 to 200', () => {
+  for (const name of Object.keys(fixtures)) {
+    for (let width = 20; width <= 200; width++) {
+      for (const frame of [false, true]) {
+        for (const l of strip(toAnsi(card(name, { width, frame }), 'dark', width)).split('\n')) {
+          assert.ok(cols(l) <= width, name + ' at ' + width + (frame ? ' framed' : '') + ': ' + l);
+        }
+      }
+    }
+  }
 });
