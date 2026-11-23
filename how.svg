@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 1206" width="830" height="1206" role="img"><title>How LCW works</title><desc>How LCW works. You say what you want. A Build, one change: Brainstorm with you, where Claude plays your intent back and you approve once; then the Spec, read cold by a reviewer that saw nothing else. A Sweep, an open goal: a Charter with you, approved once; then a Hunt where probes find problems and nothing is fixed until a recipe shows it is real. Both go on their own through Plan, Build, Review and Ship: each task owns its files, each milestone is checked blind, fresh reviewers check every requirement and the suites run, and it ends at a draft pull request. A Sweep goes back to Hunt until a round finds nothing. It stops at your usage mark, 75% of the week unless you raise it.</desc><style>
+  .bg{fill:#fbf9f6;stroke:#e6dfd5}
+  .card{fill:#ffffff;stroke:#e1d9ce}
+  .card2{fill:#f6f2ec;stroke:#e1d9ce}
+  .you{fill:#fdeceb;stroke:#efb3ae}
+  .ink{fill:#24211e}
+  .mut{fill:#6b645c}
+  .yt{fill:#b8423b}
+  .pt{fill:#24211e}
+  .ok{fill:#2f7a55}
+  .okl{stroke:#2f7a55;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .okc{fill:#e5f3ea;stroke:#9fcfb3}
+  .yc{fill:#d9534c}
+  .tick{stroke:#ffffff;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .num{fill:#ffffff;stroke:#b9b0a4}
+  .nt{fill:#6b645c;font-size:12.5px;font-weight:600}
+  .nw{fill:#ffffff;font-size:12.5px;font-weight:600}
+  .l{stroke:#a69d91;stroke-width:1.4;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .yl{stroke:#d9534c;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .gl{stroke:#2f7a55;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .rail{stroke:#d8cfc3;stroke-width:2;fill:none;stroke-linecap:round}
+  .dv{stroke:#ebe4da;stroke-width:1;fill:none}
+  .dd{stroke:#d8cfc3;stroke-width:1;fill:none;stroke-dasharray:4 4}
+  .fi{stroke:#8a6a2c;stroke-width:1.2;fill:none;stroke-linejoin:round}
+  .chip{fill:#fbf4e6;stroke:#e2cf9f}
+  .ct{fill:#7a5a1c}
+  .mF{fill:#a8388c}.mO{fill:#6a48c0}.mS{fill:#2f5fb8}.mH{fill:#0f6f82}
+  .ag{fill:#ffffff;stroke:#cfc6ba}
+  .agd{fill:#ffffff;stroke:#cfc6ba;stroke-dasharray:4 3}
+  .h1{font-size:26px;font-weight:700;letter-spacing:-0.01em}
+  .h2{font-size:19px;font-weight:700}
+  .h3{font-size:16px;font-weight:650}
+  .b{font-size:13.5px}
+  .s{font-size:12.5px}
+  .bold{font-weight:650}
+  .mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+  text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif}
+  .cap{fill:#f0807a}.spot{fill:#f2efe8}.stem{fill:#ead9b8}.face{fill:#141312}.facel{stroke:#141312;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#1b1a18;stroke:#3a3631}
+    .card{fill:#23211f;stroke:#3d3934}
+    .card2{fill:#1f1d1b;stroke:#3d3934}
+    .you{fill:#3a2422;stroke:#8a4a45}
+    .ink,.pt{fill:#ede8e1}
+    .mut{fill:#aaa197}
+    .yt{fill:#f39a94}
+    .ok{fill:#7fcf9f}
+    .okl,.gl{stroke:#7fcf9f}
+    .okc{fill:#1f3a2b;stroke:#3f7a59}
+    .yc{fill:#e0665f}
+    .tick{stroke:#1b1a18}
+    .num{fill:#23211f;stroke:#6b645c}
+    .nt{fill:#c9c1b6}
+    .l{stroke:#8a8278}
+    .yl{stroke:#f0807a}
+    .rail{stroke:#4a453f}
+    .dv{stroke:#36322e}
+    .dd{stroke:#4a453f}
+    .fi{stroke:#e0c27a}
+    .chip{fill:#2e2817;stroke:#6e5b2c}
+    .ct{fill:#ecd193}
+    .mF{fill:#ef8fd3}.mO{fill:#b9a2ff}.mS{fill:#8fb4ff}.mH{fill:#6fd0e2}
+    .ag,.agd{fill:#23211f;stroke:#57514a}
+  }
+</style><rect class="bg" x="0.5" y="0.5" width="829" height="1205" rx="14"/><g transform="translate(40 30)"><rect class="cap" x="6" y="0" width="48" height="12" rx="0"/><rect class="cap" x="0" y="12" width="60" height="12" rx="0"/><rect class="stem" x="12" y="24" width="36" height="24" rx="0"/><circle class="spot" cx="18" cy="12" r="2.4000000000000004"/><circle class="spot" cx="42" cy="12" r="2.4000000000000004"/><circle class="face" cx="18" cy="36" r="2.4000000000000004"/><circle class="face" cx="42" cy="36" r="2.4000000000000004"/><path class="facel" stroke-width="1.4" d="M24.900000000000002 34.8q0 3 2.52 3q2.58 0 2.58 -2.4000000000000004q0 2.4000000000000004 2.58 2.4000000000000004q2.52 0 2.52 -3"/></g><text class="ink h1" x="118" y="58">How LCW works</text><text class="mut b" x="118" y="84">Two ways in, one way through. Beside each step: why you can trust it.</text><rect class="you" x="305" y="118" width="220" height="36" rx="18"/><text class="yt b bold" x="415" y="141" text-anchor="middle">You say what you want</text><path class="l" d="M415 154V168Q415 176 407 176H232Q222 176 222 186V205"/><path class="l" d="M217.5 199.5L222 205L226.5 199.5"/><path class="l" d="M415 168Q415 176 423 176H598Q608 176 608 186V205"/><path class="l" d="M603.5 199.5L608 205L612.5 199.5"/><text class="mut s" x="232" y="198">one change</text><text class="mut s" x="598" y="198" text-anchor="end">an open goal</text><rect class="card" x="36" y="206" width="372" height="322" rx="12"/><text class="ink h2" x="58" y="240">A Build</text><text class="mut s" x="58" y="261">such as billing for the admin panel</text><path class="dv" d="M58 278H386"/><circle class="yc" cx="69" cy="303" r="11.5"/><text class="nw" x="69" y="307.5" text-anchor="middle">1</text><text class="ink h3" x="90" y="308">Brainstorm</text><text class="yt s bold" x="386" y="308" text-anchor="end">with you</text><text class="mut b" x="90" y="330">Claude works out what you really mean, with</text><text class="mut b" x="90" y="349">mocks and diagrams, and plays it all back.</text><circle class="yc" cx="98" cy="371.5" r="8"/><path class="tick" d="M94.5 371.7L97 374.3L101.8 368.9"/><text class="yt b bold" x="114" y="376">You approve the playback: the one</text><text class="yt b bold" x="114" y="395">approval the whole run asks of you.</text><circle class="num" cx="69" cy="424" r="11.5"/><text class="nt" x="69" y="428.5" text-anchor="middle">2</text><path class="rail" d="M69 315V412"/><text class="ink h3" x="90" y="429">Spec</text><text class="mut b" x="90" y="451">Your intent, written down: what, never how.</text><circle class="okc" cx="98" cy="473.5" r="8"/><path class="okl" d="M94.5 473.7L97 476.3L101.8 470.9"/><text class="pt b" x="114" y="478">A reviewer that saw nothing else reads it</text><text class="pt b" x="114" y="497">cold and must explain back what you meant.</text><rect class="card" x="422" y="206" width="372" height="322" rx="12"/><text class="ink h2" x="444" y="240">A Sweep</text><text class="mut s" x="444" y="261">such as every bug in billing, until none is left</text><path class="dv" d="M444 278H772"/><circle class="yc" cx="455" cy="303" r="11.5"/><text class="nw" x="455" y="307.5" text-anchor="middle">1</text><text class="ink h3" x="476" y="308">Charter</text><text class="yt s bold" x="772" y="308" text-anchor="end">with you</text><text class="mut b" x="476" y="330">You agree its goals, its limits, what it must</text><text class="mut b" x="476" y="349">never touch, and when it stops.</text><circle class="yc" cx="484" cy="371.5" r="8"/><path class="tick" d="M480.5 371.7L483 374.3L487.8 368.9"/><text class="yt b bold" x="500" y="376">You approve the charter: the one</text><text class="yt b bold" x="500" y="395">approval the whole sweep asks of you.</text><circle class="num" cx="455" cy="424" r="11.5"/><text class="nt" x="455" y="428.5" text-anchor="middle">2</text><path class="rail" d="M455 315V412"/><text class="ink h3" x="476" y="429">Hunt</text><text class="mut b" x="476" y="451">Probes look for problems, area by area, and</text><text class="mut b" x="476" y="470">each is sorted: fix, park for you, or drop.</text><circle class="okc" cx="484" cy="492.5" r="8"/><path class="okl" d="M480.5 492.7L483 495.3L487.8 489.9"/><text class="pt b" x="500" y="497">Nothing is fixed until a recipe shows it is</text><text class="pt b" x="500" y="516">real: where, what shows it, who it hurts.</text><path class="l" d="M222 528V591"/><path class="l" d="M217.5 585.5L222 591L226.5 585.5"/><text class="mut s" x="232" y="565">the spec, once</text><path class="l" d="M608 528V591"/><path class="l" d="M603.5 585.5L608 591L612.5 585.5"/><text class="mut s" x="598" y="565" text-anchor="end">the fixes, a wave at a time</text><rect class="card" x="36" y="592" width="758" height="484" rx="12"/><text class="ink h2" x="58" y="626">Then it works on its own</text><text class="mut s" x="58" y="647">Once in a Build; once for each wave in a Sweep.</text><text class="ok s bold" x="430" y="647" letter-spacing="0.06em">WHY YOU CAN TRUST IT</text><path class="dv" d="M58 664H772"/><path class="rail" d="M69 695V947"/><circle class="num" cx="69" cy="695" r="11.5"/><text class="nt" x="69" y="699.5" text-anchor="middle">3</text><text class="ink h3" x="92" y="700">Plan</text><text class="mut b" x="92" y="722">Splits the work into tasks that</text><text class="mut b" x="92" y="741">run side by side.</text><circle class="okc" cx="438" cy="695.5" r="8"/><path class="okl" d="M434.5 695.7L437 698.3L441.8 692.9"/><text class="pt b" x="454" y="700">Each task owns its own files and its own</text><text class="pt b" x="454" y="719">tests, so no two parts step on each other.</text><path class="dv" d="M92 756H772"/><circle class="num" cx="69" cy="779" r="11.5"/><text class="nt" x="69" y="783.5" text-anchor="middle">4</text><text class="ink h3" x="92" y="784">Build</text><text class="mut b" x="92" y="806">Workers write the code and its</text><text class="mut b" x="92" y="825">tests, milestone by milestone.</text><circle class="okc" cx="438" cy="779.5" r="8"/><path class="okl" d="M434.5 779.7L437 782.3L441.8 776.9"/><text class="pt b" x="454" y="784">Each milestone is checked blind, by a reviewer</text><text class="pt b" x="454" y="803">that sees only its code and runs its tests.</text><path class="dv" d="M92 840H772"/><circle class="num" cx="69" cy="863" r="11.5"/><text class="nt" x="69" y="867.5" text-anchor="middle">5</text><text class="ink h3" x="92" y="868">Review</text><text class="mut b" x="92" y="890">Fresh reviewers check the whole</text><text class="mut b" x="92" y="909">result against the spec.</text><circle class="okc" cx="438" cy="863.5" r="8"/><path class="okl" d="M434.5 863.7L437 866.3L441.8 860.9"/><text class="pt b" x="454" y="868">Reviewers that built none of it check every</text><text class="pt b" x="454" y="887">requirement, and the full test suites run.</text><path class="dv" d="M92 924H772"/><circle class="num" cx="69" cy="947" r="11.5"/><text class="nt" x="69" y="951.5" text-anchor="middle">6</text><text class="ink h3" x="92" y="952">Ship</text><text class="mut b" x="92" y="974">Writes the pull request: what,</text><text class="mut b" x="92" y="993">why and how, with pictures.</text><circle class="okc" cx="438" cy="947.5" r="8"/><path class="okl" d="M434.5 947.7L437 950.3L441.8 944.9"/><text class="pt b" x="454" y="952">It ends at a draft pull request,</text><text class="pt b" x="454" y="971">for you to review.</text><path class="dd" d="M58 1006H772"/><path class="l" d="M59 1046A10 10 0 0 1 79 1046"/><path class="l" d="M69 1046L75 1040"/><text class="ink h3" x="92" y="1036">It stops at your usage mark</text><text class="mut b" x="92" y="1058">75% of the week unless you raise it. Running agents finish; it carries on after the reset.</text><path class="l" d="M794 947H806Q814 947 814 939V450Q814 442 806 442H795"/><path class="l" d="M800.5 437.5L795 442L800.5 446.5"/><text class="mut s" x="806" y="550" text-anchor="end">then back to Hunt,</text><text class="mut s" x="806" y="567" text-anchor="end">until a round finds nothing</text><path class="l" d="M415 1076V1121"/><path class="l" d="M410.5 1115.5L415 1121L419.5 1115.5"/><text class="mut s" x="425" y="1104">a draft pull request</text><rect class="you" x="265" y="1122" width="300" height="52" rx="26"/><g transform="translate(287 1132)"><rect class="cap" x="4" y="0" width="32" height="8" rx="0"/><rect class="cap" x="0" y="8" width="40" height="8" rx="0"/><rect class="stem" x="8" y="16" width="24" height="16" rx="0"/><circle class="spot" cx="12" cy="8" r="1.6"/><circle class="spot" cx="28" cy="8" r="1.6"/><path class="facel" stroke-width="1.4" d="M10.4 25L12 23.2L13.6 25M26.4 25L28 23.2L29.6 25"/><path class="facel" stroke-width="1.4" d="M16.6 23.2q0 2 1.68 2q1.72 0 1.72 -1.6q0 1.6 1.72 1.6q1.68 0 1.68 -2"/></g><text class="yt b bold" x="339" y="1153">Back to you, to review</text></svg>
