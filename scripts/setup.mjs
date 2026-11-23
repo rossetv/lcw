@@ -192,7 +192,7 @@ if (cmd === 'install') {
   const done = [] // the records of what install changed, removed only once the settings are saved without them
   if (mine(s.statusLine)) {
     const prev = readJson(prevFile)
-    if (prev) { s.statusLine = prev; out('restored your previous statusLine') }
+    if (prev && typeof prev === 'object' && !Array.isArray(prev) && typeof prev.command === 'string' && prev.command.trim() !== '') { s.statusLine = prev; out('restored your previous statusLine') }
     else { delete s.statusLine; out('removed statusLine') }
   }
   done.push(prevFile) // a saved line the person has since replaced is not kept for a later install

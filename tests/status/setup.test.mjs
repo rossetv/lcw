@@ -315,3 +315,17 @@ test('uninstall leaves no status line when the person deleted theirs before LCW 
   assert.equal(read(settings).statusLine, undefined)
   assert.ok(!fs.existsSync(home + '/previous-statusline.json'))
 })
+
+test('uninstall does not restore a saved record that is not a status line', () => {
+  for (const bad of ['[1]', '"echo"', '5', '{}', '{"command":5}', '{"command":""}', '{"command":"  "}']) {
+    const home = tmp('home'), settings = tmp('s') + '/settings.json'
+    fs.writeFileSync(settings, JSON.stringify({ statusLine: { type: 'command', command: 'echo A' } }))
+    setup(home, settings, 'install')
+    fs.writeFileSync(home + '/previous-statusline.json', bad)
+    const u = setup(home, settings, 'uninstall')
+    assert.equal(read(settings).statusLine, undefined, bad)
+    assert.doesNotMatch(u.out, /restored your previous statusLine/, bad)
+    assert.match(u.out, /removed statusLine/, bad)
+    assert.ok(!fs.existsSync(home + '/previous-statusline.json'), bad)
+  }
+})
