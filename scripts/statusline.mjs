@@ -2,17 +2,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { usageFile, activityFile, sessionFile, runPaths, contextFile } from '../lib/key.mjs'
+import { usageFile, activityFile, sessionFile, spendFile, runPaths, contextFile } from '../lib/key.mjs'
 import { home, readJson, writeJson, git, mainCheckout } from './lib/store.mjs'
 import { findRun } from './lib/runs.mjs'
 import { applyGate, sessionIds, sessionMark, DEFAULT_MARK, driverMark } from './lib/gate.mjs'
 import { maybeRefresh } from './lib/spend-command.mjs'
 import { readMoney, recordSpend, dropSpend, setBilling } from './lib/money.mjs'
-import { settle } from '../lib/billing.mjs'
+import { settle, replied } from '../lib/billing.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import { diffOf } from './lib/diff.mjs'
 import { workOf } from '../lib/banner.mjs'
-import { noteQuotaSession, readSessionQuota, quotaUsage } from './lib/quota-session.mjs'
+import { noteQuotaSession, readSessionQuota, quotaUsage, sessionIdentity } from './lib/quota-session.mjs'
 
 const WEEK_MS = 168 * 3600 * 1000
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -96,18 +96,22 @@ const clock = () => (Number.isFinite(Number(process.env.LCW_NOW)) && process.env
 /**
  * Settles the session's billing from this tick and keeps its spend. Billing and spend are keyed by the first
  * of the session's ids, the transcript's name, as the mod keys them. A weekly figure makes a subscription and
- * takes its spend back out; a reply (a cost above 0) without one settles an unclear session as pay-per-token.
+ * takes its spend back out; a reply (a cost above 0, or above the first reading after a resume) without one settles
+ * an unclear session as pay-per-token.
  * The session file is written only when the kind changes.
  */
 function settleBilling(inp, ids, now) {
   const id = ids[0]
   if (!id) return
-  const was = ids.map((i) => readJson(sessionFile(home(), i))?.billing).find((b) => typeof b === 'string') ?? 'unclear'
+  // the canonical session's billing is the one the readers take first
+  const keys = [...new Set([sessionIdentity(id), ...ids])]
+  const stored = keys.map((i) => readJson(sessionFile(home(), i))?.billing).find((b) => typeof b === 'string')
+  const was = stored ?? 'unclear'
   const cost = num(inp.cost?.total_cost_usd)
   const weekly = inp.rate_limits?.seven_day
   const quotaSelected = !!readSessionQuota(ids, now, sessionMark(ids))
-  const billing = settle(was, { weekly: weekly && typeof weekly === 'object' ? weekly : null, replied: cost > 0, quotaSelected })
-  for (const alias of ids) {
+  const billing = settle(was, { weekly: weekly && typeof weekly === 'object' ? weekly : null, replied: replied(stored, readJson(spendFile(home(), id)), cost), quotaSelected })
+  for (const alias of keys) {
     if (readJson(sessionFile(home(), alias))?.billing !== billing && billing !== 'unclear') setBilling(alias, billing)
     if (billing === 'subscription') dropSpend(alias)
   }

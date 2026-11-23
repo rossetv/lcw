@@ -35,7 +35,7 @@ export function sweepTemp(lcwHome, now = Date.now()) {
 }
 
 export function git(cwd, ...args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  return execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 }
 
 /** Root of the main working tree, also when called from a worktree. Outside git: cwd. */

@@ -6,7 +6,7 @@ import { runsDir, repoKey, runPaths, placeFile, slug, sessionFile, spendFile, co
 import { compactChoice, tokensText, KEEP_UNDER } from '../lib/checkpoint.mjs'
 import { home, readJson, writeJson, writeAtomic, git, mainCheckout, saveState, appendLedger as appendRunLedger, loadState } from './lib/store.mjs'
 import { findRun, bindSession, unbindSession, listRuns, open, runOf, lastShown, machineRunCount } from './lib/runs.mjs'
-import { sessionFolders } from './lib/cleanup.mjs'
+import { sessionFolders, hiddenEdit } from './lib/cleanup.mjs'
 import { canHold, heldByOther, keptHold, startHold, releaseHold, alive, claudeAlive } from './lib/awake.mjs'
 import { readUsage, applyGate, atMark, sessionMark, setSessionMark, DEFAULT_MARK, driverMark } from './lib/gate.mjs'
 import { readMoney, readCap, writeCap, spendRecords } from './lib/money.mjs'
@@ -15,7 +15,7 @@ import { weekOf, weekShare } from '../lib/card.mjs'
 import { moneyFrom, runSpend, markUsdOf, machineSpend, readingOf, SPEND_COMMAND_FAILS, DEFAULT_CAP_USD } from '../lib/spend.mjs'
 import { runCommand, readSetting, writeSetting, clearSetting, readReading, recordResult, claimWindow } from './lib/spend-command.mjs'
 import { configureQuota, disableQuota, readQuotaState } from './lib/quota-command.mjs'
-import { QUOTA_SOURCE_ID, activeQuota, evaluateQuota, quotaOff } from '../lib/quota.mjs'
+import { QUOTA_SOURCE_ID, evaluateQuota, quotaOff } from '../lib/quota.mjs'
 import { dollars, ageText } from '../lib/format.mjs'
 import { isOpenWave } from '../lib/banner.mjs'
 import { noteQuotaSession, readSessionQuota, quotaUsage, quotaLine, sessionBilling } from './lib/quota-session.mjs'
@@ -86,7 +86,8 @@ for (let i = 0; i < (spendWords || quotaWords ? 0 : argv.length); i++) {
   const [, name, joined] = /^--([a-z]+)(?:[=\s]\s*([\s\S]*))?$/.exec(a) ?? []
   if (name && switches.includes(name) && joined === undefined) flags[name] = true
   else if (name && (name === 'session' || allowed.includes(name))) {
-    if (joined === undefined && i + 1 >= argv.length) refuse(`${a} needs a value`)
+    const next = /^--([a-z]+)(?:=|$)/.exec(argv[i + 1] ?? '')?.[1]
+    if (joined === undefined && (i + 1 >= argv.length || (next && (next === 'session' || allowed.includes(next) || switches.includes(next))))) refuse(`${a} needs a value`)
     flags[name] = joined === undefined ? argv[++i] : joined.trim()
   } else if (a === '-h' || a === '--help') help()
   else {
@@ -329,12 +330,17 @@ const commands = {
     const main = mainCheckout(cwd)
     const branchTaken = (nm) => { try { git(main, 'rev-parse', '--verify', '-q', `refs/heads/lcw/${nm}`); return true } catch { return false } }
     let id = base, runName = slug(name), n = 1
-    while (fs.existsSync(`${runsDir(home(), key)}/${id}`) || branchTaken(runName)) {
+    const before = machineRunCount()
+    fs.mkdirSync(runsDir(home(), key), { recursive: true })
+    // mkdir without recursive is the claim: of two starts at one instant, only one makes the folder
+    for (;;) {
+      if (!branchTaken(runName)) {
+        try { fs.mkdirSync(`${runsDir(home(), key)}/${id}`); break } catch (e) { if (e.code !== 'EEXIST') throw e }
+      }
       n++
       id = `${base}-${n}`
       runName = `${slug(name)}-${n}`
     }
-    const before = machineRunCount()
     const dir = `${runsDir(home(), key)}/${id}`
     const paths = runPaths(dir)
     fs.mkdirSync(paths.artifacts, { recursive: true })
@@ -697,9 +703,9 @@ const commands = {
     }
     if (!rest.length) {
       const state = readQuotaState(home())
-      if (!state || quotaOff(state)) return out('No external quota command set.')
+      if (!state || quotaOff(state) || !(state.endpoint || state.command)) return out('No external quota command set.')
       const view = evaluateQuota({ sourceId: QUOTA_SOURCE_ID, endpoint: state.endpoint }, state, now(), sessionMark(sessionId))
-      const label = activeQuota(state) ? `External quota for ${state.endpoint}` : 'External quota'
+      const label = `External quota for ${state.endpoint ?? 'an unset endpoint'}`
       return out(view.status === 'ok'
         ? `${label}: ${view.percentUsed}% used; resets ${view.resetsAt}${view.blocked ? '; provider blocked' : ''}.`
         : `${label}: ${view.status} (${view.code}); new work held.`)
@@ -1251,6 +1257,7 @@ function enterStage(s, stage) {
   s.stageSince = now()
   s.approval = null // asked for the playback of this Brainstorm only
   s.milestone = null // the build sets it again for each milestone it launches
+  if (s.status === 'paused') return // a pause holds until resume, whatever the stage
   if (withYou(stage)) s.status = 'with-you'
   else s.status = 'running'
   s.pausedReason = null
@@ -1352,10 +1359,22 @@ function waveStatus(run, x) {
 
 const latestDir = (s) => `${s.repoRoot}/.claude/worktrees/${s.name}-latest`
 
-/** Removes the hunt's throwaway worktree, if there is one; says what became of it. It holds nothing of its own to lose. */
-function dropLatest(s) {
+/**
+ * Removes the hunt's throwaway worktree, if there is one; says what became of it. It holds nothing of its own to lose,
+ * but a build run or a session named <name>-latest may live at the same path: only a worktree detached at a commit the
+ * hunt made (`also` is one it has just checked out) is removed.
+ */
+function dropLatest(s, also) {
   const dir = latestDir(s)
   if (!fs.existsSync(dir)) return null
+  let own = false
+  try {
+    const commits = [...huntRefs(s).map((r) => git(s.repoRoot, 'rev-parse', r)), also].filter(Boolean)
+    let attached = true
+    try { git(dir, 'symbolic-ref', '-q', 'HEAD') } catch { attached = false }
+    own = !attached && commits.includes(git(dir, 'rev-parse', 'HEAD'))
+  } catch {}
+  if (!own) return `worktree kept: ${dir}, because it is not the hunt's own worktree (detached at a commit of the hunt)`
   try { git(s.repoRoot, 'worktree', 'remove', '--force', dir) } catch (e) { return `worktree kept: ${dir}, because git would not remove it: ${firstLine(e)}` }
   return `worktree removed: ${dir}`
 }
@@ -1379,7 +1398,10 @@ function endHunts(s) {
  */
 function freshLatest(s, round) {
   const was = dropLatest(s)
-  if (was?.startsWith('worktree kept')) fail(`The hunt's worktree from the last round could not be refreshed: ${was}. Nothing was changed.`)
+  if (was?.startsWith('worktree kept')) {
+    if (was.includes("not the hunt's own")) fail(`A folder that is not the hunt's sits at ${latestDir(s)}, where the hunt's worktree goes. Move or remove it, then try again. Nothing was changed.`)
+    fail(`The hunt's worktree from the last round could not be refreshed: ${was}. Nothing was changed.`)
+  }
   const open = openWaves(s)
   if (!open.length) return null
   const newest = open.at(-1)
@@ -1403,7 +1425,7 @@ function freshLatest(s, round) {
       try { conflicted = git(real, 'diff', '--name-only', '--diff-filter=U') } catch {}
       try { git(real, 'merge', '--abort') } catch {}
       if (!conflicted) {
-        const gone = dropLatest(s) ?? `worktree ${real} was already gone`
+        const gone = dropLatest(s, git(real, 'rev-parse', 'HEAD')) ?? `worktree ${real} was already gone`
         fail(`git could not merge ${x.branch} into the hunt's worktree: ${firstLine(e)}. The stage was not changed; ${gone}.`)
       }
       git(real, 'reset', '-q', '--hard', tip)
@@ -1434,6 +1456,8 @@ function keepWorktree(s, wt) {
   try {
     // every untracked file, whatever status.showUntrackedFiles says: git worktree remove would delete them
     if (git(wt, 'status', '--porcelain', '--untracked-files=all')) return 'it has uncommitted or untracked files'
+    const hidden = hiddenEdit(wt)
+    if (hidden) return `git is told to ignore edits to ${hidden}, so removing it could lose them`
     // git worktree remove deletes ignored files, such as a .env, without asking. A wave's worktree is the sweep's own:
     // only its agents wrote there, so what it ignores (an environment, caches) can be made again and does not hold it
     const ofWave = (s.sweep?.waves ?? []).some((w) => w.worktree === wt)

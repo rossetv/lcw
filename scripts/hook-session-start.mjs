@@ -10,7 +10,7 @@ import { readMoney, dropSpend } from './lib/money.mjs'
 import { paygLines } from './lib/payg-note.mjs'
 import { claudeAlive } from './lib/awake.mjs'
 import { signInKind } from '../lib/billing.mjs'
-import { noteQuotaSession, readSessionQuota, quotaLine } from './lib/quota-session.mjs'
+import { noteQuotaSession, readSessionQuota, quotaLine, sessionIdentity } from './lib/quota-session.mjs'
 import { sessionFile } from '../lib/key.mjs'
 import { openWaves } from '../lib/banner.mjs'
 
@@ -31,19 +31,34 @@ function signIn() {
   try { return signInKind(JSON.parse(report), process.env) } catch { return 'unclear' }
 }
 
-/** Settles the session's billing from the sign-in, writing the session file once and only when something changes. */
-function settleBilling(id, signedIn) {
-  const file = sessionFile(home(), id)
-  const session = readJson(file)
-  const had = session?.billing
-  const kind = had === 'subscription' ? had : signedIn // a settled subscription is never downgraded
-  const billing = kind === 'unclear' ? had ?? 'unclear' : kind
-  const change = {}
-  if (billing !== (had ?? 'unclear')) change.billing = billing
-  if (billing === 'payg' && !session?.toldPayg) change.toldPayg = true // the note below is the payg instructions
-  if (Object.keys(change).length) writeJson(file, { ...session, ...change })
-  if (billing === 'subscription' && had === 'payg') dropSpend(id)
-  return billing
+/**
+ * Settles the session's billing from the sign-in, in the canonical session's file and each of its ids', as the
+ * readers look in all of them. A sign-in that cannot tell changes nothing. Files are written only when they change.
+ */
+function settleBilling(ids, signedIn) {
+  const keys = [...new Set([sessionIdentity(ids[0]), ...ids])]
+  const rows = keys.map((id) => ({ id, file: sessionFile(home(), id), session: readJson(sessionFile(home(), id)) }))
+  const had = rows.map(({ session }) => session?.billing).find((b) => typeof b === 'string')
+  if (signedIn === 'unclear' || (had === 'subscription' && rows.some(({ session }) => session?.quotaSelection))) return had ?? 'unclear'
+  // A subscriber with an API key in the environment signs in as api_key too, so over a settled or unsettled
+  // session a per-token sign-in leaves it unclear, for the session's own ticks to settle: a weekly figure or a reply without one.
+  if (signedIn === 'payg' && (had === 'subscription' || had === 'unclear')) {
+    for (const { file, session } of rows) {
+      if (session?.billing === 'unclear' && session.toldPayg === undefined) continue
+      const { toldPayg, ...rest } = session ?? {}
+      writeJson(file, { ...rest, billing: 'unclear' })
+    }
+    return 'unclear'
+  }
+  for (const { id, file, session } of rows) {
+    const change = {}
+    if (session?.billing !== signedIn) change.billing = signedIn
+    // the note this start gives is the payg instructions
+    if (signedIn === 'payg' && id === ids[0] && !rows.some((row) => row.session?.toldPayg)) change.toldPayg = true
+    if (Object.keys(change).length) writeJson(file, { ...session, ...change })
+    if (signedIn === 'subscription' && session?.billing === 'payg') dropSpend(id)
+  }
+  return signedIn
 }
 
 /**
@@ -98,15 +113,9 @@ try {
     if (run) break
   }
   const now = Number(process.env.LCW_NOW) || Date.now()
-  const prior = ids.map((id) => readJson(sessionFile(home(), id))).find((s) => s?.billing)
-  const signedIn = prior?.billing === 'subscription' && !prior.quotaSelection ? 'subscription' : signIn()
+  const signedIn = signIn()
   noteQuotaSession(ids, { startup: true, defaultBilling: signedIn })
-  const billing = ids.length ? settleBilling(ids[0], signedIn) : 'unclear'
-  for (const id of ids.slice(1)) {
-    const file = sessionFile(home(), id)
-    const session = readJson(file)
-    if (session?.billing !== billing) writeJson(file, { ...session, billing })
-  }
+  const billing = ids.length ? settleBilling(ids, signedIn) : 'unclear'
   if (ids.length) noteAdvisor(ids[0])
   const money = billing === 'payg' ? readMoney({ sessionId: ids, now }) : null
   const mark = sessionMark(ids)

@@ -375,3 +375,37 @@ test('a live sweep keeps every wave worktree, open or shipped; an ended one free
   assert.ok(listed.includes(`worktree:${other}`))
   assert.ok(!listed.includes(`worktree:${open}`) && !listed.includes(`worktree:${shipped}`))
 })
+
+test('a worktree with a skip-worktree or assume-unchanged edit is not listed, nor its branch', () => {
+  for (const flag of ['--skip-worktree', '--assume-unchanged']) {
+    const repo = makeRepo()
+    branch(repo, 'done', { merge: true })
+    const wt = worktree(repo, 'done')
+    git(wt, 'update-index', flag, 'a.txt')
+    fs.writeFileSync(`${wt}/a.txt`, 'my local edit\n')
+    assert.deepEqual(candidates(repo, tmp('home')), [], flag)
+  }
+})
+
+test('a skip-worktree path that is not on disk, as in a sparse checkout, does not hold a worktree', () => {
+  const repo = makeRepo()
+  branch(repo, 'done', { merge: true })
+  const wt = worktree(repo, 'done')
+  git(wt, 'update-index', '--skip-worktree', 'a.txt')
+  fs.rmSync(`${wt}/a.txt`)
+  assert.deepEqual(names(candidates(repo, tmp('home'))), [`branch:done`, `worktree:${fs.realpathSync(wt)}`].sort())
+})
+
+test('a merged worktree of a repository with over 1 MB of tracked paths is still listed', () => {
+  const repo = makeRepo()
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: repo, input: 'x\n', encoding: 'utf8' }).trim()
+  const dir = 'd'.repeat(200)
+  const index = Array.from({ length: 3000 }, (_, i) => `100644 ${blob}\t${dir}/${String(i).padStart(4, '0')}${'f'.repeat(200)}\n`).join('')
+  execFileSync('git', ['update-index', '--index-info'], { cwd: repo, input: index })
+  git(repo, 'commit', '-q', '-m', 'many long paths')
+  git(repo, 'reset', '-q', '--hard')
+  branch(repo, 'done', { merge: true })
+  const wt = worktree(repo, 'done')
+  assert.ok(execFileSync('git', ['ls-files', '-v', '-z'], { cwd: wt, maxBuffer: 1 << 28 }).length > 1024 * 1024)
+  assert.ok(names(candidates(repo, tmp('home'))).includes(`worktree:${fs.realpathSync(wt)}`))
+})
