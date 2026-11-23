@@ -1128,3 +1128,17 @@ test('a cut never leaves a separator before its "…"', () => {
   assert.match(at('RunningA', 55, 'tasks'), /3 running…$/);
   assert.match(at('StageSpec', 59, 'blind review'), /reviewer 1…/);
 });
+
+test('a cut inside a span ahead of a separator drops the separator too', () => {
+  for (const [board, width] of [['RunningA', 46], ['19-finished-some-waves-short-of-your-rule', 28], ['NeedsYou', 62], ['ManyAgents', 77]]) {
+    for (const w of [width, width + 1]) for (const frame of [true, false]) {
+      const lines = strip(toAnsi(card(board, { width: w, frame }), 'dark', w)).split('\n');
+      for (const l of lines) {
+        assert.ok(!/[·›] ?…/.test(l), board + ' at ' + w + ': ' + l);
+        assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l);
+      }
+    }
+  }
+  const l = strip(toAnsi(card('RunningA', { width: 46, frame: true }), 'dark', 46)).split('\n')[1];
+  assert.equal(cols(l), 46);
+});
