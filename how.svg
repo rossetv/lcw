@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="664" viewBox="0 0 800 664" role="img" aria-labelledby="title description">
+  <title id="title">Two quota sources, shared controls</title>
+  <desc id="description">Native sessions use native quota. The new external path connects an endpoint-matched proxy session to an external command, then validates the shared quota and its freshness. Both sources feed session and run-driver controls. A reached mark, blocked quota, failure or unavailable reading holds new work while running agents finish.</desc>
+  <style>
+    /* Two source paths converge on session and run-driver controls. */
+    :root { color-scheme: light; --bg: #f4f7fa; --panel: #ffffff; --ink: #192a3a; --muted: #506275; --line: #7d8fa0; --accent: #14619d; --external: #eaf3fc; --hold: #865000; --hold-bg: #fff5e4; --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; --bg: #101a24; --panel: #182532; --ink: #edf3f8; --muted: #b4c4d3; --line: #91a5b9; --accent: #8fcaff; --external: #182f44; --hold: #f2c06d; --hold-bg: #332b20; } }
+    .bg { fill: var(--bg); }
+    text { fill: var(--ink); font-family: var(--sans); }
+    .heading { font-size: 24px; font-weight: 650; }
+    .caption { fill: var(--muted); font-size: 14px; }
+    .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+    .external-box { fill: var(--external); stroke: var(--accent); }
+    .hold-box { fill: var(--hold-bg); stroke: var(--hold); }
+    .name { font-size: 16px; font-weight: 600; text-anchor: middle; }
+    .detail { font-size: 12px; fill: var(--muted); text-anchor: middle; }
+    .label { font-size: 12px; fill: var(--muted); text-anchor: middle; }
+    .new { font-size: 12px; font-weight: 650; letter-spacing: 1px; fill: var(--accent); }
+    .flow { fill: none; stroke: var(--line); stroke-width: 1.3; stroke-linejoin: round; marker-end: url(#arrow); }
+    .external-flow { stroke: var(--accent); marker-end: url(#external-arrow); }
+    .hold-flow { stroke: var(--hold); marker-end: url(#hold-arrow); }
+    .arrow { fill: none; stroke: var(--line); stroke-width: 1.3; }
+    .external-arrow { stroke: var(--accent); }
+    .hold-arrow { stroke: var(--hold); }
+    .hold-text { fill: var(--hold); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto" markerUnits="userSpaceOnUse"><path class="arrow" d="M 1 1 L 9 5 L 1 9"/></marker>
+    <marker id="external-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto" markerUnits="userSpaceOnUse"><path class="arrow external-arrow" d="M 1 1 L 9 5 L 1 9"/></marker>
+    <marker id="hold-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto" markerUnits="userSpaceOnUse"><path class="arrow hold-arrow" d="M 1 1 L 9 5 L 1 9"/></marker>
+  </defs>
+  <rect class="bg" width="800" height="664"/>
+  <text class="heading" x="32" y="45">Two quota sources, shared controls</text>
+  <text class="caption" x="32" y="73">The external path is new; native quota stays separate.</text>
+
+  <rect class="box" x="32" y="112" width="180" height="72" rx="6"/>
+  <text class="name" x="122" y="154">Native session</text>
+  <path class="flow" d="M 212 148 H 296"/>
+  <text class="label" x="254" y="134">session usage</text>
+  <rect class="box" x="296" y="112" width="200" height="72" rx="6"/>
+  <text class="name" x="396" y="144">Native quota</text>
+  <text class="detail" x="396" y="165">Built-in reading</text>
+  <path class="flow" d="M 496 148 H 660 Q 668 148 668 156 V 374"/>
+  <text class="label" x="716" y="220">native</text>
+  <text class="label" x="716" y="237">percentage</text>
+
+  <text class="new" x="32" y="224">NEW · EXTERNAL PATH</text>
+  <rect class="box external-box" x="32" y="248" width="180" height="80" rx="6"/>
+  <text class="name" x="122" y="280">Proxy session</text>
+  <text class="detail" x="122" y="303">Endpoint-matched</text>
+  <path class="flow external-flow" d="M 212 288 H 296"/>
+  <text class="label" x="254" y="274">quota request</text>
+  <rect class="box external-box" x="296" y="248" width="200" height="80" rx="6"/>
+  <text class="name" x="396" y="280">External command</text>
+  <text class="detail" x="396" y="303">Fetch subscription quota</text>
+  <path class="flow external-flow" d="M 396 328 V 390"/>
+  <text class="label" x="464" y="354">reading</text>
+  <text class="label" x="464" y="371">or failure</text>
+  <rect class="box external-box" x="296" y="390" width="200" height="80" rx="6"/>
+  <text class="name" x="396" y="420" style="font-size: 14px">Validated shared quota</text>
+  <text class="detail" x="396" y="445">Result + freshness checks</text>
+  <path class="flow external-flow" d="M 496 430 H 568"/>
+  <text class="label" x="532" y="405">quota</text>
+  <text class="label" x="532" y="421">state</text>
+
+  <rect class="box" x="568" y="374" width="200" height="112" rx="6"/>
+  <text class="name" x="668" y="407">Session + run-driver</text>
+  <text class="name" x="668" y="430">controls</text>
+  <text class="detail" x="668" y="460">Apply both usage marks</text>
+  <path class="flow hold-flow" d="M 668 486 V 574"/>
+  <text class="label hold-text" x="612" y="532">hold decision</text>
+  <text class="label hold-text" x="716" y="511">at mark,</text>
+  <text class="label hold-text" x="716" y="528">blocked or</text>
+  <text class="label hold-text" x="716" y="545">unavailable</text>
+  <rect class="box hold-box" x="568" y="574" width="200" height="64" rx="6"/>
+  <text class="name hold-text" x="668" y="600">Hold new work</text>
+  <text class="detail" x="668" y="622">Let running agents finish</text>
+</svg>

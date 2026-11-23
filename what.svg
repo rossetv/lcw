@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="300" viewBox="0 0 800 300" role="img" aria-labelledby="title description">
+  <title id="title">External quota holds new work</title>
+  <desc id="description">Actual CLI output with fixture values: mark 50%, external week: 67% used, new work held.</desc>
+  <style>
+    /* A cropped terminal transcript, with framing kept outside the output. */
+    :root { color-scheme: light; --bg: #f4f7fa; --panel: #ffffff; --ink: #192a3a; --muted: #506275; --line: #bac6d1; --hold: #865000; --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; --bg: #101a24; --panel: #182532; --ink: #edf3f8; --muted: #b4c4d3; --line: #526579; --hold: #f2c06d; } }
+    .bg { fill: var(--bg); }
+    .panel { fill: var(--panel); stroke: var(--line); stroke-width: 1; }
+    text { fill: var(--ink); font-family: var(--sans); }
+    .heading { font-size: 24px; font-weight: 650; }
+    .caption { fill: var(--muted); font-size: 14px; }
+    .output { font-family: var(--mono); font-size: 19px; white-space: pre; }
+    .hold { fill: var(--hold); }
+  </style>
+  <rect class="bg" width="800" height="300"/>
+  <text class="heading" x="32" y="45">External quota holds new work</text>
+  <text class="caption" x="32" y="73">Captured CLI output · fixture values</text>
+  <rect class="panel" x="32" y="101" width="736" height="163" rx="6"/>
+  <text class="output" x="56" y="145" textLength="91.2" lengthAdjust="spacingAndGlyphs">mark 50%</text>
+  <text class="output" x="56" y="183" textLength="262.2" lengthAdjust="spacingAndGlyphs">external week: 67% used</text>
+  <text class="output hold" x="56" y="221" textLength="148.2" lengthAdjust="spacingAndGlyphs">new work held</text>
+</svg>
