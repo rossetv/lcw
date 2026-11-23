@@ -3,7 +3,8 @@ import { expect, mock, test } from 'claude-code/testing'
 const NOW = Date.parse('2026-11-18T12:00:00Z')
 const RUN = '/lcw/repos/r/runs/x'
 const QUOTA = '/lcw/quota-command.json'
-const selection = { sourceId: 'external-quota' }
+const endpoint = 'https://proxy.example'
+const selection = { sourceId: 'external-quota', endpoint }
 const resetsAt = '2026-11-22T12:00:00Z'
 const accountKey = 'a'.repeat(64)
 const result = (percentUsed = 42) => ({ v: 1, status: 'ok', accountKey, weekly: { percentUsed, resetsAt }, blocked: false })
@@ -57,6 +58,58 @@ const filesFor = (externalDriver = true) => ({
 })
 const start = ($: any) => $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
 const measure = ($: any) => $.session.measure({ context: { window: 200000 }, changed: ['rateLimits'], rateLimits: [{ kind: 'seven_day', percentUsed: 99, resetsAt }], cost: { usd: 10 } } as any)
+
+test('a selected endpoint cannot borrow another endpoint profile or request its refresh', async ($, on) => {
+  const files: Record<string, string> = filesFor()
+  files[QUOTA] = record(result(95), 'q1', NOW - 1000)
+  let otherRefreshes = 0
+  const w = engine(on, files, { process: e => {
+    if (e.argv[1]?.endsWith('/scripts/quota-refresh.mjs') && JSON.parse(files[QUOTA] ?? 'null').endpoint !== endpoint) otherRefreshes++
+  } })
+  await start($)
+  await w.clock.advance(2000)
+  expect(w.prompts.length).toBe(0)
+  const other = JSON.parse(record({ ...result(2), accountKey: 'b'.repeat(64) }, 'q3', NOW + 2000))
+  other.endpoint = 'https://other.example'
+  other.revision = other.cache.revision = 'r2'
+  files[QUOTA] = JSON.stringify(other)
+  await w.clock.advance(3000)
+  expect(w.prompts.length).toBe(0)
+  expect(otherRefreshes).toBe(0)
+  expect(JSON.parse(files['/lcw/sessions/driver.json'] ?? 'null').quotaSelection.endpoint).toBe(endpoint)
+  const band = await $.ui.mount({
+    plugin: 'lcw', surface: 'terminal', component: 'AbovePrompt',
+    props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 20, bodyColumns: 100, scroll: { offset: 0, bodyRows: 19 }, view: {} },
+  } as any)
+  expect(await band.find({ type: 'Text', text: /quota unavailable/ })).toBeDefined()
+  await band.unmount()
+})
+
+test('a legacy source-only selection holds without adopting the global endpoint', async ($, on) => {
+  const files: Record<string, string> = filesFor()
+  files['/lcw/sessions/driver.json'] = JSON.stringify({ billing: 'subscription', quotaSelection: { sourceId: 'external-quota' } })
+  let refreshes = 0
+  const w = engine(on, files, { process: e => { if (e.argv[1]?.endsWith('/scripts/quota-refresh.mjs')) refreshes++ } })
+  await start($)
+  await w.clock.advance(3000)
+  expect(w.prompts.length).toBe(0)
+  expect(refreshes).toBe(0)
+  expect(JSON.parse(files['/lcw/sessions/driver.json'] ?? 'null').quotaSelection.endpoint).toBe(undefined)
+})
+
+test('a new revision on the bound endpoint can recover a held run', async ($, on) => {
+  const files: Record<string, string> = filesFor()
+  files[QUOTA] = record(result(95), 'q1', NOW - 1000)
+  const w = engine(on, files)
+  await start($)
+  await w.clock.advance(2000)
+  expect(w.prompts.length).toBe(0)
+  const next = JSON.parse(record(result(2), 'q3', NOW + 2000))
+  next.revision = next.cache.revision = 'r2'
+  files[QUOTA] = JSON.stringify(next)
+  await w.clock.advance(3000)
+  expect(w.prompts.length).toBe(1)
+})
 
 for (const owner of ['driver', 'current']) {
   test(`a ${owner} dollar mark never raises the external percentage allowance`, async ($, on) => {

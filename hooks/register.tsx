@@ -163,7 +163,7 @@ async function readRun($: EngineInterface, now: number): Promise<Run | null> {
 async function readQuota($: EngineInterface, session: any, mark: number, now: number) {
   const home = await lcwHome($)
   const state = await readJson($, quotaFile(home))
-  if (session?.quotaSelection && activeQuota(state)) {
+  if (activeQuota(state) && session?.quotaSelection?.sourceId === state.sourceId && session?.quotaSelection?.endpoint === state.endpoint) {
     const last = S.quotaRefresh
     const due = !Number.isFinite(state.lastAttemptAt) || now - state.lastAttemptAt >= REFRESH_MS
     const claimed = state.claim?.revision === state.revision && now - state.claim.startedAt < CLAIM_MS

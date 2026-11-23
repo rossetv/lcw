@@ -63,7 +63,7 @@ test('an external default mark stays at the native percentage reserve in facts a
 
 test('disabling external quota restores only its saved billing while a broken source remains subscription-backed', () => {
   for (const billing of ['payg', 'subscription', 'unclear', undefined]) {
-    const session = { billing: 'subscription', quotaSelection: { sourceId: 'external-quota' }, quotaDefaultBilling: billing }
+    const session = { billing: 'subscription', quotaSelection: { sourceId: 'external-quota', endpoint: 'https://proxy.example' }, quotaDefaultBilling: billing }
     const restored = measureStep(session, null, { weekly: null, cost: undefined, quota: null }, NOW)
     assert.equal(restored.billing, billing ?? 'unclear')
     const held = measureStep(session, null, { weekly: null, cost: 10, quota: { ...quota, status: 'unavailable', hold: true } }, NOW)
