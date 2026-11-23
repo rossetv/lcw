@@ -1173,7 +1173,11 @@ const commands = {
     const w = sweepOnly(run)
     const n = wholeNumber(rest[0], 'lcw merge')
     // the run may have been paused or stopped while the wait went on
-    if (flags.wait !== undefined) stillOn(run, w.waves.find((x) => x.n === n)?.pr)
+    const waited = flags.wait !== undefined && w.waves.find((x) => x.n === n)
+    try { if (flags.wait !== undefined) stillOn(run, waited?.pr) } catch (e) {
+      if (waitNoted && e instanceof Fail) noteNoMerge(run, waited, e)
+      throw e
+    }
     if (w.prs !== 'merged') fail(`The charter's pull request choice is ${PR_CHOICES[w.prs] ?? 'not made yet'}, not merged as it goes, so the sweep merges nothing. Nothing was changed.`)
     const wave = w.waves.find((x) => x.n === n) || fail(`No wave ${n}. Nothing was changed.`)
     if (wave.empty) fail(`Wave ${n} shipped with no commits, so it has no pull request to merge. Nothing was changed.`)
@@ -1239,8 +1243,26 @@ async function waitForChecks() {
     const view = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state,baseRefName'))
     if (view.state === 'MERGED' || view.baseRefName !== JSON.parse(gh(root, 'repo', 'view', repo, '--json', 'defaultBranchRef')).defaultBranchRef.name) return
   } catch { return }
-  // the one record of a wait in flight, for a session that was compacted while it ran
+  // the ledger holds a wait's start and, when it merges nothing, its end: a session compacted meanwhile reads both
   appendLedger(run.paths, `wave ${wave.n}: waiting up to ${limit} minutes for the checks of #${pr}, to merge it once they pass`, wave)
+  waitNoted = true
+  try { await checksPass(run, pr, limit) } catch (e) {
+    if (e instanceof Fail) noteNoMerge(run, wave, e)
+    throw e
+  }
+}
+
+let waitNoted = false // this call wrote the ledger line that says a wait began
+
+/** The ledger's other half of a wait that began: it ended, nothing was merged, and why. */
+function noteNoMerge(run, wave, e) {
+  appendLedger(run.paths, `wave ${wave.n}: the wait for the checks of #${wave.pr} ended with no merge: ${e.message.replace(/ Nothing was merged\.$/, '')}`, wave)
+}
+
+/** Looks at the pull request's checks twice a minute until they have passed; fails when they cannot, or do not within the limit. */
+async function checksPass(run, pr, limit) {
+  const root = run.state.repoRoot
+  const repo = githubRepo(root)
   const minute = Number(process.env.LCW_CHECKS_MINUTE_MS) || 60000
   const start = Date.now()
   let unread = 0

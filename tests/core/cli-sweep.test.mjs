@@ -665,6 +665,7 @@ test('merge --wait merges nothing once a check fails or is cancelled, whatever e
     assert.equal(r.code, 1, r.out)
     assert.match(r.out, said)
     assert.equal(gh.calls().filter((c) => c.startsWith('pr checks')).length, 1, 'settled at the first look')
+    assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1: the wait for the checks of #12 ended with no merge: #12's checks/)
     assert.ok(!wrote(gh), gh.calls().join('\n'))
     assert.equal(t.state().sweep.waves[0].merged, false)
   }
@@ -732,6 +733,7 @@ test('merge --wait ends, merging nothing, for a run paused before it or stopped 
   assert.equal(u.cli('stop').code, 0)
   assert.equal(await done, 1, out)
   assert.match(out, /is stopped, so lcw merge --wait ends here for #12/)
+  assert.match(fs.readFileSync(`${u.dir}/ledger.md`, 'utf8'), /wave 1: the wait for the checks of #12 ended with no merge: Run \S+ is stopped/)
   assert.ok(!wrote(gh), gh.calls().join('\n'))
   assert.equal(u.state().sweep.waves[0].merged, false)
 })
