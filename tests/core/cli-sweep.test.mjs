@@ -666,6 +666,9 @@ test('merge --wait takes 1 to 60 minutes', () => {
   const gh = fakeGh({ GH_CHECKS: checks('pass') })
   for (const m of ['0', '61', 'soon']) assert.equal(lcw(['merge', '1', '--wait', m], { ...t.o, env: gh.env }).code, 1, m)
   assert.deepEqual(gh.calls(), [])
+  const early = lcw(['merge', '2', '--wait', '5'], { ...t.o, env: gh.env })
+  assert.match(early.out, /Wave 1 is not merged yet/, 'a wave out of order is refused before any wait')
+  assert.deepEqual(gh.calls(), [])
 })
 
 test('a pull request the merge only queued is not recorded and keeps its branch, and a later merge records it once GitHub shows it merged', () => {

@@ -1227,7 +1227,8 @@ async function waitForChecks() {
   const wave = run.state.sweep?.waves?.find((x) => x.n === Number(rest[0]))
   const root = run.state.repoRoot
   const repo = githubRepo(root)
-  if (!wave?.pr || wave.merged || wave.empty || !repo) return
+  const earlier = run.state.sweep.waves.some((x) => x.n < wave?.n && !x.merged && !x.empty)
+  if (!wave?.pr || wave.status !== 'shipped' || wave.merged || wave.empty || earlier || !repo) return
   const pr = String(wave.pr)
   const pause = Number(process.env.LCW_CHECKS_POLL_SECONDS) || 30
   const start = Date.now()
