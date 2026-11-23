@@ -1398,7 +1398,10 @@ function endHunts(s) {
  */
 function freshLatest(s, round) {
   const was = dropLatest(s)
-  if (was?.startsWith('worktree kept')) fail(`The hunt's worktree from the last round could not be refreshed: ${was}. Nothing was changed.`)
+  if (was?.startsWith('worktree kept')) {
+    if (was.includes("not the hunt's own")) fail(`A folder that is not the hunt's sits at ${latestDir(s)}, where the hunt's worktree goes. Move or remove it, then try again. Nothing was changed.`)
+    fail(`The hunt's worktree from the last round could not be refreshed: ${was}. Nothing was changed.`)
+  }
   const open = openWaves(s)
   if (!open.length) return null
   const newest = open.at(-1)
@@ -1422,7 +1425,7 @@ function freshLatest(s, round) {
       try { conflicted = git(real, 'diff', '--name-only', '--diff-filter=U') } catch {}
       try { git(real, 'merge', '--abort') } catch {}
       if (!conflicted) {
-        const gone = dropLatest(s, tip) ?? `worktree ${real} was already gone`
+        const gone = dropLatest(s, git(real, 'rev-parse', 'HEAD')) ?? `worktree ${real} was already gone`
         fail(`git could not merge ${x.branch} into the hunt's worktree: ${firstLine(e)}. The stage was not changed; ${gone}.`)
       }
       git(real, 'reset', '-q', '--hard', tip)
