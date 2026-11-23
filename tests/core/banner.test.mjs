@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { bannerFor, bannerRows, openWaves } from '../../lib/banner.mjs'
+import { len } from '../../lib/format.mjs'
+import { toAnsi } from '../../lib/paint.mjs'
 import * as S from './banner-samples.mjs'
 import { runFact } from '../../hooks/boxes.mjs'
 
@@ -229,6 +231,23 @@ test('every row of every box is as wide as the others and at most 92, from a wid
       assert.deepEqual([...new Set(rows.map(cells))], [Math.min(cols, 92)], name + ' at ' + cols)
     }
   }
+})
+
+test('a box whose text has wide characters keeps every row to its width', () => {
+  const wide = 'アップロードの再試行は何回までにしますか？上限を決めてください。'
+  const plain = { kind: 'answer', key: 'k', title: wide, lines: [wide + wide], bullets: [wide + ' ' + wide], options: [['now', 'Answer now'], ['later', 'Later']] }
+  const choices = { ...plain, kind: 'question', bullets: [], tag: ' ◆ LCW ', note: wide, options: [['a', '再試行する'], ['b', 'やめる']], choices: [{ ids: ['a'], meaning: wide + wide }, { ids: ['b'], meaning: wide }] }
+  for (const banner of [plain, choices]) for (const cols of [92, 60, 40]) {
+    const rows = bannerRows(banner, cols)
+    assert.ok(rows.length > 3, 'drawn at ' + cols)
+    assert.deepEqual([...new Set(rows.map((r) => len(r.map((s) => s.t).join(''))))], [cols], banner.kind + ' at ' + cols)
+  }
+})
+
+test('a row with wide characters and a right group is painted to the width given', () => {
+  const row = [{ t: '作業者がテストを書いています' }, { t: '12m', r: true }]
+  const painted = toAnsi([row], 'dark', 40).replace(/\x1b\[[0-9;]*m/g, '')
+  assert.equal(len(painted), 40)
 })
 
 test('over a card the box is as wide as the card, past 92', () => {
