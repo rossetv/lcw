@@ -12,7 +12,7 @@ import { settle } from '../lib/billing.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import { diffOf } from './lib/diff.mjs'
 import { workOf } from '../lib/banner.mjs'
-import { noteQuotaSession, readSessionQuota, quotaUsage } from './lib/quota-session.mjs'
+import { noteQuotaSession, readSessionQuota, quotaUsage, sessionIdentity } from './lib/quota-session.mjs'
 
 const WEEK_MS = 168 * 3600 * 1000
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -102,12 +102,14 @@ const clock = () => (Number.isFinite(Number(process.env.LCW_NOW)) && process.env
 function settleBilling(inp, ids, now) {
   const id = ids[0]
   if (!id) return
-  const was = ids.map((i) => readJson(sessionFile(home(), i))?.billing).find((b) => typeof b === 'string') ?? 'unclear'
+  // the canonical session's billing is the one the readers take first
+  const keys = [...new Set([sessionIdentity(id), ...ids])]
+  const was = keys.map((i) => readJson(sessionFile(home(), i))?.billing).find((b) => typeof b === 'string') ?? 'unclear'
   const cost = num(inp.cost?.total_cost_usd)
   const weekly = inp.rate_limits?.seven_day
   const quotaSelected = !!readSessionQuota(ids, now, sessionMark(ids))
   const billing = settle(was, { weekly: weekly && typeof weekly === 'object' ? weekly : null, replied: cost > 0, quotaSelected })
-  for (const alias of ids) {
+  for (const alias of keys) {
     if (readJson(sessionFile(home(), alias))?.billing !== billing && billing !== 'unclear') setBilling(alias, billing)
     if (billing === 'subscription') dropSpend(alias)
   }

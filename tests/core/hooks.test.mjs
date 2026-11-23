@@ -455,13 +455,13 @@ test('session start on a subscription, an unreadable sign-in or an unclear one s
   assert.deepEqual(sessionOf(home, 'p1'), { billing: 'subscription' })
 })
 
-test('session start under an API key makes a settled subscription count dollars, and a subscription sign-in takes back the dollars of a per-token session', () => {
+test('session start under an API key leaves a settled subscription unclear and says nothing of dollars, and a subscription sign-in takes back the dollars of a per-token session', () => {
   const repo = makeRepo()
   const home = tmp('home')
   writeSession(home, 'p1', { billing: 'subscription' })
   const out = startNote(home, repo, KEY)
-  assert.match(out, /billed per token/)
-  assert.equal(sessionOf(home, 'p1').billing, 'payg')
+  assert.doesNotMatch(out, /per token/)
+  assert.equal(sessionOf(home, 'p1').billing, 'unclear')
   const other = tmp('home')
   writeSession(other, 'p1', { billing: 'payg', toldPayg: true })
   spent(other, 'p1', 40)
