@@ -4,7 +4,7 @@ import { gateExpired } from '../lib/usage.mjs'
 import { MAX_AGE_MS } from '../lib/quota.mjs'
 import { thresholds as TH } from '../lib/theme.mjs'
 import { recordReading, next0800 } from '../lib/spend.mjs'
-import { settle } from '../lib/billing.mjs'
+import { settle, replied } from '../lib/billing.mjs'
 import { clip, dollars, len, tokens as tokenCount } from '../lib/format.mjs'
 
 const LIVE = ['pending', 'running', 'waiting']
@@ -370,14 +370,14 @@ export function quotaBilling(session, quota) {
 
 /**
  * What one session.measure reading does to the session's billing and its spend record. A weekly figure settles a
- * subscription, whose spend is dropped; a reply (a cost above 0) without one settles an unclear session as
- * pay-per-token. Spend is recorded unless the session is a subscription; cost is undefined where the host keeps
+ * subscription, whose spend is dropped; a reply (a cost above 0, or above the first reading after a resume) without
+ * one settles an unclear session as pay-per-token. Spend is recorded unless the session is a subscription; cost is undefined where the host keeps
  * no ledger, and then nothing is recorded. rec is the stored record, null when there is none (undefined when it
  * could not be read). record is the record to write, or null when nothing changed.
  */
 export function measureStep(session, rec, { weekly, cost, quota }, now) {
   const was = session?.billing ?? 'unclear'
-  const billing = quota ? 'subscription' : settle(quotaBilling(session, quota), { weekly, replied: cost > 0 })
+  const billing = quota ? 'subscription' : settle(quotaBilling(session, quota), { weekly, replied: replied(session?.billing, rec, cost) })
   const changed = billing !== was
   if (billing === 'subscription') return { billing, changed, record: null, drop: rec !== null }
   const next = recordReading(rec, cost, now)

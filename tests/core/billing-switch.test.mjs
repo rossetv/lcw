@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { tmp, makeRepo, run, lcw, readJson, START_HOOK, LIMIT_HOOK } from './helpers.mjs'
+import { measureStep } from '../../hooks/lcw-mod.mjs'
 
 const STATUS_LINE = new URL('../../scripts/statusline.mjs', import.meta.url).pathname
 const NOW = Date.UTC(2026, 5, 10, 12, 0, 0)
@@ -41,14 +42,32 @@ test('a subscriber resumed with an API key in the environment is told nothing ab
   assert.equal(prompt(t), null)
 })
 
+test('a resumed subscriber whose first tick shows the cost from before the resume, with no weekly figure, is never made pay-per-token', () => {
+  const t = place({ p1: { billing: 'subscription' } })
+  start(t, 'api_key')
+  tick(t, { cost: 0.00308 })
+  assert.notEqual(billingOf(t.home, 'p1'), 'payg')
+  assert.equal(prompt(t), null)
+  tick(t, { cost: 0.00308, weekly: true })
+  assert.equal(billingOf(t.home, 'p1'), 'subscription')
+  assert.equal(prompt(t), null)
+})
+
+test('the mod settles a session left unclear at a resume as pay-per-token only once its cost rises past the first reading', () => {
+  const first = measureStep({ billing: 'unclear' }, null, { weekly: null, cost: 0.00308 }, NOW)
+  assert.equal(first.billing, 'unclear')
+  assert.equal(measureStep({ billing: 'unclear' }, first.record, { weekly: null, cost: 0.05 }, NOW).billing, 'payg')
+})
+
 test('a stored subscription resumed under an API key whose reply has no weekly figure counts dollars and stops at the dollar mark', () => {
   const t = place({ p1: { billing: 'subscription', toldPayg: true } })
   start(t, 'api_key')
   tick(t, { cost: 0.4 })
+  tick(t, { cost: 0.9 })
   assert.equal(billingOf(t.home, 'p1'), 'payg')
   assert.match(prompt(t), /turned out to be billed per token/)
   assert.equal(lcw(['mark', '10usd'], { home: t.home, cwd: t.repo, session: 'p1' }).code, 0)
-  tick(t, { cost: 12 })
+  tick(t, { cost: 12.4 })
   assert.match(prompt(t), /STOP\. This session is at its usage mark: \$12 was spent .* the mark is \$10/)
 })
 
@@ -56,6 +75,7 @@ test('a resume known by an older canonical id settles the canonical session too'
   const t = place({ c0: { billing: 'subscription', sessionCanonicalId: 'c0' }, p1: { sessionCanonicalId: 'c0' } })
   start(t, 'api_key')
   tick(t, { cost: 0.4 })
+  tick(t, { cost: 0.9 })
   assert.match(prompt(t), /turned out to be billed per token/)
 })
 
