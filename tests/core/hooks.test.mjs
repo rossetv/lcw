@@ -67,6 +67,42 @@ test("a session that is not on the run is held to its own mark, not the run's", 
   assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 2, 'and does not lift the run')
 })
 
+test('gate hook refuses a run over its mark that has no gate file, and allows it once the mark is raised over the usage', () => {
+  const t = started()
+  weekAt(t.home, 90) // another session read the week past the mark; this one has written no gate yet
+  const refused = gateHook(t, { session_id: 's1', cwd: t.repo })
+  assert.equal(refused.code, 2)
+  assert.match(refused.err, /this run is at its usage mark.*pause mark/)
+  t.cli('usage')
+  t.cli('pause', 'mark')
+  t.cli('resume')
+  assert.equal(fs.existsSync(`${t.dir}/gate`), false, 'resume removes the gate')
+  assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 2, 'resumed while still over the mark')
+  t.cli('mark', '95')
+  assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 0)
+})
+
+test('gate hook refuses a run the user paused while over its mark', () => {
+  const t = started()
+  weekAt(t.home, 90)
+  t.cli('pause', 'human')
+  t.cli('usage')
+  assert.equal(fs.existsSync(`${t.dir}/gate`), false)
+  const refused = gateHook(t, { session_id: 's1', cwd: t.repo })
+  assert.equal(refused.code, 2)
+  assert.match(refused.err, /this run is at its usage mark/)
+  assert.ok(!/pause mark/.test(refused.err), 'the user\'s pause is not turned into a pause at the mark')
+})
+
+test('gate hook allows a run whose percent gate has expired once the new week is under the mark', () => {
+  const t = started()
+  fs.writeFileSync(`${t.dir}/gate`, JSON.stringify({ reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt: past(), at: 1 }))
+  weekAt(t.home, 10)
+  assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 0)
+  weekAt(t.home, 90)
+  assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 2, 'a new week already over the mark')
+})
+
 test('session-start hook without a run prints the rule and the command', () => {
   const home = tmp('home')
   const repo = makeRepo()
@@ -476,6 +512,19 @@ test('the agent gate holds a run at its dollar gate only while the spend is over
   assert.match(refused.err, /\$3,020 was spent in the last 7 days and the mark is \$3,000.*pause mark/)
   spent(t.home, 's1', 2500)
   assert.equal(spawnGate(t.home, t.repo, 's1').code, 0, 'under the mark again, though the gate file stands')
+})
+
+test('the agent gate refuses a run billed per token whose spend is over its mark before any gate file is written', () => {
+  const t = started('dollars')
+  writeSession(t.home, 's1', { ...readJson(`${t.home}/sessions/s1.json`), billing: 'payg', toldPayg: true })
+  weekAt(t.home, 90) // a share of the week does not count for a session billed per token
+  spent(t.home, 's1', 2500)
+  assert.equal(spawnGate(t.home, t.repo, 's1').code, 0)
+  spent(t.home, 's1', 3020)
+  assert.equal(fs.existsSync(`${t.dir}/gate`), false)
+  const refused = spawnGate(t.home, t.repo, 's1')
+  assert.equal(refused.code, 2)
+  assert.match(refused.err, /\$3,020 was spent in the last 7 days and the mark is \$3,000.*pause mark/)
 })
 
 test('at a mark of the whole week or the full cap the stop text does not offer "finish this regardless", which would lift nothing', () => {

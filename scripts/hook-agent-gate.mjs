@@ -1,8 +1,7 @@
 import fs from 'node:fs'
 import { findRun } from './lib/runs.mjs'
-import { gateHolds, atMark, readUsage, sessionIds, sessionMark } from './lib/gate.mjs'
+import { gateHolds, atMark, readUsage, sessionIds, sessionMark, DEFAULT_MARK } from './lib/gate.mjs'
 import { readMoney } from './lib/money.mjs'
-import { readJson } from './lib/store.mjs'
 import { dollars } from '../lib/format.mjs'
 
 try {
@@ -15,12 +14,17 @@ try {
     if (run) break
   }
   if (run) {
-    if (gateHolds(run.paths, run.state, now)) {
-      // A dollar gate is told in dollars while the session is still billed per token, as gateHolds judges it.
-      const money = readJson(run.paths.gate)?.unit === 'usd' ? readMoney({ sessionId: [run.state.driver, ...ids].filter(Boolean), now, state: run.state }) : null
+    const held = gateHolds(run.paths, run.state, now)
+    let view = null
+    try { view = readMoney({ sessionId: [run.state.driver, ...ids].filter(Boolean), now, state: run.state }) } catch {}
+    // the gate file can be missing while the run is over its mark: resumed, paused by the user, or not yet read by this session
+    if (held || atMark(run.state.markPercent ?? DEFAULT_MARK, readUsage(), now, view)) {
+      const money = view && atMark(null, null, now, view) ? view : null // told in dollars only when the spend is the reason
+      // "lcw pause mark" would turn the user's own pause into one that ends by itself at the reset
+      const then = run.state.status === 'paused' ? 'Let the running agents finish and record the state in the ledger.' : 'Let the running agents finish, record the state in the ledger, then run "lcw pause mark".'
       process.stderr.write(money
-        ? `LCW: this run is at its usage mark: ${dollars(money.spentUsd)} was spent in the last 7 days and the mark is ${dollars(money.markUsd)}. Launch no new agents. Let the running agents finish, record the state in the ledger, then run "lcw pause mark".\n`
-        : 'LCW: this run is at its usage mark. Launch no new agents. Let the running agents finish, record the state in the ledger, then run "lcw pause mark".\n')
+        ? `LCW: this run is at its usage mark: ${dollars(money.spentUsd)} was spent in the last 7 days and the mark is ${dollars(money.markUsd)}. Launch no new agents. ${then}\n`
+        : `LCW: this run is at its usage mark. Launch no new agents. ${then}\n`)
       process.exit(2)
     }
   } else {
