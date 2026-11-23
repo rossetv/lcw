@@ -14,6 +14,8 @@ export interface Banner {
   options: [string, string][]
   /** The approval box: its own tag, its replies in a column (ids of options, and what each means), and a note at the foot. */
   tag?: string
+  /** A name the tag takes after its first "· ", as much of it as the top row has room for. */
+  tagName?: string
   choices?: { ids: string[]; meaning: string }[]
   note?: string
   /** The question box: the question it puts. */

@@ -460,5 +460,18 @@ test('an ask without options keeps the box it always had', () => {
 })
 
 test("the box of an ask's options names the run, as the plain answer box does", () => {
-  assert.match(bannerFor({ run: asking([CHOICE]), now: 0 }).tag, /export-csv needs your answer/)
+  assert.match(bannerRows(bannerFor({ run: asking([CHOICE]), now: 0 }), 92)[0].map((s) => s.t).join(''), /◆ LCW · export-csv needs your answer/)
+})
+
+test("the top row of an ask's options box is never wider than the box, whatever the run's name", () => {
+  for (const name of ['demo', 'plugin-and-status-bar-bugs-and-a-good-deal-more']) {
+    const b = bannerFor({ run: runFact({ id: 'r', name, stage: 'Build', status: 'running', asks: [CHOICE] }, false), now: 0 })
+    for (let width = 32; width <= 100; width++) {
+      for (const overCard of [false, true]) {
+        const rows = bannerRows(b, width, overCard)
+        if (!rows.length) continue
+        assert.equal(len(rows[0].map((s) => s.t).join('')), len(rows[1].map((s) => s.t).join('')), `${name} at ${width}`)
+      }
+    }
+  }
 })
