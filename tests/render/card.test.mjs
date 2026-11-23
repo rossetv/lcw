@@ -913,3 +913,21 @@ test('in a wave\'s review a partly fixed fix counts as reviewed, not as one to g
   const view = buildView({ state: { shape: 'sweep', stage: 'Review', status: 'running', requirements, sweep: { waves: [] } }, now: NOW });
   assert.deepEqual([view.detail.pass, view.detail.toGo, view.detail.total], [2, 1, 3]);
 });
+
+// Cells as a terminal draws them: Chinese, Japanese and Korean characters and emoji take two.
+const cellsOf = t => [...t].reduce((n, c) => n + (/[　-鿿＀-｠\u{1F300}-\u{1FAFF}]/u.test(c) ? 2 : 1), 0);
+const joined = spans => spans.map(s => s.t).join('');
+const rowCells = r => { const k = r.findIndex(s => s.r); return k < 0 ? cellsOf(joined(r)) : cellsOf(joined(r.slice(0, k))) + 2 + cellsOf(joined(r.slice(k))); };
+
+test('wide characters take two cells, so every row keeps to the width and the frame', () => {
+  const state = { name: 'アップロード再試行の修正', stage: 'Build', status: 'running', stageSince: NOW - 6e5, createdAt: NOW - 6e5, health: '作業者がテストを書いています',
+    asks: [{ n: 1, text: 'アップロードの再試行は何回までにしますか？指数バックオフを使いますか？', at: NOW }], tasks: [{ id: 'T1', status: 'running' }] };
+  const agents = [{ id: 'a', description: '再試行ポリシーのテストを書く 🧪', model: 'claude-sonnet-4-5', effort: 'high', tokens: 1000, startTime: NOW, status: 'running' }];
+  for (const [width, frame] of [[60, true], [100, true], [40, false]]) {
+    for (const r of renderCard(buildView({ state, agents, now: NOW }), { width, frame })) {
+      const n = rowCells(r);
+      assert.ok(n <= width, width + ': ' + n + ' cells: ' + joined(r));
+      if (frame && !r.some(s => s.r)) assert.equal(n, width, joined(r));
+    }
+  }
+});
