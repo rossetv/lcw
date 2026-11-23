@@ -24,6 +24,6 @@ Report problems: something that is wrong or does not work, that breaks another t
 
 Every tool call re-reads all you have read so far, so read in few, large steps: start from the milestone's diff (`git diff --stat <base>..<end>`, then the diff of the files it changed), read several files in one call, and never read a file twice.
 
-When your brief gives you fix commits by their ids in place of a base and an end, you are checking fixes only: read each with `git show <id>`, and run their tests in a throwaway worktree at the last of them. A message after your report may give you such commits, for problems you raised: check them the same way, with a worktree made again for it, and be as hard on each fix as you were on the work.
+When your brief gives you fix commits by their ids in place of a base and an end, you are checking fixes only: read each with `git show <id>`, and run their tests in a throwaway worktree at the last of them. A message after your report may give you fixes for problems you raised: each problem, the commits that answer it, the commit they started from and the head to check at. Read those commits, run the tests that cover what they touched at that head, in a throwaway worktree made new for it, and be as hard on each fix as you were on the work.
 
 Reply with one line first: "clean", or how many problems. Then each problem in a line or two: where it is, what is wrong, and what a worker should do about it.
