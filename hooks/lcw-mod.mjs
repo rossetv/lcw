@@ -31,7 +31,7 @@ export const SPARK_CELLS = 8
 
 /**
  * Normalises $.agent.list() for the card and tracks when each agent's tokens last moved.
- * An agent that is not running (waiting on a shell or a child, or pending) is never quiet.
+ * An agent that is not running (waiting on a shell or a child, or pending), or that has a live agent of its own, is never quiet.
  * An agent is held when its turn has ended and it is still listed with no live agent of its own: background work it
  * started, such as a command that never ended, keeps it there. heldMs is how long that has lasted, and listedMs how
  * long the agent has been listed in one go.
@@ -48,7 +48,7 @@ export function trackAgents(list, seen, now) {
     if (!LIVE.includes(a.status)) continue
     const tokens = agentTokens(a)
     const prev = seen?.[a.id]
-    const since = !prev || prev.tokens !== tokens || a.status !== 'running' ? now : prev.since
+    const since = !prev || prev.tokens !== tokens || a.status !== 'running' || parents.has(a.id) ? now : prev.since
     const moved = !!prev && prev.tokens !== tokens
     let spark = prev?.spark ?? [], from = prev?.from ?? now, base = prev?.base ?? tokens
     // A span is closed with what was gained in it; spans the mod missed (it was not polling) count as empty.

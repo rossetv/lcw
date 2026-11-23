@@ -110,6 +110,16 @@ test('an agent that waits on an agent it launched is not held, and one whose tur
   expect(w.prompts[0]).toMatch(/gave its report 16 minutes ago/)
 })
 
+test('a running agent whose own child is at work is not reported as stalled, though its tokens stay flat', async ($, on) => {
+  const agents = { list: [] as unknown[] }
+  const w = engine(on, 'running', agents)
+  for (let i = 0; i < 4; i++) {
+    agents.list = [worker({ id: 'o1', tokenCount: 5 }), worker({ id: 'k1', parentId: 'o1', tokenCount: 100 + i })]
+    await (i ? w.pass(6) : start($))
+  }
+  expect(w.prompts.length).toBe(0)
+})
+
 test('an agent still at work after an hour is checked on once, and not again after a pause', async ($, on) => {
   const agents = { list: [worker()] as unknown[] }
   const w = engine(on, 'running', agents)
