@@ -121,6 +121,34 @@ test('external classification excludes old and new estimated money even before h
   assert.deepEqual(readJson(spendFile(f.home, 'proxy')), record)
 })
 
+test('explicit canonical unselection overrides stale alias subscription in money reads and writes', () => {
+  const f = fixture()
+  const canonical = { sessionCanonicalId: 'canonical', quotaSelection: null, billing: 'payg', markPercent: 80 }
+  put(sessionFile(f.home, 'canonical'), canonical)
+  put(sessionFile(f.home, 'alias'), { sessionCanonicalId: 'canonical', quotaSelection: selection, billing: 'subscription', quotaDefaultBilling: 'payg' })
+  put(sessionFile(f.home, 'independent'), { quotaSelection: selection, billing: 'subscription' })
+  const record = (usd) => ({ v: 1, base: 0, max: usd, q: { [Math.floor(now / 900000)]: usd } })
+  put(spendFile(f.home, 'alias'), record(30))
+  put(spendFile(f.home, 'independent'), record(900))
+  withHome(f.home, () => {
+    assert.equal(readMoney({ sessionId: 'alias', now })?.spentUsd, 30)
+    assert.equal(readMoney({ sessionId: 'canonical', now })?.spentUsd, 30)
+    assert.equal(recordSpend('alias', 45, now)?.max, 45)
+    assert.equal(readMoney({ sessionId: ['canonical', 'alias'], now })?.spentUsd, 45)
+    fs.writeFileSync(quotaFile(f.home), '{')
+    assert.equal(readMoney({ sessionId: 'independent', now }), null)
+    const { quotaSelection, ...unknownSelection } = canonical
+    put(sessionFile(f.home, 'canonical'), unknownSelection)
+    assert.equal(readMoney({ sessionId: 'alias', now }), null)
+    assert.equal(recordSpend('alias', 80, now), null)
+    put(sessionFile(f.home, 'canonical'), canonical)
+    put(sessionFile(f.home, 'native-payg'), { billing: 'payg' })
+    put(spendFile(f.home, 'native-payg'), record(5))
+    assert.equal(readMoney({ sessionId: 'alias', now })?.spentUsd, 50)
+    assert.equal(readMoney({ sessionId: 'native-payg', now })?.spentUsd, 50)
+  })
+})
+
 function fixture() {
   const home = tmp('quota-home'), cwd = makeRepo()
   const options = { home, cwd, session: 'proxy', env: { LCW_NOW: String(now), ANTHROPIC_BASE_URL: 'https://proxy.test', LCW_AUTH_STATUS_JSON: '{"authMethod":"api_key"}' } }
