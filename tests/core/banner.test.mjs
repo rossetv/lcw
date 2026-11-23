@@ -438,7 +438,6 @@ test('a box of LCW\'s own keeps its first option filled', () => {
 test('an open question shows before an open ask, so its options are not hidden behind the answer box', () => {
   const run = runFact({ id: 'r', name: 'r', shape: 'sweep', stage: 'Build', status: 'running', asks: [{ n: 1, text: 'Push where?', at: 1 }], questions: [{ ...QUESTION, recommend: 'a' }] }, false)
   assert.equal(bannerFor({ run, now: 0 })?.kind, 'question')
-  assert.equal(bannerFor({ run, now: 0, dismissed: new Set(['question:r:Q82']) })?.kind, 'answer')
 })
 
 const asking = (asks) => runFact({ id: 'r', name: 'export-csv', stage: 'Build', status: 'running', asks }, false)
@@ -458,8 +457,8 @@ test('an ask without options keeps the box it always had', () => {
   const b = bannerFor({ run: asking([{ n: 1, text: 'Which format?', at: 1 }, CHOICE].map((a, i) => ({ ...a, n: i + 1 }))), now: 0 })
   assert.deepEqual(b.options, [['now', 'Answer now'], ['later', 'Later']])
   assert.equal(b.choices, undefined)
+})
 
 test("the box of an ask's options names the run, as the plain answer box does", () => {
   assert.match(bannerFor({ run: asking([CHOICE]), now: 0 }).tag, /export-csv needs your answer/)
-})
 })

@@ -414,3 +414,21 @@ test("an ask's option drawn before the ask changed is not acted on, though the n
   assert.equal(sameBox(drawn, next, 'b'), false)
   assert.equal(sameBox(drawn, bannerFor(choosing([REMOTE])), 'b'), true)
 })
+
+test("Later on a question shown before an ask brings up the ask's buttons, and the question comes back once the ask is answered", () => {
+  const sweep = (asks) => ({ now: NOW, run: runFact({ id: 'r1', name: 'export-csv', shape: 'sweep', status: 'running', stage: 'Build', asks,
+    questions: [{ id: 'Q1', text: 'Keep the 409?', why: 'w', status: 'open', recommend: 'a', options: [{ key: 'a', label: 'Keep', meaning: 'm' }, { key: 'b', label: 'Change', meaning: 'n' }] }] }) })
+  const dismissed = new Set()
+  const pressOn = (facts, option) => {
+    const box = bannerFor({ ...facts, dismissed })
+    const plan = pressPlan(box, option, facts, CTX)
+    if (plan?.dismiss) for (const k of dismissKeys(box)) dismissed.add(k)
+    return { box, plan }
+  }
+  const asked = sweep([REMOTE])
+  assert.equal(pressOn(asked, 'later').box.kind, 'question')
+  const { box, plan } = pressOn(asked, 'b')
+  assert.equal(box.kind, 'answer')
+  assert.deepEqual(argvs(plan), ['answer 2 fork: push to your fork --session s1'])
+  assert.equal(bannerFor({ ...sweep([]), dismissed })?.kind, 'question')
+})
