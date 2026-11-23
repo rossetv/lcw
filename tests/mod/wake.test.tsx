@@ -16,6 +16,8 @@ function engine(on: any, files: Record<string, string>, opts: { rmWorks?: boolea
   const clock = opts.clock === false ? null! : mock.clock(on, { now: NOW })
   const prompts: string[] = []
   let drops = opts.drops ?? 0
+  // The driving session's process as ps sees it, and how often the mod asked.
+  const ps = { out: opts.ps ?? '', calls: 0 }
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
@@ -38,7 +40,7 @@ function engine(on: any, files: Record<string, string>, opts: { rmWorks?: boolea
       }
       return { value: { exitCode: 0, stdout: '{"ok":true}', stderr: '' } }
     }
-    if (e.argv[0] === 'ps') return { value: { exitCode: 0, stdout: opts.ps ?? '', stderr: '' } }
+    if (e.argv[0] === 'ps') { ps.calls++; return { value: { exitCode: 0, stdout: ps.out, stderr: '' } } }
     if (opts.rmWorks !== false && e.argv[0] === 'rm') delete files[e.argv[e.argv.length - 1]]
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
   })
@@ -51,7 +53,7 @@ function engine(on: any, files: Record<string, string>, opts: { rmWorks?: boolea
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
   on('ui.invalidate', () => ({ value: undefined }))
-  return { clock, prompts, files }
+  return { clock, prompts, files, ps }
 }
 
 const start = ($: any) => $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -89,6 +91,21 @@ test('a session whose run another open session now drives does not wake it', asy
   await start($)
   await w.clock.advance(10000)
   expect(w.prompts.length).toBe(0)
+})
+
+test('a wake held back for an open driving session asks ps only now and then, and is sent once that session closes', async ($, on) => {
+  const driven = JSON.stringify({ ...JSON.parse(state('paused')), driver: 's2' })
+  const w = engine(on, {
+    ...BIND, '/lcw/sessions/s2.json': JSON.stringify({ runDir: RUN, claudePid: 4242 }), [RUN + '/state.json']: driven, [RUN + '/gate']: gate(NOW - DAY),
+  }, { ps: 'claude --resume\n' })
+  await start($)
+  const before = w.ps.calls
+  await w.clock.advance(60000)
+  expect(w.ps.calls - before).toBeLessThanOrEqual(3)
+  expect(w.prompts.length).toBe(0)
+  w.ps.out = ''
+  await w.clock.advance(31000)
+  expect(w.prompts.length).toBe(1)
 })
 
 test('a wake another session sent while this one waited to send its own is not sent again', async ($, on) => {

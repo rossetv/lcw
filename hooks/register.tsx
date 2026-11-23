@@ -381,7 +381,8 @@ async function recoverQuota($: EngineInterface, run: Run, now: number) {
     const ackFile = `${run.runDir}/quota-woke`
     if ((await readJson($, ackFile))?.gate === proof.gate) { S.wokeFor = key; S.quotaWaking = false; return }
     // A binding left behind when another open session took the run over: that session wakes it, not this one too.
-    if (await driverOpen($, run.state.driver)) { S.quotaWaking = false; return }
+    // Looked at again only after a while: the other session may stay open for days, and each look runs ps.
+    if (await driverOpen($, run.state.driver)) { S.quotaRetry = { key, at: now + RETRY_MS }; S.quotaWaking = false; return }
     $.clock.after(700, () => void (async () => {
       const at = await $.clock.now()
       const current = await readRun($, at)
