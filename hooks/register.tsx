@@ -11,8 +11,8 @@ import { hex } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep,
-  longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, resumePrompt, retryGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
-  wakeable, wakeDue, wakePrompt,
+  longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, retryGate, stallNudges, stallPrompt, themeFrom, trackAgents,
+  usageFrom, usdWakePrompt, wakeable, wakeDue, wakePrompt,
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
@@ -714,8 +714,8 @@ export const register: Register = (on) => {
         const usage = mergeUsage(await readJson($, file), reading as any)
         await $.fs.write(file, JSON.stringify(usage))
         const run = await readRun($, now)
-        const gate = run && !run.gate ? gateFor(run.state, usage?.sevenDay, now) : null
-        if (run && gate) await $.fs.write(run.paths.gate, JSON.stringify(gate))
+        const gate = run ? gateFor(run.state, usage?.sevenDay, now) : null
+        if (run && replacesGate(run.gate, gate)) await $.fs.write(run.paths.gate, JSON.stringify(gate))
       } else if (billing === 'payg') {
         const run = await readRun($, now)
         const money = run && !run.gate ? await readMoney($, run.session, run.state, null, now) : null

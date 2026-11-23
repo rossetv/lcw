@@ -292,6 +292,17 @@ export function gateFor(state, sevenDay, now, money) {
 }
 
 /**
+ * Whether a gate gateFor gave is written over the one on disk: there is none, or that one is a usage gate with no
+ * reset time (which would never lift) and this one has it. A dollar gate is never replaced.
+ */
+export function replacesGate(current, next) {
+  if (!next) return false
+  if (!current) return true
+  const known = (g) => Number.isFinite(Date.parse(g?.resetsAt ?? ''))
+  return current.unit !== 'usd' && next.unit !== 'usd' && !known(current) && known(next)
+}
+
+/**
  * True once a gate's reset time has passed and this reset has not been handled yet. A dollar gate is due at its
  * retryAt, and at once in a session settled as a subscription, where a dollar mark never holds.
  */

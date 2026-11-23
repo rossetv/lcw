@@ -30,6 +30,7 @@ export function usageTokens(usage: any): number
 export function agentTokens(agent: any): number
 export function gateFor(state: any, sevenDay: SevenDay | null | undefined, now: number): Gate | null
 export function gateFor(state: any, sevenDay: SevenDay | null | undefined, now: number, money: Money | null | undefined): Gate | UsdGate | null
+export function replacesGate(current: { unit?: string; resetsAt?: string | null } | null | undefined, next: Gate | UsdGate | null | undefined): boolean
 export function wakeDue(gate: { resetsAt?: string | null; unit?: string; retryAt?: number } | null | undefined, now: number,
   wokeFor: string | number | null | undefined, billing?: Billing | string): boolean
 export function retryGate(gate: UsdGate, money: Money | null | undefined, now: number): UsdGate | null

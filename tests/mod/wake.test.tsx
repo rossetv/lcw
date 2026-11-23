@@ -212,3 +212,18 @@ test('a figure for a new week replaces the old one', async ($, on) => {
   expect(JSON.parse(w.files['/lcw/usage.json'] ?? '{}').sevenDay.percentUsed).toBe(5)
   expect(RUN + '/gate' in w.files).toBe(false)
 })
+
+test('a gate with no reset time is written again with one when a reading that has it arrives, and then wakes the run', async ($, on) => {
+  const resetsAt = '2026-11-18T12:00:05.000Z'
+  const w = engine(on, {
+    ...BIND, [RUN + '/state.json']: state('paused'),
+    [RUN + '/gate']: JSON.stringify({ reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt: null, at: NOW - DAY }),
+  })
+  await start($)
+  await $.session.measure(limits(82, resetsAt) as any)
+  expect(JSON.parse(w.files[RUN + '/gate'] ?? '{}').resetsAt).toBe(resetsAt)
+  await w.clock.advance(10000)
+  expect(RUN + '/gate' in w.files).toBe(false)
+  expect(w.prompts.length).toBe(1)
+  expect(w.prompts[0]).toMatch(/limit has reset/)
+})

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import {
   addTotals, addUsage, agentTokens, buttons, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
-  longNudges, quietCounts, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt,
+  longNudges, quietCounts, replacesGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt,
   measureStep, retryGate, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
@@ -240,6 +240,20 @@ test('a gate is written once the week reaches the mark of an unfinished run', ()
   assert.equal(gateFor(state, null, NOW), null)
   assert.equal(gateFor({ ...state, status: 'paused', pausedReason: 'human' }, { percentUsed: 90, resetsAt }, NOW), null, 'the human paused it')
   assert.equal(gateFor({ ...state, status: 'paused', pausedReason: 'mark' }, { percentUsed: 90, resetsAt }, NOW).reason, 'mark')
+})
+
+test('a gate is written over one on disk only where that one has no reset time and the new one has', () => {
+  const resetsAt = '2026-11-22T14:00:00.000Z'
+  const known = { reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt, at: NOW }
+  const unknown = { ...known, resetsAt: null }
+  assert.equal(replacesGate(null, known), true)
+  assert.equal(replacesGate(null, unknown), true, 'a gate with no reset time still holds the run at its mark')
+  assert.equal(replacesGate(unknown, known), true)
+  assert.equal(replacesGate({ ...known, resetsAt: undefined }, known), true, 'one another program wrote without the field')
+  assert.equal(replacesGate(known, { ...known, usedPercent: 90 }), false)
+  assert.equal(replacesGate(unknown, unknown), false)
+  assert.equal(replacesGate({ reason: 'mark', unit: 'usd', retryAt: NOW }, known), false, 'a dollar gate')
+  assert.equal(replacesGate(unknown, null), false)
 })
 
 test('the wake comes once, after the reset time', () => {
