@@ -27,6 +27,25 @@ function reap(lock) {
   } catch {}
 }
 
+function reapPrepared(home, lock) {
+  let entries
+  try { entries = fs.readdirSync(home, { withFileTypes: true }) } catch { return }
+  for (const entry of entries) {
+    const dir = `${home}/${entry.name}`
+    if (!entry.isDirectory() || !dir.startsWith(`${lock}.`)) continue
+    const marker = dir.slice(lock.length + 1)
+    const match = /^([1-9]\d*)-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.exec(marker)
+    if (!match || !Number.isSafeInteger(Number(match[1]))) continue
+    try {
+      try { process.kill(Number(match[1]), 0); continue } catch (e) { if (e.code !== 'ESRCH') continue }
+      const names = fs.readdirSync(dir)
+      if (names.length === 1 && names[0] === marker && fs.lstatSync(`${dir}/${marker}`).isFile()) fs.unlinkSync(`${dir}/${marker}`)
+      else if (names.length) continue
+      fs.rmdirSync(dir)
+    } catch {}
+  }
+}
+
 async function commit(home, fn) {
   const file = quotaFile(home)
   const lock = `${file}.lock`
@@ -35,6 +54,7 @@ async function commit(home, fn) {
   const until = Date.now() + 2000
   try {
     fs.mkdirSync(home, { recursive: true, mode: 0o700 })
+    reapPrepared(home, lock)
     fs.mkdirSync(prepared, { mode: 0o700 })
     try {
       fs.writeFileSync(`${prepared}/${marker}`, '', { flag: 'wx', mode: 0o600 })

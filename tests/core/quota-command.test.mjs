@@ -118,6 +118,55 @@ test('an interrupted empty lock does not prevent disabling the source', async (t
   assert.equal(readQuotaState(home).enabled, false)
 })
 
+for (const phase of ['preparation', 'release']) test(`abandoned directories from ${phase} are reclaimed without touching live contenders or unrelated paths`, async (t) => {
+  const home = fixture(t)
+  const lock = `${quotaFile(home)}.lock`
+  const url = new URL('../../scripts/lib/quota-command.mjs', import.meta.url).href
+  const source = `
+    import fs from 'node:fs'
+    import { disableQuota } from ${JSON.stringify(url)}
+    const lock = ${JSON.stringify(lock)}
+    const mkdir = fs.mkdirSync
+    fs.mkdirSync = (target, ...args) => {
+      const value = mkdir(target, ...args)
+      if (${JSON.stringify(phase)} === 'preparation' && String(target).startsWith(lock + '.')) process.kill(process.pid, 'SIGKILL')
+      return value
+    }
+    const rename = fs.renameSync
+    fs.renameSync = (from, to) => {
+      const value = rename(from, to)
+      if (${JSON.stringify(phase)} === 'release' && from === lock && String(to).startsWith(lock + '.')) process.kill(process.pid, 'SIGKILL')
+      return value
+    }
+    await disableQuota(${JSON.stringify(home)})
+  `
+  await assert.rejects(promisify(execFile)(process.execPath, ['--input-type=module', '-e', source], { timeout: 3000 }), { signal: 'SIGKILL' })
+  const prefix = path.basename(lock) + '.'
+  const leftovers = fs.readdirSync(home).filter((name) => name.startsWith(prefix))
+  assert.equal(leftovers.length, 1)
+  const deadPid = leftovers[0].slice(prefix.length).split('-')[0]
+  const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+  const live = [1, 2].map((n) => `${lock}.${process.pid}-${uuid(n)}`)
+  for (const dir of live) fs.mkdirSync(dir)
+  fs.writeFileSync(`${live[1]}/${process.pid}-${uuid(2)}`, '')
+  const unrelated = `${lock}.notes`
+  fs.mkdirSync(unrelated)
+  const unexpected = `${lock}.${deadPid}-${uuid(3)}`
+  fs.mkdirSync(unexpected)
+  fs.writeFileSync(`${unexpected}/keep`, 'unrelated')
+  const target = fixture(t)
+  fs.writeFileSync(`${target}/${deadPid}-${uuid(4)}`, 'keep')
+  const link = `${lock}.${deadPid}-${uuid(4)}`
+  fs.symlinkSync(target, link, 'dir')
+
+  assert.deepEqual(await disableQuota(home), { ok: true })
+  assert.equal(fs.existsSync(path.join(home, leftovers[0])), false)
+  for (const dir of [...live, unrelated, unexpected]) assert.equal(fs.existsSync(dir), true)
+  assert.equal(fs.readFileSync(`${unexpected}/keep`, 'utf8'), 'unrelated')
+  assert.equal(fs.lstatSync(link).isSymbolicLink(), true)
+  assert.equal(fs.readFileSync(`${target}/${deadPid}-${uuid(4)}`, 'utf8'), 'keep')
+})
+
 test('real separate processes serialize claims for the same revision', async (t) => {
   const home = fixture(t)
   await setup(home)
