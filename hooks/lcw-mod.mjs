@@ -1,6 +1,7 @@
 // The mod's pure decisions, kept apart from register.tsx so node --test can reach them.
 
 import { gateExpired } from '../lib/usage.mjs'
+import { MAX_AGE_MS } from '../lib/quota.mjs'
 import { thresholds as TH } from '../lib/theme.mjs'
 import { recordReading, next0800 } from '../lib/spend.mjs'
 import { settle } from '../lib/billing.mjs'
@@ -291,11 +292,24 @@ export function gateFor(state, sevenDay, now, money) {
   return { reason: 'mark', markPercent: mark, usedPercent: sevenDay.percentUsed, resetsAt: sevenDay.resetsAt ?? null, at: now }
 }
 
-/**
- * True once a gate's reset time has passed and this reset has not been handled yet. A dollar gate is due at its
- * retryAt, and at once in a session settled as a subscription, where a dollar mark never holds.
- */
-export function wakeDue(gate, now, wokeFor, billing) {
+/** A recovery must carry a new allowable observation, not just an elapsed reset. */
+export function quotaWakeEvidence(gate, quota, now) {
+  if (gate?.unit !== 'quota' || quota?.sourceId !== gate.sourceId || quota.status !== 'ok' || quota.hold || quota.blocked) return null
+  if (!quota.revision || !quota.requestId || !quota.accountKey || !(Date.parse(quota.resetsAt) > now)) return null
+  if (!Number.isFinite(quota.observedAt) || quota.observedAt < gate.at || quota.observedAt > now || now - quota.observedAt >= MAX_AGE_MS) return null
+  if (quota.revision === gate.revision && quota.requestId === gate.requestId) return null
+  return {
+    gate: JSON.stringify([gate.holdId, gate.sourceId, gate.revision, gate.requestId, gate.accountKey, gate.resetsAt, gate.at]),
+    evidence: JSON.stringify([quota.sourceId, quota.revision, quota.accountKey, quota.resetsAt, quota.requestId, quota.observedAt]),
+  }
+}
+
+export function wakeDue(gate, now, wokeFor, billing, quota) {
+  if (gate?.unit === 'quota') {
+    const proof = quotaWakeEvidence(gate, quota, now)
+    return !!proof && proof.gate !== wokeFor
+  }
+  if (quota) return false
   if (gate?.unit === 'usd') return gate.retryAt !== wokeFor && (billing === 'subscription' || gate.retryAt <= now)
   return !!gate && gate.resetsAt !== wokeFor && gateExpired(gate, now)
 }
@@ -339,9 +353,9 @@ export function retryGate(gate, money, now) {
  * no ledger, and then nothing is recorded. rec is the stored record, null when there is none (undefined when it
  * could not be read). record is the record to write, or null when nothing changed.
  */
-export function measureStep(session, rec, { weekly, cost }, now) {
+export function measureStep(session, rec, { weekly, cost, quota }, now) {
   const was = session?.billing ?? 'unclear'
-  const billing = settle(was, { weekly, replied: cost > 0 })
+  const billing = quota ? 'subscription' : settle(was, { weekly, replied: cost > 0 })
   const changed = billing !== was
   if (billing === 'subscription') return { billing, changed, record: null, drop: rec !== null }
   const next = recordReading(rec, cost, now)

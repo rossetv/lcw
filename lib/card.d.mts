@@ -54,6 +54,7 @@ export interface View {
   health: string; share: number | null; runUsd: number | null; mark: number | null;
   /** Pay-per-token billing, else null: the mark and the "run up to" figure as text, and when a paused run tries again ("08:00", or '' when unknown). */
   money: { mark: string; hint: string; retryAt: string; retried: boolean } | null;
+  quota: import('./quota.mjs').QuotaView | null;
   pausedBy: 'mark' | 'human'; resumesIn: string;   // 'human': paused by the human, no countdown
   asks: { n: number; text: string; age: string }[];
   stages: { name: string; st: 'done' | 'now' | 'next' }[];
@@ -71,6 +72,7 @@ export interface BuildInput {
   usage?: { sevenDay?: { percentUsed: number; resetsAt: string } | null } | null;
   gate?: Record<string, any> | null;
   /** The pay-per-token view; null on subscription or unclear billing, and then everything is as it was. */
+  quota?: import('./quota.mjs').QuotaView | null;
   money?: Money | null;
   now?: number;
   ui?: { expanded?: Record<string, boolean>; moreOpen?: boolean };

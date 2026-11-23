@@ -49,7 +49,7 @@ export interface BannerFacts {
   mac?: boolean
   run?: BannerRun | null
   /** since: when this session saw the week reach the mark, cleared once it has been below it for a minute. */
-  usage?: { usedPercent?: number; resetsAt?: Time; markPercent?: number; atMark?: boolean; spentUsd?: number; capUsd?: number; markUsd?: number; since?: number }
+  usage?: { quota?: import('./quota.mjs').QuotaView | null; usedPercent?: number; resetsAt?: Time; markPercent?: number; atMark?: boolean; spentUsd?: number; capUsd?: number; markUsd?: number; since?: number }
   /** lastError: the stored phrase for what went wrong ('printed "401 Unauthorized"', 'took longer than 30 s'). */
   spendFailing?: { fails: number; since?: Time; lastError?: string | null } | null
   /** name is the run's name; title the one line it was started with ("Add a CSV export ..."); milestone as Build records it ("2 of 3"). Without name, title is the name. */

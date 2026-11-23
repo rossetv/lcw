@@ -9,7 +9,7 @@ export const LEARN_TEXT: string
 
 export function runFact(state: any, kept?: boolean): BannerRun | null
 export function awakeApplies(state: any): boolean
-export function usageFact(args: { state?: any; session?: any; usage?: any; money?: any; now: number }): NonNullable<BannerFacts['usage']>
+export function usageFact(args: { state?: any; session?: any; usage?: any; money?: any; quota?: import('../lib/quota.mjs').QuotaView | null; now: number }): NonNullable<BannerFacts['usage']>
 export const BELOW_MARK_MS: number
 export type MarkSpell = { since: number; below: number }
 export function markSpell(prev: MarkSpell | null | undefined, atMark: boolean | undefined, now: number): MarkSpell

@@ -28,6 +28,7 @@ export interface StatusInput {
   weekElapsedPercent?: number | null;
   markPercent?: number | null;
   /** On pay-per-token billing: the row shows the spend, a gauge as wide as the larger of the cap and the mark, the mark and the pace in dollars; weekUsedPercent, weekElapsedPercent and markPercent are not used. */
+  quota?: import('./quota.mjs').QuotaView | null;
   money?: Money | null;
   /** Lines added and removed in the checkout; a column at the right edge when either is above 0. */
   diff?: { added: number; removed: number } | null;
