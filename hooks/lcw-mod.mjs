@@ -404,6 +404,10 @@ export function usdWakePrompt(root, markUsd) {
   return `LCW: ${why}. Run \`${cli(root)} resume\`, then \`${cli(root)} status\`, and carry on from the ledger.`
 }
 
+export function completionPrompt(root) {
+  return `LCW: this build is idle in Ship with no active agents or unfinished tasks recorded. Assess the remaining agreed work, including outstanding requirements and post-merge verification or setup. Only if that work is actually complete, use the supported \`${cli(root)} finish\` command with the appropriate PR or branch details. Otherwise record what remains in the requirements and ledger, and carry on where allowed or ask the person if blocked. This is an assessment, not an instruction to finish blindly.`
+}
+
 export function reopenPrompt(root) {
   return `LCW: this session was reopened with an unfinished LCW run. Load the lcw:lcw skill with the Skill tool, run \`${cli(root)} status\`, and carry on.`
 }

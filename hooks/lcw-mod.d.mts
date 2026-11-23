@@ -48,6 +48,7 @@ export function usageFrom(rateLimits: readonly { kind: string; percentUsed: numb
 export function compactInstructions(state: any, runDir: string, step: string): string
 export function resumePrompt(root: string, step: string): string
 export function wakePrompt(root: string): string
+export function completionPrompt(root: string): string
 export function reopenPrompt(root: string): string
 export function quietCounts(agents: readonly CardAgent[] | undefined, quietMs?: number, stalledMs?: number): { quiet: number; stalled: number }
 export type Nudged = Record<string, { at: number; times: number; tokens?: number }>

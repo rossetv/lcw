@@ -1,5 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
+import type { LcwCompletion } from '../types'
 
 import {
   activityFile, capFile, cleanupFile, noticesFile, quotaFile, runPaths, runsDir, sessionFile, spendCommandFile, spendDir, spendFile, spendReadingFile, updateFile, usageFile,
@@ -13,7 +14,7 @@ import { mergeUsage } from '../lib/usage.mjs'
 import { activeQuota, CLAIM_MS, evaluateQuota, quotaOff, REFRESH_MS } from '../lib/quota.mjs'
 import type { QuotaView } from '../lib/quota.mjs'
 import {
-  addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep,
+  addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, completionPrompt, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep,
   longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
   wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity,
 } from './lcw-mod.mjs'
@@ -39,6 +40,7 @@ const keptDismissed = atom({ plugin: 'lcw', key: 'dismissed' } as const, [], { s
 const keptReplied = atom({ plugin: 'lcw', key: 'repliedAt' } as const, 0, { shape: KEPT })
 const keptTold = atom({ plugin: 'lcw', key: 'told' } as const, {}, { shape: KEPT })
 const keptNudged = atom({ plugin: 'lcw', key: 'nudged' } as const, {}, { shape: KEPT })
+const keptCompletion = atom({ plugin: 'lcw', key: 'completion' } as const, {}, { shape: KEPT })
 const keptCarry = atom({ plugin: 'lcw', key: 'carry' } as const, null, { shape: KEPT })
 
 // session is the session's file (the binding, its billing and its mark); money is the pay-per-token view, else null.
@@ -95,6 +97,9 @@ const S = {
   slowBusy: false,
   turnRunning: false,
   turnEndedAt: 0,
+  completion: {} as LcwCompletion,
+  completionReadyAt: 0,
+  completionBusy: false,
   // The facts the shown box was last chosen from; the run folders found finished or stopped, never read again.
   facts: null as BannerFacts | null,
   closedRuns: new Set<string>(),
@@ -166,13 +171,14 @@ function keepCarry($: EngineInterface) {
 // What an earlier copy of this code kept, merged into what this one holds; a read that fails changes nothing.
 async function restore($: EngineInterface) {
   try {
-    const [dismissed, repliedAt, told, nudged, carry, session] = await Promise.all([
-      read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(),
+    const [dismissed, repliedAt, told, nudged, carry, session, completion] = await Promise.all([
+      read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(), read($, keptCompletion),
     ])
     for (const k of dismissed) S.banner.dismissed.add(k)
     S.repliedAt = Math.max(S.repliedAt, repliedAt)
     S.told = { ...told, ...S.told }
     S.nudged = { ...nudged, ...S.nudged }
+    S.completion = { ...completion, ...S.completion }
     if (!S.carry && carry?.session === session) S.carry = carry.carry
   } catch {}
   S.restored = true
@@ -462,6 +468,7 @@ async function pollAgents($: EngineInterface) {
     S.totalsChanged = false
     S.totalsAt = now
   }
+  await assessCompletion($)
 }
 
 // What a finished turn used, added to the run's totals: the main session's turns and each agent's run, which is
@@ -646,6 +653,45 @@ async function checkSleep($: EngineInterface) {
 
 // What the person has typed and not sent; anything unreadable counts as typed, so nothing is submitted over it.
 const draft = ($: EngineInterface) => $.prompt.read().then((b) => String(b?.text ?? '')).catch(() => '?')
+
+// A successful main turn must have been observed; a reload alone is not evidence that the driver is idle.
+async function assessCompletion($: EngineInterface) {
+  const idleAt = S.completionReadyAt
+  const blocked = () => !idleAt || S.completionReadyAt !== idleAt || S.turnRunning || S.compacting || !!S.carry || !!S.owed || S.pressing
+  if (!S.restored || S.completionBusy || !S.run || blocked()) return
+  S.completionBusy = true
+  try {
+    const now = await $.clock.now()
+    if (now - idleAt < RETRY_MS) return
+    const run = await readRun($, now)
+    if (!run || S.run?.runDir !== run.runDir) return
+    const s = run.state
+    if (s.status !== 'running' || s.stage !== 'Ship' || s.shape === 'sweep' || s.driver !== await $.session.id()) return
+    if (s.asks?.length || s.questions?.some((q: any) => !q.used) || !s.tasks?.length || s.tasks.some((t: any) => !['done', 'dropped'].includes(t.status))) return
+    const last = S.completion[run.runDir]
+    if (last && (last.sent || last.tries >= 3 || now - last.at < RETRY_MS)) return
+    if (run.gate || run.quota?.hold || run.quota?.blocked) return
+    const money = await readMoney($, run.session, s, run.gate, now)
+    if (usageFact({ state: s, session: run.session, usage: run.usage, money, quota: run.quota, now }).atMark) return
+    if (String(await $.fs.read(run.paths.checkpoint).catch(() => '')).trim() || (await draft($)) !== '') return
+    const agents = await $.agent.list()
+    if (agents.some((a) => ['pending', 'running', 'waiting'].includes(a.status)) || blocked()) return
+    const fresh = await readRun($, await $.clock.now())
+    const snapshot = (r: Run) => JSON.stringify([r.runDir, r.state, r.session, r.gate, r.quota, r.usage])
+    if (!fresh || snapshot(fresh) !== snapshot(run) || blocked()) return
+    // Claim before submitting: the assessment's own turn must never wake another assessment, even after a reload.
+    const notice = { at: now, tries: (last?.tries ?? 0) + 1, sent: true }
+    S.completion = { ...S.completion, [run.runDir]: notice }
+    await update($, keptCompletion, () => S.completion)
+    if (blocked()) { notice.sent = false; await update($, keptCompletion, () => S.completion); return }
+    if (!(await submit($, { text: completionPrompt($.plugin.root) }))) {
+      notice.sent = false
+      await update($, keptCompletion, () => S.completion)
+    }
+  } finally {
+    S.completionBusy = false
+  }
+}
 
 // A try to carry the session on after an API error, once it falls due. Notifications start turns by themselves, and
 // the person may have stepped in, so all is checked again right before it is sent: a try never lands in a working
@@ -883,13 +929,17 @@ export const register: Register = (on) => {
 
   // A turn of the main loop running; the weekly checks wait for none.
   on('turn.start', async ($, e, next) => {
-    if (!e.agentId) S.turnRunning = true
+    if (!e.agentId) { S.turnRunning = true; S.completionReadyAt = 0 }
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
-    if (!e.agentId) { S.turnRunning = false; S.turnEndedAt = await $.clock.now().catch(() => S.turnEndedAt) }
+    if (!e.agentId) {
+      S.turnRunning = false
+      S.turnEndedAt = await $.clock.now().catch(() => S.turnEndedAt)
+      S.completionReadyAt = !e.isAborted && e.reason === 'answer' ? S.turnEndedAt : 0
+    }
     // A main turn that did not end in error has carried the session on; one that did was judged by classic.StopFailure.
     if (!e.agentId && e.reason !== 'error' && S.carry) setCarry($, null)
     await countTurn($, e).catch(() => {})
@@ -907,6 +957,7 @@ export const register: Register = (on) => {
       // What the person sends takes over from any carry-on.
       if (S.carry) setCarry($, null)
       S.owed = null
+      S.completionReadyAt = 0
       void readBanner($).catch(() => {})
     }
     return result
@@ -914,7 +965,10 @@ export const register: Register = (on) => {
 
   // A built-in command that runs locally may raise no prompt.submit; the person's run of one still takes over from a carry-on.
   on('command.run', async ($, e, next) => {
-    if (PERSON.includes((e as any).origin?.kind) && S.carry) setCarry($, null)
+    if (PERSON.includes((e as any).origin?.kind)) {
+      S.completionReadyAt = 0
+      if (S.carry) setCarry($, null)
+    }
     return next(e)
   })
 
@@ -931,6 +985,7 @@ export const register: Register = (on) => {
 
   on('session.stop', async ($, e, next) => {
     const result = await next(e)
+    S.completionReadyAt = 0
     if (e.isTurnRunning) await noteStopped($).catch(() => {})
     return result
   })

@@ -119,7 +119,7 @@ const SWEEP = {
   ],
   "17-finished-with-stacked-pull-requests": [
     "╭─ ◆ LCW Sweep · backlog-sweep ───────────────────────────────────────────────────────────────────────────────── 1d 7h ─╮",
-    "✓ finished · 7 draft PRs, #41 to #47, are open for your review",
+    "✓ finished · PRs: #41 to #47",
     "153 fixed · 14 parked for you, in parked.md · 24 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  ✓ Ship",
     "3 rounds · 7 waves · 212 agents · 48.3M tokens · ≈ 31% of your week",
@@ -133,14 +133,14 @@ const SWEEP = {
   ],
   "19-finished-some-waves-short-of-your-rule": [
     "╭─ ◆ LCW Sweep · backlog-sweep ───────────────────────────────────────────────────────────────────────────────── 1d 7h ─╮",
-    "✓ finished · 4 PRs merged · #45 to #47 are open for your review",
+    "✓ finished · 4 PRs merged · PRs: #45 to #47",
     "153 fixed · 14 parked for you, in parked.md · 24 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  ✓ Ship",
     "3 rounds · 7 waves · 212 agents · 48.3M tokens · ≈ 31% of your week",
   ],
   "20-finished-with-one-pull-request-at-the-end": [
     "╭─ ◆ LCW Sweep · backlog-sweep ───────────────────────────────────────────────────────────────────────────────── 1d 7h ─╮",
-    "✓ finished · 1 draft PR, #41, is open for your review",
+    "✓ finished · PR: #41",
     "153 fixed · 14 parked for you, in parked.md · 24 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  ✓ Ship",
     "3 rounds · 7 waves · 212 agents · 48.3M tokens · ≈ 31% of your week",
@@ -436,10 +436,21 @@ test('the week gauge and its figures are as wide as the group above, whatever th
   }
 });
 
-test('the card shows the PR number, never its link', () => {
-  const ansi = toAnsi(card('Done', { width: 126 }), 'dark', 126);
-  assert.ok(strip(ansi).includes('draft PR #482 is open'));
-  assert.ok(!ansi.includes('github.com'));
+test('a finished build links its PR without claiming an unknown draft or merge state', () => {
+  const input = inputsOf('Done');
+  const rows = renderCard(buildView(input), { width: 126 });
+  assert.match(toPlain(rows), /PR: #482/);
+  assert.doesNotMatch(toPlain(rows), /draft|open for your review|merged/);
+  assert.equal(rows.flat().find(s => s.t === '#482')?.href, input.state.pr.url);
+});
+
+test('finished sweeps name PRs neutrally unless a recorded merge supports more', () => {
+  for (const board of ['17-finished-with-stacked-pull-requests', '19-finished-some-waves-short-of-your-rule', '20-finished-with-one-pull-request-at-the-end']) {
+    const text = toPlain(card(board, { width: 126 }));
+    assert.match(text, /PRs?: #/);
+    assert.doesNotMatch(text, /draft|open for your review/);
+    if (board.startsWith('19-')) assert.match(text, /4 PRs merged/);
+  }
 });
 
 test('status rows survive missing input', () => {
