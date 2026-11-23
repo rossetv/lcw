@@ -239,7 +239,7 @@ const LANES = {
     wide: [
       "◆ LCW Sweep · backlog-sweep                                                                                   1d 2h",
       "● running · wave 6 in its final checks, wave 7 building                                          ≈ 23% of your week",
-      "waves   ✓ Plan  › Build  ○ Review  › Ship    ▰▰▰▰▰▰▰▱▱  5 done · 2 queued           round 3 · 61 fixed · 170 parked",
+      "waves   ✓ Plan  › Build  ○ Review  › Ship    ▰▰▰▰▰▰▰▱▱  5 done · 2 queued         round 3 · 61 fixed · 170 parked …",
       "wave 6  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▰  ▰▰▰▰▰▰    final checks                                                       18m",
       "wave 7  ▰▰▰▰▰▰  ▰▰▰▰▰▰▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    4 of 11 tasks done · 4 running                                      9m",
     ],
@@ -841,9 +841,9 @@ test('at 100 columns nothing is lost, at 80 the longer words go first, and below
   assert.equal(laneOf(fifty, 1), 'wave 1  ▰▰▰ ▰▰▰ ▰▰▰ ▱▱▱  Review');
   // Where the heading is short the sweep's totals give way before the wave counts, and the counts before the cells.
   const long = (w) => laneRows(inputsOf('28-lanes-a-long-sweep'), w).find(l => l.startsWith('waves '));
-  assert.match(long(115), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +round 3 · 61 fixed · 170 parked$/);
-  assert.match(long(80), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued$/);
-  assert.match(long(70), /Ship {4}▰{7}▱{2} {2}… +61 fixed$/);
+  assert.match(long(115), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +round 3 · 61 fixed · 170 parked …$/);
+  assert.match(long(80), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +…$/);
+  assert.match(long(70), /Ship {4}▰{7}▱{2} {2}… +61 fixed …$/);
   for (const board of Object.keys(LANES)) for (const w of [140, 100, 80, 70, 60, 50, 44, 43, 36, 30]) {
     laneRows(inputsOf(board), w).forEach(l => assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l));
   }
@@ -851,9 +851,9 @@ test('at 100 columns nothing is lost, at 80 the longer words go first, and below
 
 test('framed at 100 columns the heading keeps its wave counts and as many totals as fit', () => {
   const heading = board => strip(toAnsi(card(board, { width: 100, frame: true }), 'dark', 100)).split('\n').find(l => l.startsWith('│ waves '));
-  assert.match(heading('29-lanes-hunt-and-final-checks'), /Ship {4}▰▰▰ {2}2 done +round 2 · 43 fixed · 2 parked │$/);
-  // The long sweep has no room for all: the dropped and the round go.
-  assert.match(heading('28-lanes-a-long-sweep'), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +61 fixed · 170 parked │$/);
+  assert.match(heading('29-lanes-hunt-and-final-checks'), /Ship {4}▰▰▰ {2}2 done +round 2 · 43 fixed · 2 parked … │$/);
+  // The long sweep has no room for all: the dropped, the round and the parked go.
+  assert.match(heading('28-lanes-a-long-sweep'), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +61 fixed … │$/);
 });
 
 test('a narrow waves row drops whole counts and never cuts a word or leaves a dangling dot', () => {
@@ -862,7 +862,7 @@ test('a narrow waves row drops whole counts and never cuts a word or leaves a da
     const rows = strip(toAnsi(card('28-lanes-a-long-sweep', { width: w, frame: true }), 'dark', w)).split('\n').filter(l => l.startsWith('│ waves '));
     for (const row of rows) {
       seen++;
-      const after = row.slice(2, -2).trim().replace(/^waves\s+/, '').replace(/[▰▱]+|[✓›○] (Plan|Build|Review|Ship)/gu, '').replace(/ *…/, "").trim();
+      const after = row.slice(2, -2).trim().replace(/^waves\s+/, '').replace(/[▰▱]+|[✓›○] (Plan|Build|Review|Ship)/gu, '').replace(/ *…/g, "").trim();
       if (!after) continue;
       for (const part of after.split(/ {2,}/).join(' · ').split(' · ')) {
         assert.match(part, /^(\d+ (done|in progress|queued|fixed|parked|dropped)|round \d+)$/, w + ': ' + row);
@@ -962,11 +962,11 @@ test('outside the lanes the waves row keeps its label and cells, and its counts 
   const state = { name: 'sweep-x', shape: 'sweep', stage: 'Hunt', status: 'running', createdAt: NOW - 864e5, stageSince: NOW - 6e5,
     sweep: { round: 2, fixed: 14, parked: 3, dropped: 2, prs: 'stacked', hunt: { fix: 6, park: 1, drop: 2 }, waves } };
   const row = (width, s = state) => laneRows({ state: s, now: NOW }, width).find(l => l.startsWith('waves'));
-  for (let w = 44; w <= 90; w++) assert.match(row(w), /^waves ▰▰▰▱▱(  3 done( · 2 queued)?)?( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?$/, w + ': ' + row(w));
+  for (let w = 44; w <= 90; w++) assert.match(row(w), /^waves ▰▰▰▱▱(  3 done( · 2 queued)?)?( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?( …)?$/, w + ': ' + row(w));
   assert.match(row(80), /^waves ▰▰▰▱▱  3 done · 2 queued +round 2 · 14 fixed · 3 parked · 2 dropped$/);
   // With no wave queued yet the totals give way too.
   const none = { ...state, sweep: { ...state.sweep, waves: [] } };
-  for (let w = 44; w <= 90; w++) assert.match(row(w, none), /^waves none queued yet( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?$/, w + ': ' + row(w, none));
+  for (let w = 44; w <= 90; w++) assert.match(row(w, none), /^waves none queued yet( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?( +…)?$/, w + ': ' + row(w, none));
 });
 
 test('the requirements bar stays twenty cells when one failing of many rounds to a cell of its own', () => {
@@ -1106,6 +1106,20 @@ test('a lane or heading that drops what it said ends in "…", and a row that fi
     assert.match(rows('28-lanes-a-long-sweep', width, false).find(l => l.startsWith('waves ')), /▰▱*  …/, String(width));
   }
   assert.match(rows('28-lanes-a-long-sweep', 44, true).find(l => l.startsWith('│ waves ')), /2 queued …/);
+});
+
+test('a totals group that drops a part ends in "…", and one that fits whole has none', () => {
+  const rows = (board, width, start) => strip(toAnsi(card(board, { width, frame: false }), 'dark', width)).split('\n').find(l => l.startsWith(start));
+  const wave = '06-build-wave-2-fixes-in-parallel', long = '28-lanes-a-long-sweep';
+  // Nothing of the totals fits: a "…" stands where they were.
+  assert.match(rows(wave, 80, 'waves'), /1 done · 4 queued +…$/);
+  assert.match(rows(long, 80, 'waves'), /5 done · 2 queued +…$/);
+  // Some of them fit: the "…" follows them, even where the counts end in one too.
+  assert.match(rows(wave, 50, 'waves'), /4 queued … +27 fixed …$/);
+  assert.match(rows(long, 50, 'waves'), /2 queued … +61 fixed …$/);
+  assert.match(rows(long, 115, 'waves'), /2 queued +round 3 · 61 fixed · 170 parked …$/);
+  assert.match(rows('29-lanes-hunt-and-final-checks', 115, 'waves'), /2 done +round 2 · 43 fixed · 2 parked · 3 dropped$/);
+  for (const w of [44, 50, 60, 70, 80, 100]) for (const b of [wave, long]) assert.ok(cols(rows(b, w, 'waves')) <= w, b + ' at ' + w);
 });
 
 test('a cut never leaves a separator before its "…"', () => {
