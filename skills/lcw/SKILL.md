@@ -22,7 +22,7 @@ Your first pick is a guess, made when you know least. Until the human approves t
 
 If the human names a shape, that wins: if you think it is the wrong one, say why and let them decide. If you cannot tell a Build from a Sweep, ask one short question, such as "One change, or should I hunt for every case and fix them in waves?".
 
-`lcw` below means the command line the session-start hook printed (`node <plugin>/scripts/lcw.mjs`). Run it from the shell, written out in full each time: zsh does not split a variable, so one that holds the command line, or a flag with its value, fails. From a script, pass each argument that holds spaces or quotes as a `${}` value of the `$` template, since a command with escaped quotes inside a string can be refused. It is how everything is recorded, and the status bar shows only what you record, so record as things happen, not in a batch at the end. Each call you make is a turn that reads the whole session again, so run the commands of one step in one shell call, one per line (a task marked done, the stage that follows and its ledger line, say), never one call for each.
+`lcw` below means the command line the session-start hook printed (`node <plugin>/scripts/lcw.mjs`). Run it from the shell, written out in full each time: zsh does not split a variable, so one that holds the command line, or a flag with its value, fails. From a script, pass each argument that holds spaces or quotes as a `${}` value of the `$` template, since a command with escaped quotes inside a string can be refused. It is how everything is recorded, and the status bar shows only what you record, so record as things happen, not in a batch at the end. Each call you make is a turn that reads the whole session again, so run the commands of one step in one shell call, joined with `&&` so that when one is refused the rest do not run (a task marked done, the stage that follows and its ledger line, say), never one call for each.
 
 ## You manage, agents do the work
 
@@ -76,7 +76,7 @@ A Build: Brainstorm, Spec, Plan, Build, Review, Ship. A Sweep: Charter, Hunt, th
 | Spec | the blind review and the feasibility review both pass |
 | Charter | the human approves the charter: the one approval a Sweep needs |
 | Hunt | every finding is sorted into Fix, Park or Drop and the fixes are queued as waves; or nothing is left to fix, and the sweep finishes as the charter's stop line says |
-| Plan | plan.md is written, tasks are recorded and you are in the run's worktree |
+| Plan | plan.md is written, tasks are recorded and the run's worktree is made |
 | Build | every task is done, parked or dropped and the run branch works |
 | Review | a review round leaves nothing you decide to change |
 | Ship | the draft pull request is open |
@@ -150,7 +150,7 @@ Several asks are numbered, oldest first, and the human answers by number in plai
 
 ## What the human can say at any time
 
-- Pause ("hold on", "stop for now"): let running agents finish, `lcw pause human`, and wait. A paused sweep opens no pull request. Resume ("carry on"): `lcw resume`, `lcw status`, carry on.
+- Pause ("hold on", "stop for now"): let running agents finish, `lcw pause human`, and wait. A paused sweep opens no pull request and merges none: a `lcw merge --wait` still in the background ends by itself, merging nothing, once the run is paused or stopped. Resume ("carry on"): `lcw resume`, `lcw status`, carry on.
 - Stop the run for good: launch nothing more, let running agents finish, `lcw stop`, and say where the records are (for a sweep, parked.md too). A sweep whose pull request choice is one at the end first opens that pull request for what has landed, only if `lcw/<name>` has commits beyond the default branch: push `lcw/<name>`, open it as a draft against the default branch as Ship does, then `lcw stop --pr <url>`.
 - Change the usage mark ("run up to 80%", "until the limit, 100%"): `lcw mark <percent>`; if the run was paused at the mark, then `lcw resume` and carry on. On pay-per-token billing the same words work, and a figure in dollars ("run up to $5,500") is `lcw mark 5500usd`. Say what `lcw` prints back.
 - Change the weekly cap on pay-per-token billing ("my weekly cap is now $5,000"): `lcw cap 5000`. The session's mark moves with it, unless it was set in dollars. Then `lcw resume` if the run was paused at the mark.

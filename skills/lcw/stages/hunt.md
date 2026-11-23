@@ -16,7 +16,7 @@ Probes read the code where the sweep stands: the `latest work` path `lcw status`
 
 Split the round into parts: for a list such as a backlog, about eight items to a part; for an open hunt, one part for each area and angle (an area of the backend, hunted for wrong totals, say). One probe hunts each part. Pick its model by what a miss would cost: Haiku, low, to check a list's items; Sonnet, medium, for an open hunt; Opus, high, where a miss is costly or hard to see, such as security, money or data that could be lost.
 
-Brief each probe with the charter's goals, non-goals, anti-goals, no-go zones and proof line, its part (the area and its files, and its items or its angle), and what to report. For each problem it finds, a recipe: where it is, what input or situation shows it, what goes wrong, and who it hurts. For a backlog item, whether it is still true. If it finds nothing, it says so. Its description on the status bar names its part: "Hunt Billing, items 1 to 8: still true? what would fix each?".
+Brief each probe with the charter's goals, non-goals, anti-goals, no-go zones and proof line, its part (the area and its files, and its items or its angle), and what to report. For each problem it finds, a recipe: where it is, what input or situation shows it, what goes wrong, who it hurts, and where else in its part it saw the same mistake. For a backlog item, whether it is still true. If it finds nothing, it says so. Its description on the status bar names its part: "Hunt Billing, items 1 to 8: still true? what would fix each?".
 
 List the round's parts in findings.md, then launch the probes in batches of up to about ten, and the next as each finishes. Keep the bar current, counting parts:
 
@@ -24,13 +24,13 @@ List the round's parts in findings.md, then launch the probes in batches of up t
 lcw hunt --areas 36 --hunted 14 --running 6 --findings 23
 ```
 
-Write each report into findings.md under its part as it arrives, so after a compaction you can see which parts have reported. A report with no recipe is not a finding: ask the probe for what is missing, and if it cannot say, leave it out. A finding already parked or dropped in an earlier round is not sorted again; one written in during a wave (what a partly fixed fix left, or a concern its review sent on because the wave had not changed it) is sorted with this round's, and so is each question answered and not yet used (`lcw question`), as plan.md's step 3 says.
+Write each report into findings.md under its part as it arrives, so after a compaction you can see which parts have reported. A report with no recipe is not a finding: ask the probe for what is missing, and if it cannot say, leave it out. A finding already parked or dropped in an earlier round is not sorted again; one written in during a wave (what a partly fixed fix left, or a concern its review sent on because the wave had not changed it) is sorted with this round's, and so is each question answered and not yet used (`lcw question`), as plan.md's step 4 says.
 
 ## Sorting
 
 When every part has reported, and in round 1 the baseline the charter launched too (charter.md, "Baseline"), sort each finding against the charter, and write the sort and its reason beside it in findings.md.
 
-A check the baseline found failing is handled as the charter's PRs line says. Where the charter says to fix it, it is a finding like any other, its recipe taken from the baseline's report, and sorted to Fix, so it lands in the first wave. Where the charter says to wait for the human, `lcw ask` them now: only the merges wait on the answer, and the waves carry on. Give each finding an id that is new in this sweep (F1, F2, and on across rounds); a fix keeps its id when its wave's Plan records it.
+A check the baseline found failing is handled as the charter's PRs line says. Where the charter says to fix it, it is a finding like any other, its recipe taken from the baseline's report, and sorted to Fix, so it lands in the first wave. Where the charter says to wait for the human, `lcw ask` them now: only the merges wait on the answer, and the waves carry on. The same mistake in several places is one finding, with every place in its recipe. Give each finding an id that is new in this sweep (F1, F2, and on across rounds); a fix keeps its id when its wave's Plan records it.
 
 - **Fix**: it goes into a wave.
 - **Park**: a decision only the human can make (the finding names a problem but not what should happen instead, and the charter does not settle it), or what the charter's park line says to park. A fix that would need a no-go zone, or a kind of change the charter does not allow, is parked, not built. Say why.
