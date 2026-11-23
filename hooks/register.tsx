@@ -1149,7 +1149,7 @@ export const register: Register = (on) => {
       let drawn = shown && !e.props.hasSurvey ? bannerRows(shown, cols, !!run) : []
       let banner = drawn
       if ((!run && !banner.length) || e.props.hasSurvey) {
-        S.holdsCard = false
+        S.holdsCard = !!run
         if (S.hideRows) { S.hideRows = false; S.dirty = true }
         return next(e)
       }
@@ -1203,8 +1203,9 @@ export const register: Register = (on) => {
       const rows: Row[] = banner.length && below.length ? [...banner, [{ t: ' ' }], ...below] : [...banner, ...below]
       const hide = !S.collapsed && rows.some((row) => row.some((s) => /^(view|toggle):/.test(s.id ?? '')))
       if (hide !== S.hideRows) { S.hideRows = hide; S.dirty = true }
-      S.holdsCard = !!run && card.length > 0
-      if (S.holdsCard && run && (now - S.alive.at >= 5000 || S.alive.runDir !== run.runDir)) void writeAlive($, run, now).catch(() => {})
+      // Claimed even when the approval or question box leaves the card no room: else the status line draws it.
+      S.holdsCard = !!run
+      if (run && (now - S.alive.at >= 5000 || S.alive.runDir !== run.runDir)) void writeAlive($, run, now).catch(() => {})
 
       const press = async (id: string) => {
         if (id.startsWith('banner:')) return void (await pressBanner($, id, banner.length ? shown : null).catch(() => {}))

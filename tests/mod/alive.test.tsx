@@ -78,7 +78,7 @@ test('a session bound to a second run gives that run a mod-alive on the next dra
   await band.unmount()
 })
 
-test('a card the approval box takes all the room from is not drawn, so mod-alive is let go stale', async ($, on) => {
+test('while the approval box takes all the room from the card, mod-alive stays fresh', async ($, on) => {
   const w = engine(on)
   const approval = { go: ['Go'], meaning: 'build it', at: NOW - 1000 }
   w.files[A + '/state.json'] = JSON.stringify({ ...JSON.parse(state('a')), status: 'with-you', stage: 'Brainstorm', approval })
@@ -87,7 +87,7 @@ test('a card the approval box takes all the room from is not drawn, so mod-alive
   expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /in Brainstorm/ })).toBeUndefined()
   await w.advance(20000)
-  expect(w.age(A)).toBeGreaterThan(15000)
+  expect(w.age(A)).toBeLessThan(15000)
   await band.unmount()
 })
 
@@ -102,4 +102,15 @@ test('a run bound while the box is hidden gets no mod-alive until its card is dr
   const band = await $.ui.mount(BAND)
   expect(w.age(B)).toBeLessThan(1000)
   await band.unmount()
+})
+
+test('while a survey holds the band, the card is still claimed and mod-alive stays fresh', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await band.unmount()
+  const survey = await $.ui.mount(SURVEY)
+  await w.advance(20000)
+  expect(w.age(A)).toBeLessThan(15000)
+  await survey.unmount()
 })
