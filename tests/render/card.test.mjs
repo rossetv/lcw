@@ -1111,8 +1111,9 @@ test('a lane or heading that drops what it said ends in "…", and a row that fi
 test('a totals group that drops a part ends in "…", and one that fits whole has none', () => {
   const rows = (board, width, start) => strip(toAnsi(card(board, { width, frame: false }), 'dark', width)).split('\n').find(l => l.startsWith(start));
   const wave = '06-build-wave-2-fixes-in-parallel', long = '28-lanes-a-long-sweep';
+  // A shorter strip makes room for the first total and its "…" before a lone "…" stands for them all.
+  assert.match(rows(wave, 80, 'waves'), /▰▰▱ {2}1 done · 4 queued +27 fixed …$/);
   // Nothing of the totals fits: a "…" stands where they were.
-  assert.match(rows(wave, 80, 'waves'), /1 done · 4 queued +…$/);
   assert.match(rows(long, 80, 'waves'), /5 done · 2 queued +…$/);
   // Some of them fit: the "…" follows them, even where the counts end in one too.
   assert.match(rows(wave, 50, 'waves'), /4 queued … +27 fixed …$/);
