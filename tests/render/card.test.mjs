@@ -964,6 +964,16 @@ test('the requirements bar stays twenty cells when one failing of many rounds to
   assert.match(row, /^requirements ▰{20}  39 pass · 1 failing/);
 });
 
+test('a long model name is shortened so row 1 keeps to the width', () => {
+  const input = { ...inputsOf('Main').status, model: 'Sonnet 4.5 (1M context)', effort: 'medium' };
+  for (let width = 30; width <= 80; width++) {
+    const rows = renderStatusRows(input, { width });
+    rows.forEach((r, i) => assert.ok(rowCells(r) <= width, width + ', row ' + (i + 1) + ': ' + toPlain([r])));
+  }
+  assert.match(joined(renderStatusRows(input, { width: 44 })[0]), /^Sonnet 4\.5 \(… · medium {12} 38% of 1M$/);
+  assert.match(joined(renderStatusRows(input, { width: 80 })[0]), /^Sonnet 4\.5 \(1M context\) · medium/);
+});
+
 test('just after the weekly reset the week row gives no pace, until enough of the week has passed for it to mean something', () => {
   const right = (weekElapsedPercent, weekUsedPercent) => {
     const r = renderStatusRows({ ...inputsOf('Main').status, weekElapsedPercent, weekUsedPercent }, { width: 126 })[1];
