@@ -943,3 +943,19 @@ test('outside the lanes the waves row keeps its label and cells, and its counts 
   const none = { ...state, sweep: { ...state.sweep, waves: [] } };
   for (let w = 44; w <= 90; w++) assert.match(row(w, none), /^waves none queued yet( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?$/, w + ': ' + row(w, none));
 });
+
+test("an agent's effort stays whole and in its column, with no token figure or with a chip of an hour or more", () => {
+  const efforts = (i, width) => strip(toAnsi(renderCard(buildView(i), { width }), 'dark', width)).split('\n')
+    .filter(l => /^ *→/.test(l)).map(l => [l.indexOf(/(medium|low|high|xhigh)\b/.exec(l)?.[0]), /(medium|low|high|xhigh) /.exec(l)?.[1]]);
+  for (const width of [100, 120]) {
+    const noMod = efforts(inputsOf('NoMod'), width);
+    assert.ok(noMod.length && noMod.every(([at, e]) => e && at === noMod[0][0]), width + ': ' + JSON.stringify(noMod));
+    // The dash stands where the token figure would.
+    const row = strip(toAnsi(renderCard(buildView(inputsOf('NoMod')), { width }), 'dark', width)).split('\n').find(l => l.includes('—'));
+    assert.match(row, / {12}— {5}12m$/);
+    const i = inputsOf('RunningA');
+    i.agents = [...i.agents.slice(0, 2), { ...i.agents[0], id: 'old', effort: 'medium', startTime: NOW - 65 * 6e4, quietMs: 20 * 6e4 }];
+    const chip = efforts(i, width);
+    assert.ok(chip.length === 3 && chip.every(([at, e]) => e && at === chip[0][0]), width + ': ' + JSON.stringify(chip));
+  }
+});
