@@ -33,7 +33,7 @@ export interface StatusInput {
   /** Lines added and removed in the checkout; a column at the right edge when either is above 0. */
   diff?: { added: number; removed: number } | null;
 }
-export interface RenderOpts { /** The clock, epoch ms; the failing spend command's age is counted to it. Defaults to the time now. */ now?: number; width?: number; theme?: ThemeName; frame?: boolean; tick?: number; maxRows?: number; /** Leave out the card's "say run up to ..." hint while a banner offers the same choice. */ hideMarkHint?: boolean }
+export interface RenderOpts { /** The clock, epoch ms; the failing spend command's age is counted to it. Defaults to the time now. */ now?: number; width?: number; theme?: ThemeName; frame?: boolean; tick?: number; /** Seconds: the card's slow pulse, used when there is no tick. */ beat?: number; maxRows?: number; /** Leave out the card's "say run up to ..." hint while a banner offers the same choice. */ hideMarkHint?: boolean }
 
 /** Two rows: model and context; then the week gauge, with the used figure on its left, the usage mark as a line inside it and the mark's figure on its right. The gauge and its two figures are as wide as the model, effort and context group above. A third row, "resets in", when width is below 44. With a diff, added over removed in a column at the right edge, one space after a thin rule, which gives way before the repo and branch are shortened. */
 export function renderStatusRows(input?: StatusInput, opts?: RenderOpts): Row[];
