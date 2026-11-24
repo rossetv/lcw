@@ -149,12 +149,18 @@ test('with the launcher missing, the command prints the approved line and says s
   assert.match(logLines(s)[0], /bin\/statusline\.mjs is missing/)
 })
 
-test('a log that cannot be written changes nothing on screen', () => {
+test('a log that cannot be written changes nothing on screen, and puts nothing on stderr', () => {
   const s = scratch()
-  fs.mkdirSync(`${s.home}/statusline.log`)
-  assert.equal(tick(s), BROKEN)
   fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'syntax error here\n'))
-  assert.equal(launch(s), BROKEN)
+  fs.chmodSync(s.home, 0o500)
+  try {
+    for (const shell of ['/bin/sh', '/bin/bash', '/bin/zsh', '/bin/dash'].filter((x) => fs.existsSync(x))) {
+      const r = spawnSync(shell, ['-c', `. '${s.home}/bin/statusline.sh'`], { input: INPUT, encoding: 'utf8', env: env(s, { PATH: `${s.t}/fake`, LCW_FAKE_DATE: `${S}+0000` }) })
+      assert.deepEqual([r.status, r.stdout, r.stderr], [0, BROKEN, ''], shell)
+    }
+    assert.equal(launch(s), BROKEN)
+  } finally { fs.chmodSync(s.home, 0o700) }
+  assert.deepEqual(logLines(s), [])
 })
 
 test('the log is cut to its newest half once it passes 64 KB', () => {
