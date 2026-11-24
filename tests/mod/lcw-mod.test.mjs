@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  addTotals, addUsage, agentTokens, buttons, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
+  addTotals, addUsage, agentTokens, buttons, cardMotion, cardPace, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
   longNudges, quietCounts, replacesGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt,
   measureStep, retryGate, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
@@ -12,6 +12,32 @@ import { inputsOf } from '../render/boards.mjs'
 
 const MIN = 60 * 1000
 const NOW = Date.parse('2026-11-18T12:00:00Z')
+
+test('the card steps five times a second while work is in flight, once while it waits on the person, never when paused or finished', () => {
+  assert.equal(cardPace('running', true), 200)
+  assert.equal(cardPace('with-you', true), 200)
+  assert.equal(cardPace('running', false), 1000)
+  assert.equal(cardPace('with-you', false), 1000)
+  for (const working of [true, false]) {
+    assert.equal(cardPace('paused', working), 0)
+    assert.equal(cardPace('finished', working), 0)
+  }
+})
+
+test('at five steps a second a fade lasts as long as at ten: the step is read from the clock, in 100 ms units', () => {
+  const since = NOW - 37
+  const frame = tick => renderCard(buildView(inputsOf('NeedsYou')), { width: 100, frame: true, tick })[0][0].c
+  // Drawn anywhere within a step, the tick is the clock's count of 100 ms at the step's start, as at ten steps a second.
+  for (let ms = 0; ms <= 2800; ms += 200) assert.equal(cardMotion(200, since, since + ms + 150).tick, ms / 100)
+  // The needs-you frame fades out and back in 2.8 seconds, as today.
+  assert.equal(frame(cardMotion(200, since, since + 2800).tick), frame(cardMotion(200, since, since).tick))
+  assert.notEqual(frame(cardMotion(200, since, since + 1400).tick), frame(cardMotion(200, since, since).tick))
+})
+
+test('at one step a second the beat counts whole seconds from the clock', () => {
+  const since = NOW - 950
+  assert.deepEqual([0, 999, 1000, 4999, 5000].map(ms => cardMotion(1000, since, since + ms).beat), [0, 0, 1, 4, 5])
+})
 
 test('a run is shown until ten minutes after it finished; a stopped run never', () => {
   assert.equal(isShown(null, NOW), false)

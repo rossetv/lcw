@@ -14,7 +14,7 @@ import { mergeUsage } from '../lib/usage.mjs'
 import { activeQuota, CLAIM_MS, evaluateQuota, quotaOff, REFRESH_MS } from '../lib/quota.mjs'
 import type { QuotaView } from '../lib/quota.mjs'
 import {
-  addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, completionPrompt, countsTurn, compactInstructions, gateFor, isAnimating, isShown, layout, measureStep,
+  addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, completionPrompt, countsTurn, compactInstructions, cardMotion, cardPace, gateFor, isShown, layout, measureStep,
   longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
   wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity,
 } from './lcw-mod.mjs'
@@ -69,6 +69,10 @@ const S = {
   alive: { runDir: '', at: 0 },
   shownSince: 0,
   dirty: false,
+  // What the card last showed (its view, as text, and its mode), and the step of its motion last drawn ('' still).
+  shows: '',
+  mode: '',
+  step: '',
   wokeFor: null as string | number | null,
   quotaWaking: false,
   quotaRetry: { key: '', at: 0 },
@@ -423,6 +427,25 @@ async function recoverQuota($: EngineInterface, run: Run, now: number) {
   } catch { S.quotaWaking = false }
 }
 
+function cardView(run: Run, now: number) {
+  // The mod's totals are newer than the run's copy: the turn that ran lcw finish is counted after it.
+  const state = Number.isFinite(S.totals.tokens) ? { ...run.state, totals: { ...run.state.totals, agents: S.totals.agents, tokens: S.totals.tokens } } : run.state
+  return buildView({ state, agents: S.agents, usage: run.usage, gate: run.gate, money: run.money, quota: run.quota, now, ui: S.ui })
+}
+
+const working = () => S.turnRunning || S.agents.length > 0
+
+// The step of the card's motion at now, '' while it holds still.
+const stepAt = (pace: number, now: number) => (pace ? pace + ':' + cardMotion(pace, S.shownSince, now).step : '')
+
+// The card is redrawn when what it shows has changed: what was read, and the times it gives, which move with the clock.
+function noteCard(now: number) {
+  const view = S.run ? cardView(S.run, now) : null
+  const shows = JSON.stringify(view)
+  S.mode = view?.mode ?? ''
+  if (shows !== S.shows) { S.shows = shows; S.dirty = true }
+}
+
 async function refresh($: EngineInterface) {
   const now = await $.clock.now()
   const own = await readSession($, await $.session.id())
@@ -443,7 +466,7 @@ async function refresh($: EngineInterface) {
   }
   S.run = run
   S.refreshed = true
-  S.dirty = true
+  noteCard(now)
   if (!run) {
     S.agents = []
     S.seen = {}
@@ -473,7 +496,7 @@ async function pollAgents($: EngineInterface) {
   const tracked = trackAgents(list, S.seen, now)
   S.agents = tracked.agents
   S.seen = tracked.seen
-  S.dirty = true
+  noteCard(now)
   // The mascot beside the status rows shows trouble with agents. It cannot ask the mod, so the count of quiet
   // and stalled agents is left in the run's folder, written when it changes.
   const quiet = quietCounts(S.agents)
@@ -953,7 +976,8 @@ function writeAlive($: EngineInterface, run: Run, now: number) {
 async function heartbeat($: EngineInterface) {
   if (!S.run) return
   const now = await $.clock.now()
-  S.theme = themeFrom(await $.config.list())
+  const theme = themeFrom(await $.config.list())
+  if (theme !== S.theme) { S.theme = theme; S.dirty = true }
   // Only for the run whose card was drawn: one bound since is not drawn until the box comes back.
   if (S.holdsCard && S.alive.runDir === S.run.runDir) await writeAlive($, S.run, now)
 }
@@ -995,12 +1019,15 @@ async function start($: EngineInterface) {
   $.clock.every(2000, quietly(() => readBanner($)))
   $.clock.every(2000, quietly(() => slowFacts($)))
   $.clock.every(1000, quietly(() => carryOn($)))
-  // The one place that redraws: ten times a second while the card moves, else when something changed.
-  $.clock.every(100, () => {
-    if (!S.dirty && !(S.run && !S.collapsed && isAnimating(S.run.state))) return
+  // The one place that redraws: when something changed, or the card's motion has come to its next step.
+  $.clock.every(100, () => void (async () => {
+    const pace = S.run && !S.collapsed ? cardPace(S.mode, working()) : 0
+    const step = pace ? stepAt(pace, await $.clock.now()) : ''
+    if (!S.dirty && step === S.step) return
     S.dirty = false
+    S.step = step
     $.ui.invalidate('ui.render')
-  })
+  })().catch(() => {}))
   S.theme = themeFrom(await $.config.list())
   S.devCheckout = !$.plugin.root.includes('/plugins/cache/')
   S.mac = await $.session.info().then((i) => i.platform === 'macos').catch(() => false)
@@ -1175,14 +1202,16 @@ export const register: Register = (on) => {
       const viewing = e.props.view.agentId
       let card: Row[] = []
       if (run) {
-        // The mod's totals are newer than the run's copy: the turn that ran lcw finish is counted after it.
-        const state = Number.isFinite(S.totals.tokens) ? { ...run.state, totals: { ...run.state.totals, agents: S.totals.agents, tokens: S.totals.tokens } } : run.state
-        const view = buildView({ state, agents: S.agents, usage: run.usage, gate: run.gate, money: run.money, quota: run.quota, now, ui: S.ui })
-        const tick = isAnimating(run.state) ? Math.floor((now - S.shownSince) / 100) : undefined
+        const view = cardView(run, now)
+        S.shows = JSON.stringify(view)
+        S.mode = view.mode
+        const pace = S.collapsed ? 0 : cardPace(view.mode, working())
+        S.step = stepAt(pace, now)
+        const { tick, beat } = pace ? cardMotion(pace, S.shownSince, now) : { tick: undefined, beat: undefined }
         // The mark box offers the raises and the answer box shows asks (an ask with options alone), so the card does not say them again,
         // unless the box waits for room.
         const draw = (maxRows: number, boxed: boolean) => {
-          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, hideMarkHint: boxed && shown?.kind === 'mark', asksInBox: boxed && shown?.kind === 'answer' ? (shown.askN === undefined ? view.asks.map((a: any) => a.n) : [shown.askN]) : undefined }
+          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, beat, hideMarkHint: boxed && shown?.kind === 'mark', asksInBox: boxed && shown?.kind === 'answer' ? (shown.askN === undefined ? view.asks.map((a: any) => a.n) : [shown.askN]) : undefined }
           return renderCard(view, opts)
         }
         const boxed = drawn.length > 0 && (shown?.kind === 'mark' || shown?.kind === 'answer')
