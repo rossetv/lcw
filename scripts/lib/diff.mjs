@@ -1,12 +1,13 @@
-// Lines added and removed in the checkout a session works in, for the status line's diff column.
+// What git says of the folder a session works in, for the status line: the lines added and removed for its diff
+// column, the branch and the main checkout that gives the repository's name.
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fnv1a32hex } from '../../lib/key.mjs'
-import { readJson, writeJson } from './store.mjs'
+import { readJson, writeJson, git, mainCheckout } from './store.mjs'
 
-// The status line runs every second; git runs at most once in this long for a checkout, whatever the sessions.
-const FRESH_MS = 5000
+// The status line runs every second; git runs at most once in this long for a folder, whatever the sessions.
+const FRESH_MS = 15000
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
 // It runs beside the person's own git commands, so it never takes the index lock to refresh the index.
@@ -51,16 +52,32 @@ function count(top) {
   return { added, removed }
 }
 
-/** {added, removed} for the checkout holding cwd, against the files as they are now; null outside git or when git fails. */
-export function diffOf(cwd, home, now = Date.now()) {
-  const top = tryRun(cwd, 'rev-parse', '--show-toplevel')
-  if (!top) return null
-  const file = `${home}/cache/diff-${fnv1a32hex(top)}.json`
-  const kept = readJson(file)
-  if (kept && now - kept.at >= 0 && now - kept.at < FRESH_MS) return kept.failed ? null : { added: kept.added, removed: kept.removed }
-  let found = null
-  try { found = count(top) } catch {}
-  // A failure is kept too, so a slow repository costs one try in each stretch and not one every second.
-  try { writeJson(file, found ? { at: now, top, ...found } : { at: now, top, failed: true }) } catch {}
-  return found
+const ask = {
+  diff: (cwd) => {
+    const top = tryRun(cwd, 'rev-parse', '--show-toplevel')
+    if (!top) return null
+    try { return count(top) } catch { return null }
+  },
+  main: (cwd) => mainCheckout(cwd),
+  branch: (cwd) => { try { return git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD') } catch { return null } },
 }
+
+/**
+ * The git figures of a folder that `want` names, each asked of git at most once in FRESH_MS and kept in a record of
+ * that folder alone: diff ({added, removed}, null outside git or when git fails), main (mainCheckout's answer) and
+ * branch (null outside git).
+ */
+export function gitOf(cwd, home, now, want) {
+  const file = `${home}/cache/git-${fnv1a32hex(cwd)}.json`
+  const kept = readJson(file)
+  const facts = kept?.cwd === cwd && now - kept.at >= 0 && now - kept.at < FRESH_MS ? kept : { cwd, at: now }
+  const missing = want.filter((k) => !Object.hasOwn(facts, k))
+  if (!missing.length) return facts
+  // A failure is kept too, so a slow repository costs one try in each stretch and not one every second.
+  for (const k of missing) facts[k] = ask[k](cwd)
+  try { writeJson(file, facts) } catch {}
+  return facts
+}
+
+/** {added, removed} for the checkout holding cwd, against the files as they are now; null outside git or when git fails. */
+export const diffOf = (cwd, home, now = Date.now()) => gitOf(cwd, home, now, ['diff']).diff

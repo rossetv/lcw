@@ -15,7 +15,8 @@ export const open = (runDir) => {
 export function bindSession(sessionId, runDir) {
   if (!sessionId) return
   const file = sessionFile(home(), sessionId)
-  writeJson(file, { ...(readJson(file) || {}), runDir }) // its usage mark lives in the same file
+  const session = readJson(file) || {}
+  if (session.runDir !== runDir) writeJson(file, { ...session, runDir }) // its usage mark lives in the same file
 }
 
 /** Forgets that a session drives this run, when its binding still names it. */

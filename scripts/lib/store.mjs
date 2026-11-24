@@ -4,8 +4,28 @@ import { execFileSync } from 'node:child_process'
 
 export const home = () => process.env.LCW_HOME || `${process.env.HOME}/.lcw`
 
+// While a process holds its reads, each file is read from disk once: later reads get the same text, or what this
+// process wrote or removed since. The text is kept, not the parsed value, so no caller can change another's copy.
+let held = null
+
+/** Holds reads (see above) until called with false. Only a short process that reads its records once may hold them. */
+export function holdReads(on = true) { held = on ? new Map() : null }
+
+/** Forgets what was held, so the next reads come from disk: for work under a lock, where what was read before it may be old. */
+export function forgetReads() { if (held) held = new Map() }
+
+/** A file's text, or null when it cannot be read. */
+export function readText(file) {
+  if (held?.has(file)) return held.get(file)
+  let text = null
+  try { text = fs.readFileSync(file, 'utf8') } catch {}
+  held?.set(file, text)
+  return text
+}
+
 export function readJson(file) {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')) } catch { return null }
+  const text = readText(file)
+  try { return text === null ? null : JSON.parse(text) } catch { return null }
 }
 
 export function writeAtomic(file, text) {
@@ -13,6 +33,13 @@ export function writeAtomic(file, text) {
   const tmp = `${file}.${process.pid}.tmp`
   fs.writeFileSync(tmp, text)
   fs.renameSync(tmp, file)
+  held?.set(file, String(text))
+}
+
+/** Removes a file if it is there. */
+export function removeFile(file) {
+  if (fs.existsSync(file)) fs.rmSync(file, { force: true })
+  held?.set(file, null)
 }
 
 export const writeJson = (file, value) => writeAtomic(file, JSON.stringify(value, null, 2) + '\n')

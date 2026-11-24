@@ -282,7 +282,7 @@ test('the diff counts a branch from where it left main, with uncommitted edits a
   assert.deepEqual(diffOf(repo, home, now), { added: 5, removed: 1 })
   fs.writeFileSync(repo + '/more.txt', '1\n')
   assert.deepEqual(diffOf(repo, home, now + 1000), { added: 5, removed: 1 }, 'kept for a few seconds')
-  assert.deepEqual(diffOf(repo, home, now + 6000), { added: 6, removed: 1 })
+  assert.deepEqual(diffOf(repo, home, now + 15000), { added: 6, removed: 1 })
   const onMain = makeRepo()
   fs.writeFileSync(onMain + '/a.txt', 'uno\n'); fs.writeFileSync(onMain + '/b.txt', 'b\n')
   assert.deepEqual(diffOf(onMain, home, now), { added: 2, removed: 1 })

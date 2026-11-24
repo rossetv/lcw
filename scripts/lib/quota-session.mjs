@@ -1,7 +1,6 @@
-import fs from 'node:fs'
 import { sessionFile, spendFile } from '../../lib/key.mjs'
 import { activeQuota, selectQuota, quotaOff, evaluateQuota, normalizeEndpoint } from '../../lib/quota.mjs'
-import { home, readJson, writeJson } from './store.mjs'
+import { home, readJson, writeJson, removeFile } from './store.mjs'
 import { readQuotaState, maybeRefreshQuota } from './quota-command.mjs'
 import { alive } from './awake.mjs'
 
@@ -64,7 +63,7 @@ export function noteQuotaSession(ids, { startup = false, endpoint = process.env.
     if (selection) next.quotaDefaultBilling = prior
     else delete next.quotaDefaultBilling
     if (JSON.stringify(next) !== JSON.stringify(session)) writeJson(sessionFile(home(), id), next)
-    if (selection) fs.rmSync(spendFile(home(), id), { force: true })
+    if (selection) removeFile(spendFile(home(), id))
   }
 }
 

@@ -5,7 +5,7 @@ import { usageFile, sessionFile } from '../../lib/key.mjs'
 import { gateExpired } from '../../lib/usage.mjs'
 import { thresholds } from '../../lib/theme.mjs'
 import { next0800 } from '../../lib/spend.mjs'
-import { home, readJson, writeJson } from './store.mjs'
+import { home, readJson, writeJson, removeFile, forgetReads } from './store.mjs'
 import { readMoney } from './money.mjs'
 import { readSessionQuota, sessionIdentity } from './quota-session.mjs'
 import { alive } from './awake.mjs'
@@ -58,25 +58,25 @@ export function setSessionMark(sessionId, mark) {
  * whether the run is at its mark. A dollar gate stays while the run is paused at the mark, even once the spend
  * is under it: the run waits for its 08:00 try, which the mod makes.
  */
-function updateDefaultGate(paths, state, usage, now, money, intent) {
-  if (intent === 'resume') { fs.rmSync(paths.gate, { force: true }); return false }
+function updateDefaultGate(paths, state, usage, now, money, intent, io) {
+  if (intent === 'resume') { io.remove(paths.gate); return false }
   const on = atMark(driverMark(state), usage, now, money)
   const previous = readJson(paths.gate)
   if (previous?.unit === 'quota' && !on && !intent) return false
-  if (previous?.unit === 'quota' || (previous?.unit === 'usd' && !money && on)) fs.rmSync(paths.gate, { force: true })
-  if (intent === 'mark' && (gateExpired(readJson(paths.gate), now) || (money && !atMark(null, null, now, money)))) fs.rmSync(paths.gate, { force: true })
+  if (previous?.unit === 'quota' || (previous?.unit === 'usd' && !money && on)) io.remove(paths.gate)
+  if (intent === 'mark' && (gateExpired(readJson(paths.gate), now) || (money && !atMark(null, null, now, money)))) io.remove(paths.gate)
   if (on && state.status === 'paused' && state.pausedReason === 'human') return on // the human paused it, so no gate: resume evaluates the mark again
   const has = fs.existsSync(paths.gate)
   if (has && gateExpired(readJson(paths.gate), now)) return false // the mod wakes the session; only resume and mark remove it
   const repair = !money && previous && !previous.unit && !Number.isFinite(Date.parse(previous.resetsAt ?? '')) && Date.parse(usage?.sevenDay?.resetsAt ?? '') > now
   if (on && !has && money) {
-    writeJson(paths.gate, { reason: 'mark', unit: 'usd', markUsd: money.markUsd, usedUsd: money.spentUsd, retryAt: next0800(now), retried: false, at: now })
+    io.write(paths.gate, { reason: 'mark', unit: 'usd', markUsd: money.markUsd, usedUsd: money.spentUsd, retryAt: next0800(now), retried: false, at: now })
   } else if (on && (!has || repair)) {
     const w = usage.sevenDay
-    writeJson(paths.gate, { reason: 'mark', markPercent: driverMark(state), usedPercent: w.percentUsed, resetsAt: w.resetsAt ?? null, at: now })
+    io.write(paths.gate, { reason: 'mark', markPercent: driverMark(state), usedPercent: w.percentUsed, resetsAt: w.resetsAt ?? null, at: now })
   }
   const waits = money && state.status === 'paused' && state.pausedReason === 'mark' && readJson(paths.gate)?.unit === 'usd'
-  if (!on && has && !waits) fs.rmSync(paths.gate, { force: true })
+  if (!on && has && !waits) io.remove(paths.gate)
   return on
 }
 
@@ -115,6 +115,7 @@ function withGateLock(paths, fn, fallback = true) {
       reapGateLock(lock)
       fs.renameSync(prepared, lock)
     }
+    forgetReads()
     try { return fn() } finally { fs.renameSync(lock, prepared) }
   } catch { return fallback }
   finally {
@@ -125,21 +126,23 @@ function withGateLock(paths, fn, fallback = true) {
 
 const quotaEvidence = (quota) => ({ sourceId: quota.sourceId, revision: quota.revision, requestId: quota.requestId ?? null, accountKey: quota.accountKey ?? null, resetsAt: quota.resetsAt ?? null, observedAt: quota.observedAt ?? null })
 
-function updateGate(paths, state, usage, now, money, intent) {
+const live = { write: writeJson, remove: removeFile }
+
+function updateGate(paths, state, usage, now, money, intent, io = live) {
   const quota = readSessionQuota(state.driver, now, driverMark(state))
   const currentMoney = state.driver ? readMoney({ sessionId: state.driver, now, state }) : money
   if (!intent && (['finished', 'stopped'].includes(state.status) || (state.status === 'paused' && state.pausedReason === 'human'))) return quota?.hold ?? atMark(driverMark(state), readUsage() ?? usage, now, currentMoney)
-  if (!quota) return updateDefaultGate(paths, state, readUsage() ?? usage, now, currentMoney, intent)
+  if (!quota) return updateDefaultGate(paths, state, readUsage() ?? usage, now, currentMoney, intent, io)
   if (state.status === 'paused' && state.pausedReason === 'human') return quota.hold
-  if (intent === 'resume' && !quota.hold) { fs.rmSync(paths.gate, { force: true }); return false }
+  if (intent === 'resume' && !quota.hold) { io.remove(paths.gate); return false }
   const previous = readJson(paths.gate)
   const evidence = quotaEvidence(quota)
   if (quota.hold) {
     const gate = { reason: 'mark', unit: 'quota', ...evidence, status: quota.status, blocked: !!quota.blocked, code: quota.code ?? null, markPercent: driverMark(state), usedPercent: quota.percentUsed ?? null }
     const { at, holdId, recoveredBy, ...old } = previous ?? {}
-    if (recoveredBy || !isDeepStrictEqual(old, gate)) writeJson(paths.gate, { ...gate, holdId: randomUUID(), at: now })
+    if (recoveredBy || !isDeepStrictEqual(old, gate)) io.write(paths.gate, { ...gate, holdId: randomUUID(), at: now })
   } else if (previous?.unit === 'quota' && !isDeepStrictEqual(previous.recoveredBy, evidence)) {
-    writeJson(paths.gate, { ...previous, recoveredBy: evidence })
+    io.write(paths.gate, { ...previous, recoveredBy: evidence })
   }
   return quota.hold
 }
@@ -147,6 +150,18 @@ function updateGate(paths, state, usage, now, money, intent) {
 export function applyGate(paths, state, usage, now = Date.now(), money = null, intent = null) {
   // Source and state are re-read only after acquisition; a display's older snapshot cannot retire a newer hold.
   return withGateLock(paths, () => updateGate(paths, readJson(paths.state) ?? state, usage, now, money, intent))
+}
+
+const CHANGES = Symbol('the gate would change')
+const judging = { write: () => { throw CHANGES }, remove: (file) => { if (fs.existsSync(file)) throw CHANGES } }
+
+/**
+ * applyGate for a display that redraws every second: the gate is judged from what was already read, and the lock is
+ * taken, and the gate applied afresh under it, only when the gate has to change.
+ */
+export function settleGate(paths, state, usage, now, money) {
+  try { updateGate(paths, readJson(paths.state) ?? state, usage, now, money, null, judging); return } catch (e) { if (e !== CHANGES) throw e }
+  applyGate(paths, state, usage, now, money)
 }
 
 export function reconcileGate(paths, expected, action, now, expectedQuota) {
