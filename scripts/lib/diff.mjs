@@ -91,6 +91,3 @@ export function gitOf(cwd, home, now, want) {
   if (!outside) try { writeJson(file, facts) } catch {}
   return facts
 }
-
-/** {added, removed} for the checkout holding cwd, against the files as they are now; null outside git or when git fails. */
-export const diffOf = (cwd, home, now = Date.now()) => gitOf(cwd, home, now, ['diff']).diff

@@ -6,7 +6,10 @@ import { tmp, lcw, readJson, makeRepo, git } from '../core/helpers.mjs'
 import { mapInput } from '../../scripts/statusline.mjs'
 import { renderStatusRows } from '../../lib/status.mjs'
 import { toAnsi } from '../../lib/paint.mjs'
-import { diffOf, gitOf } from '../../scripts/lib/diff.mjs'
+import { gitOf } from '../../scripts/lib/diff.mjs'
+
+// The lines added and removed, as the status line asks git for them.
+const diffOf = (cwd, home, now) => gitOf(cwd, home, now, ['diff']).diff
 
 const ROOT = new URL('../..', import.meta.url).pathname
 const LINE = ROOT + 'scripts/statusline.mjs'
