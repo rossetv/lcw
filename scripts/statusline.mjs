@@ -328,11 +328,14 @@ export async function main({ margin = 5, input } = {}) {
 const FRAMES = 16
 const SESSION = /^[A-Za-z0-9_-]{1,128}$/
 // The fields of the input that change while the rows stay the same: how long the session has run, its token
-// and prompt-cache counts, and on a subscription its cost. Everything else is compared. The first ones always hold
-// a plain number, and an input where one does not gets no frames; the others are passed over only when they do.
+// and prompt-cache counts, the lines it changed (the rows count them with git), the five-hour limit, and on a
+// subscription its cost. Everything else is compared. The first ones always hold a plain number, and an input where
+// one does not gets no frames; the others are passed over only when they do. A name is a field's name, or the text
+// that stands before the value where the name alone would also find a figure the rows show.
 const IGNORED = ['total_duration_ms', 'total_api_duration_ms', 'total_input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens']
-const ALSO_IGNORED = ['total_output_tokens', 'input_tokens', 'output_tokens', 'expires_at', 'requests', 'misses', 'expected_rebuilds',
-  'hit_ratio', 'cache_write_tokens', 'miss_recache_tokens', 'last_miss_at', 'recache_tokens_if_cold']
+const ALSO_IGNORED = ['total_output_tokens', 'input_tokens', 'output_tokens', 'total_lines_added', 'total_lines_removed', 'warm',
+  'expires_at', 'requests', 'misses', 'expected_rebuilds', 'hit_ratio', 'cache_write_tokens', 'miss_recache_tokens', 'last_miss_at',
+  'recache_tokens_if_cold', '"five_hour":{"used_percentage":']
 const VALUE = /^[0-9A-Za-z.+-]+/
 
 /** The session id as the player finds it, the text after the first "session_id":", when it is safe for a folder's name. */
@@ -353,7 +356,7 @@ function zoneOf(t) {
 function piecesOf(text, strict, lenient) {
   const spans = []
   for (const name of [...strict, ...lenient]) {
-    const key = `"${name}":`
+    const key = name.startsWith('"') ? name : `"${name}":`
     const at = text.indexOf(key)
     if (at < 0) continue
     const value = VALUE.exec(text.slice(at + key.length, at + key.length + 64))?.[0]

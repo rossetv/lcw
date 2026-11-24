@@ -27,12 +27,21 @@ function scratch(name = 'lcw') {
 const log = (s) => (fs.existsSync(`${s.t}/node.log`) ? fs.readFileSync(`${s.t}/node.log`, 'utf8').split('\n').filter(Boolean) : [])
 const starts = (s) => log(s).length
 
-const inputOf = (s, extra = {}) => ({
-  session_id: 's1', transcript_path: `${s.t}/s1.jsonl`, cwd: s.repo, model: { display_name: 'Opus 5' },
-  cost: { total_cost_usd: 0.5, total_duration_ms: 1000, total_api_duration_ms: 500 },
-  context_window: { total_input_tokens: 100, total_output_tokens: 10, context_window_size: 1000000, current_usage: { input_tokens: 2, output_tokens: 10, cache_creation_input_tokens: 30, cache_read_input_tokens: 68 }, used_percentage: 42 },
-  prompt_cache: { expires_at: S + 3600, requests: 3, misses: 0, hit_ratio: 0.87, cache_write_tokens: 10, last_miss_at: null },
-  rate_limits: { seven_day: { used_percentage: 31, resets_at: S + 3 * 86400 } }, ...extra,
+/**
+ * An input shaped as Claude Code's, field for field. `i` moves every figure that changes while the rows stay as they
+ * are: how long the session has run, its token and prompt-cache counts, its cost, its lines added and removed and
+ * the five-hour limit.
+ */
+const inputOf = (s, extra = {}, i = 0) => ({
+  session_id: 's1', transcript_path: `${s.t}/s1.jsonl`, cwd: s.repo, scratchpad_dir: `${s.t}/scratch`, prompt_id: 'p-1',
+  effort: { level: 'high' }, session_name: 'Demo', model: { id: 'claude-opus-5', display_name: 'Opus 5' },
+  workspace: { current_dir: s.repo, project_dir: s.repo, added_dirs: [], git_worktree: 'w' }, version: '2.1.326', output_style: { name: 'default' },
+  cost: { total_cost_usd: 0.5 + i, total_duration_ms: 1000 + i * 977, total_api_duration_ms: 500 + i, total_lines_added: 3 * i, total_lines_removed: i },
+  context_window: { total_input_tokens: 100 + i, total_output_tokens: 10 + i, context_window_size: 1000000, current_usage: { input_tokens: 2 + i, output_tokens: 10 + i, cache_creation_input_tokens: 30 + i, cache_read_input_tokens: 68 + 2 * i }, used_percentage: 42, remaining_percentage: 58 },
+  exceeds_200k_tokens: false,
+  prompt_cache: { warm: i % 2 === 0, caching_observed: true, ttl: '1h', expires_at: S + 3600 + i, requests: 3 + i, misses: i, expected_rebuilds: i, hit_ratio: 0.87 - i / 100, cache_write_tokens: 10 + i, miss_recache_tokens: i, last_miss_at: i ? S + i : null, last_miss_cause: null, miss_causes: {}, recache_tokens_if_cold: 100 + i },
+  fast_mode: false, thinking: { enabled: true },
+  rate_limits: { five_hour: { used_percentage: 24 + i, resets_at: S + 3600 }, seven_day: { used_percentage: 31, resets_at: S + 3 * 86400 } }, ...extra,
 })
 
 const quoted = (p) => `'${p.replaceAll("'", "'\\''")}'`
@@ -75,16 +84,11 @@ describe('when Node starts', { concurrency: true }, () => {
   test('the heartbeat, the session\'s age and a subscription\'s cost and cache figures start no Node', () => {
     const s = scratch()
     assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }).code, 0)
-    fs.writeFileSync(`${runDir(s)}/mod-alive`, String(S * 1000 - 1000))
+    fs.writeFileSync(`${runDir(s)}/mod-alive`, String(S * 1000 - 1437))
     settle(s, inputOf(s))
     for (let i = 0; i < 15; i++) {
-      if (i % 5 === 0) fs.writeFileSync(`${runDir(s)}/mod-alive`, String((S + i) * 1000))
-      const n = 1000 + i
-      tick(s, inputOf(s, {
-        cost: { total_cost_usd: 0.5 + i, total_duration_ms: 1000 + i * 977, total_api_duration_ms: 500 + i },
-        context_window: { total_input_tokens: 100 + n, total_output_tokens: n, context_window_size: 1000000, current_usage: { input_tokens: i, output_tokens: n, cache_creation_input_tokens: n, cache_read_input_tokens: 2 * n }, used_percentage: 42 },
-        prompt_cache: { expires_at: S + 3600 + i, requests: 3 + i, misses: i, hit_ratio: 0.5 + i / 100, cache_write_tokens: n, last_miss_at: S + i },
-      }), S + i)
+      if (i % 5 === 0) fs.writeFileSync(`${runDir(s)}/mod-alive`, String((S + i) * 1000 + 437))
+      tick(s, inputOf(s, {}, i), S + i)
     }
     assert.equal(starts(s), 1)
   })
@@ -117,8 +121,11 @@ describe('when Node starts', { concurrency: true }, () => {
     'an outside quota is set up': (s) => fs.writeFileSync(`${s.home}/quota-command.json`, JSON.stringify({ v: 1, enabled: true })),
     'the session starts a run': (s) => lcw(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }),
     'the model changes': () => ({ model: { display_name: 'Sonnet 5' } }),
-    'the context grows': () => ({ context_window: { used_percentage: 43, context_window_size: 1000000 } }),
-    'the week\'s figure moves': () => ({ rate_limits: { seven_day: { used_percentage: 32, resets_at: S + 3 * 86400 } } }),
+    // one figure each, in an input that is otherwise the same: beside used_percentage fields the rows do not show
+    'the context grows': (s) => ({ context_window: { ...inputOf(s).context_window, used_percentage: 43 } }),
+    'the effort changes': () => ({ effort: { level: 'low' } }),
+    'the context window changes': (s) => ({ context_window: { ...inputOf(s).context_window, context_window_size: 200000 } }),
+    'the week\'s figure moves': (s) => ({ rate_limits: { ...inputOf(s).rate_limits, seven_day: { used_percentage: 32, resets_at: S + 3 * 86400 } } }),
     'the input gains text after its end': () => ({ after: '\n\n' }),
     'the window is resized': () => ({ env: { COLUMNS: '100' } }),
     'the theme changes': () => ({ env: { LCW_THEME: 'light' } }),
@@ -133,7 +140,7 @@ describe('when Node starts', { concurrency: true }, () => {
       tick(s, inputOf(s), S); tick(s, inputOf(s), S + 1)
       assert.equal(starts(s), 1)
       const { env, zone, after = '', ...input } = change(s) ?? {}
-      tick(s, JSON.stringify(inputOf(s, input.model || input.context_window || input.rate_limits ? input : {})) + after, S + 2, { env, zone })
+      tick(s, JSON.stringify(inputOf(s, input.model || input.context_window || input.rate_limits || input.effort ? input : {})) + after, S + 2, { env, zone })
       assert.equal(starts(s), 2)
     })
   }
