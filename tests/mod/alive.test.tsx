@@ -28,7 +28,6 @@ function engine(on: any) {
   })
   on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
   on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
-  on('fs.list', () => ({ value: [] }))
   on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '' } }))
   on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
   on('agent.list', () => ({ value: [] }))

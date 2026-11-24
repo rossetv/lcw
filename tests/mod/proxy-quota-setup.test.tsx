@@ -15,6 +15,7 @@ const BAND = {
 const start = ($: any) => $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
 const initial = () => ({ '/lcw/sessions/s1.json': JSON.stringify({ billing: 'payg', markUsd: 75 }), '/lcw/cap.json': '{"usd":100}' })
 
+// With no run the mod looks at its files, and at the address, every five seconds: each step below waits for one look.
 function engine(on: any, files: Record<string, string> = initial()) {
   const clock = mock.clock(on, { now: NOW })
   const control = { endpoint: ENDPOINT as string | undefined, id: 's1', draft: '', fill: 'ok', writeFails: false, beforeDraft: undefined as undefined | (() => Promise<void>), beforeFile: undefined as undefined | (() => Promise<void>) }
@@ -41,7 +42,10 @@ function engine(on: any, files: Record<string, string> = initial()) {
     files[e.path] = e.text
     return { value: undefined }
   })
-  on('fs.list', (_: any, e: any) => ({ value: e.path === '/lcw/spend' ? Object.keys(files).filter((p) => p.startsWith('/lcw/spend/')).map((p) => ({ name: p.split('/').pop(), kind: 'file', mtimeMs: NOW, size: 10, isLink: false })) : [] }))
+  on('fs.list', (_: any, e: any) => {
+    if (e.path !== '/lcw/spend') throw new Error('only the spend folder is listed here')
+    return { value: Object.keys(files).filter((p) => p.startsWith('/lcw/spend/')).map((p) => ({ name: p.split('/').pop(), kind: 'file', mtimeMs: NOW, size: files[p]!.length, isLink: false })) }
+  })
   on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
   on('process.run', (_: any, e: any) => {
     runs.push(e.argv)
@@ -103,21 +107,21 @@ for (const choice of ['setup', 'keep', 'dismiss']) {
     expect(JSON.stringify(withoutChoice)).toBe(before)
     expect(w.runs.filter((a) => a[1]?.split('/').pop()?.startsWith('quota') || a.slice(2).some((v) => /^(quota-command|billing|mark|resume)$/.test(v)))).toEqual([])
     expect(w.reads.filter((p) => /(?:^|\/)(?:\.credentials\.json|auth\.json|settings(?:\.local)?\.json)$/.test(p))).toEqual([])
-    await w.clock.advance(2000)
+    await w.clock.advance(5000)
     expect(await band.find({ type: 'Text', text: TITLE })).toBeUndefined()
     w.control.id = 's2'
     w.files['/lcw/sessions/s2.json'] = '{"billing":"payg"}'
     for (const key of Object.keys(w.kept)) delete w.kept[key]
     await start($)
-    await w.clock.advance(2000)
+    await w.clock.advance(5000)
     expect(await band.find({ type: 'Text', text: TITLE })).toBeUndefined()
     for (const sameHost of [ENDPOINT + '/other', 'https://proxy.example:8443/private/team', 'http://proxy.example:3456']) {
       w.control.endpoint = sameHost
-      await w.clock.advance(2000)
+      await w.clock.advance(5000)
       expect(await band.find({ type: 'Text', text: TITLE })).toBeUndefined()
     }
     w.control.endpoint = OTHER
-    await w.clock.advance(2000)
+    await w.clock.advance(5000)
     expect(await band.find({ type: 'Text', text: TITLE })).toBeDefined()
     await band.unmount()
   })
@@ -131,7 +135,7 @@ for (const choice of ['setup', 'keep', 'dismiss']) {
     const band = await $.ui.mount(BAND)
     expect(await band.find({ type: 'Text', text: TITLE })).toBeUndefined()
     w.control.endpoint = OTHER
-    await w.clock.advance(2000)
+    await w.clock.advance(5000)
     expect(await band.find({ type: 'Text', text: TITLE })).toBeDefined()
     await band.unmount()
   })

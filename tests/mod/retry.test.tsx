@@ -35,7 +35,6 @@ function engine(on: any, opts: { run?: string; shape?: string; reason?: string |
   })
   on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
   on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
-  on('fs.list', () => ({ value: [] }))
   on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '' } }))
   on('prompt.submit', (_: any, e: any) => { prompts.push(String(e.text)); return opts.drop ? { drop: opts.drop } : { text: e.text } })
   on('prompt.read', () => ({ value: { text: box.draft, cursor: 0 } }))

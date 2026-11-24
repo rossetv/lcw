@@ -32,7 +32,6 @@ function engine(on: any, files: Record<string, string>, opts: { rejectPrompts?: 
     throw new Error('ENOENT')
   })
   on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
-  on('fs.list', () => ({ value: [] }))
   on('fs.write', (_: any, e: any) => { files[e.path] = e.text; writes.push(e.path); return { value: undefined } })
   on('process.run', (_: any, e: any) => {
     const ran = opts.process?.(e)
@@ -182,7 +181,8 @@ test('idle refresh retries a failed launch and does not suppress a replacement r
   const replacement = JSON.parse(record())
   replacement.revision = replacement.cache.revision = 'r2'
   files[QUOTA] = JSON.stringify(replacement)
-  await w.clock.advance(1000)
+  // With no run the files are looked at every five seconds: the next look is at ten.
+  await w.clock.advance(2000)
   expect(calls).toBe(3)
   await w.clock.advance(5000)
   expect(calls).toBe(3)
@@ -355,7 +355,8 @@ test('the driver source recovers once per hold without deleting its gate, includ
   files[RUN + '/state.json'] = JSON.stringify({ id: 'x', status: 'stopped' })
   await w.clock.advance(1000)
   files[RUN + '/state.json'] = runState()
-  await w.clock.advance(2000)
+  // Without a run shown, the next look comes five seconds after the last.
+  await w.clock.advance(5000)
   expect(w.prompts.length).toBe(1)
   files[RUN + '/gate'] = hold('q4', NOW + 5000)
   files[QUOTA] = record({ v: 1, status: 'refused', code: 'provider-refused' }, 'q4', NOW + 5000)

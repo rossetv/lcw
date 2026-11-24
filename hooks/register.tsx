@@ -79,7 +79,8 @@ const S = {
   quotaRefresh: { revision: '', at: -Infinity, busy: false },
   proxyNotice: { host: '', file: '' },
   gateCheck: { key: '', at: -Infinity, busy: false },
-  aliasBlockedUntil: new Map<string, number>(),
+  // Whether the Claude Code owning a canonical session row was running, by row and owner, and until when that holds.
+  owners: new Map<string, { until: number; open: boolean }>(),
   startedAt: 0,
   reopenChecked: false,
   // The id of the run a Resume press on the unfinished-run box takes over: no reopened session's, so no reopen prompt.
@@ -137,6 +138,9 @@ const S = {
   // What an earlier copy of this code kept has been read: nothing is written over it before then.
   restored: false,
 }
+
+// How often the files are looked at while the session has no run.
+const IDLE_MS = 5000
 
 const totalsFile = (runDir: string) => `${runDir}/totals.json`
 
@@ -210,8 +214,67 @@ async function restore($: EngineInterface) {
   keepOwed($)
 }
 
+// A file is read again only when a look finds its size or time changed since it was last read; one missing is
+// remembered as missing ('' its stamp). A look at a folder answers for every file in it, and any look answers again
+// for LOOK_MS, so the timers that fire together and the reads within one pass share it.
+const LOOK_MS = 100
+const held = new Map<string, { stamp: string; text: string | null }>()
+const looks = new Map<string, { at: number; answer: Promise<any> }>()
+const gone = (err: any) => /ENOENT|ENOTDIR/.test(String(err?.code ?? '') + ' ' + String(err?.message ?? err))
+const folderOf = (path: string) => path.slice(0, path.lastIndexOf('/'))
+
+// The answer of a look, null when the path is missing, undefined when it could not be told.
+async function look<T>($: EngineInterface, key: string, take: () => Promise<T>): Promise<T | null | undefined> {
+  const now = await $.clock.now()
+  const kept = looks.get(key)
+  if (kept && now >= kept.at && now - kept.at < LOOK_MS) return kept.answer
+  const answer = take().catch((err) => (gone(err) ? null : undefined))
+  looks.set(key, { at: now, answer })
+  return answer
+}
+
+const folder = ($: EngineInterface, dir: string) =>
+  look($, 'list:' + dir, () => $.fs.list(dir).then((entries) => new Map(entries.map((f) => [f.name, f]))))
+
+// What was written, by the mod or a process it ran, is seen at the next read, not after a look answers again.
+function forget(path?: string) {
+  if (!path) return looks.clear()
+  held.delete(path)
+  looks.delete('list:' + folderOf(path))
+  looks.delete('stat:' + path)
+}
+
+function write($: EngineInterface, path: string, text: string) {
+  forget(path)
+  return $.fs.write(path, text).finally(() => forget(path))
+}
+
+// A file's size and time, '' when it is missing, undefined when they cannot be told (it is then read every time).
+async function stampOf($: EngineInterface, path: string) {
+  const dir = folderOf(path)
+  // The sessions folder keeps a file for every session there was: one file's stat is less than its listing.
+  if (dir !== `${S.home}/sessions`) {
+    const files = await folder($, dir)
+    if (files === null) return ''
+    const f = files?.get(path.slice(dir.length + 1))
+    if (files && !f) return ''
+    if (f?.kind === 'file') return f.size + ':' + f.mtimeMs
+  }
+  const stat = await look($, 'stat:' + path, () => $.fs.stat(path))
+  return stat ? stat.size + ':' + stat.mtimeMs : stat === null ? '' : undefined
+}
+
+async function readText($: EngineInterface, path: string) {
+  const stamp = await stampOf($, path)
+  const kept = held.get(path)
+  if (stamp !== undefined && kept?.stamp === stamp) return kept.text
+  const text = stamp === '' ? null : await $.fs.read(path).then(String, () => null)
+  if (stamp !== undefined) held.set(path, { stamp, text })
+  return text
+}
+
 const readJson = ($: EngineInterface, path: string) =>
-  $.fs.read(path).then((text) => JSON.parse(text)).catch(() => null)
+  readText($, path).then((text) => (text === null ? null : JSON.parse(text))).catch(() => null)
 
 async function lcwHome($: EngineInterface) {
   if (!S.home) S.home = (await $.env.get('LCW_HOME')) || `${await $.env.get('HOME')}/.lcw`
@@ -230,13 +293,14 @@ async function lentAnchor($: EngineInterface, id: string, session: any) {
   if (Number.isInteger(anchor.claudePid) && anchor.claudePid > 1 && anchor.claudePid !== pid) {
     const key = id + ':' + canonical + ':' + anchor.claudePid
     const now = await $.clock.now()
-    if ((S.aliasBlockedUntil.get(key) ?? 0) > now) return null
+    // The owner's answer holds for five seconds either way: each read of the session would run ps again.
+    const kept = S.owners.get(key)
+    if (kept && kept.until > now) return kept.open ? null : anchor
     // ps is not available on every host; an unknown owner never lends its mark.
     const r = await $.process.run(['ps', '-p', String(anchor.claudePid), '-o', 'pid='], { timeoutMs: 1000 }).catch(() => null)
-    if (r?.exitCode !== 1 || String(r.stdout ?? '').trim() || String(r.stderr ?? '').trim()) {
-      S.aliasBlockedUntil.set(key, now + 5000)
-      return null
-    }
+    const open = r?.exitCode !== 1 || !!String(r.stdout ?? '').trim() || !!String(r.stderr ?? '').trim()
+    S.owners.set(key, { until: now + 5000, open })
+    if (open) return null
   }
   return anchor
 }
@@ -259,8 +323,9 @@ async function readRun($: EngineInterface, now: number): Promise<Run | null> {
   const binding = await readSession($, await $.session.id())
   if (!binding?.runDir) return null
   const paths = runPaths(binding.runDir)
-  if (!(await $.fs.exists(paths.state))) return null
-  let state = JSON.parse(await $.fs.read(paths.state))
+  const text = await readText($, paths.state)
+  if (text === null) return null
+  let state = JSON.parse(text)
   if (!isShown(state, now)) return null
   const session = state.driver && state.driver !== await $.session.id()
     ? await readSession($, state.driver) : binding
@@ -306,7 +371,7 @@ async function readMoney($: EngineInterface, session: any, state: any, gate: any
   session = { ...session, billing: 'payg' }
   const home = await lcwHome($)
   const dir = spendDir(home)
-  const names = ((await $.fs.list(dir).catch(() => [])) as { name: string; kind: string; mtimeMs: number }[])
+  const names = [...((await folder($, dir))?.values() ?? [])]
     .filter((f) => f.kind === 'file' && f.name.endsWith('.json') && spendFileCounts(f.mtimeMs, now)).map((f) => f.name)
   const records = await Promise.all(names.map((name) => readJson($, `${dir}/${name}`)))
   const own = records[names.indexOf(`${await spendName($)}.json`)]
@@ -316,6 +381,21 @@ async function readMoney($: EngineInterface, session: any, state: any, gate: any
     reading: readingOf(await readJson($, spendCommandFile(home)), await readJson($, spendReadingFile(home))),
   })
   return gate?.unit === 'usd' ? { ...money, retryAt: gate.retryAt, retried: !!gate.retried } : money
+}
+
+// The facts the usage mark is judged by, as the files stand when it is called, whatever the timers last saw (a look
+// of the last LOOK_MS stands for now): this session's row, mark, outside quota and money view, the week's figure, and
+// the run shown with its driver's row, mark, quota and money. A file is read only if it changed since its last read.
+async function markFacts($: EngineInterface) {
+  const now = await $.clock.now()
+  const session = await readSession($, await $.session.id())
+  const mark: number = session?.markPercent ?? TH.usageMarkPercent
+  const quota = await readQuota($, session, mark, now)
+  const usage = await readJson($, usageFile(await lcwHome($)))
+  const money = await readMoney($, session, null, null, now)
+  const run = await readRun($, now)
+  if (run) run.money = await readMoney($, run.session, run.state, run.gate, now)
+  return { now, session, mark, quota, usage, money, run }
 }
 
 // Whether a prompt was sent: one the engine or a hook drops (a Stop stands, a host limit reached) was not.
@@ -374,7 +454,7 @@ async function reconcileGate($: EngineInterface, run: Run, action: 'sync' | 'ret
     const payload = { sessionId: run.state.driver || await $.session.id(), action, expectedGate: run.gate, ...(expectedQuota ? { expectedQuota } : {}) }
     const r = await $.process.run(['node', `${$.plugin.root}/scripts/gate-reconcile.mjs`, JSON.stringify(payload)], { timeoutMs: 10000, env: { LCW_HOME: await lcwHome($) } })
     return r.exitCode === 0 && JSON.parse(String(r.stdout)).ok === true
-  } catch { return false } finally { check.busy = false }
+  } catch { return false } finally { check.busy = false; forget() }
 }
 
 async function recoveryProof($: EngineInterface, run: Run, now: number) {
@@ -421,7 +501,7 @@ async function recoverQuota($: EngineInterface, run: Run, now: number) {
         : `LCW: ${why}. Run \`node "${$.plugin.root}/scripts/lcw.mjs" resume\`, then \`node "${$.plugin.root}/scripts/lcw.mjs" status\`, and carry on from the ledger.`
       if (!(await submit($, { text }))) return
       S.wokeFor = key
-      await $.fs.write(ackFile, JSON.stringify(fresh))
+      await write($, ackFile, JSON.stringify(fresh))
       await reconcileGate($, current, 'ack')
     })().catch(() => {}).finally(() => { S.quotaWaking = false }))
   } catch { S.quotaWaking = false }
@@ -458,7 +538,7 @@ async function refresh($: EngineInterface) {
   // The first run this process sees is judged once, by mod-alive as it stood before this process drew it.
   const firstSight = !!run && !S.reopenChecked
   if (firstSight) S.reopenChecked = true
-  const aliveAt = firstSight && run ? Number(await $.fs.read(run.paths.modAlive).catch(() => '')) : 0
+  const aliveAt = firstSight && run ? Number(await readText($, run.paths.modAlive)) : 0
   if (!S.run || S.run.runDir !== run?.runDir) {
     S.shownSince = now
     S.totals = (run && (await readJson($, totalsFile(run.runDir)))) || {}
@@ -478,7 +558,7 @@ async function refresh($: EngineInterface) {
     return
   }
   if (firstSight) {
-    await $.fs.write(run.paths.modAlive, String(now)).catch(() => {})
+    await write($, run.paths.modAlive, String(now)).catch(() => {})
     // Within ten seconds of start: the session-start hook that binds a resumed session can run after us.
     if (now - S.startedAt <= 10000 && run.state.id !== S.taken && !run.quota?.hold && reopenDue(run.state, run.gate, aliveAt, now) && !(await driverOpen($, run.state.driver))) owe($, run.runDir, reopenPrompt($.plugin.root))
   }
@@ -503,7 +583,7 @@ async function pollAgents($: EngineInterface) {
   const quiet = quietCounts(S.agents)
   if (quiet.quiet !== S.quiet?.quiet || quiet.stalled !== S.quiet?.stalled) {
     S.quiet = quiet
-    await $.fs.write(run.paths.quiet, JSON.stringify({ ...quiet, at: now })).catch(() => {})
+    await write($, run.paths.quiet, JSON.stringify({ ...quiet, at: now })).catch(() => {})
   }
   // An agent that has stalled, or been long at work, is the orchestrator's to look at: tell the main loop, which acts
   // once it is idle. Who was told of long work is kept through a pause, so nobody is told twice.
@@ -523,7 +603,7 @@ async function pollAgents($: EngineInterface) {
   S.totals = totals
   // At most every five seconds; a change made in between is written on a later poll.
   if (S.totalsChanged && now - S.totalsAt >= 5000) {
-    await $.fs.write(totalsFile(run.runDir), JSON.stringify(totals))
+    await write($, totalsFile(run.runDir), JSON.stringify(totals))
     S.totalsChanged = false
     S.totalsAt = now
   }
@@ -546,12 +626,12 @@ async function countTurn($: EngineInterface, e: { usage?: any; agentId?: string;
     S.totalsAt = now
     S.dirty = true
   }
-  await $.fs.write(totalsFile(run.runDir), JSON.stringify(totals))
+  await write($, totalsFile(run.runDir), JSON.stringify(totals))
 }
 
 // A file's text and what it parses to: missing is null; caught mid-write (it does not parse) is undefined.
 async function readParsed($: EngineInterface, path: string) {
-  const text = await $.fs.read(path).catch(() => null)
+  const text = await readText($, path)
   if (text === null) return null
   try { return JSON.parse(String(text)) } catch { return undefined }
 }
@@ -566,43 +646,44 @@ async function measureSpend($: EngineInterface, e: { cost?: { usd: number } }, r
   const control = await readSession($, id)
   const quota = await readQuota($, control, control?.markPercent ?? TH.usageMarkPercent, now)
   const step = measureStep(control, rec, { weekly: quota ? null : reading, cost: e.cost?.usd, quota }, now)
-  if ((step.changed || control?.billing !== session?.billing) && session !== undefined) await $.fs.write(sessionFile(home, id), JSON.stringify({ ...session, billing: step.billing }))
+  if ((step.changed || control?.billing !== session?.billing) && session !== undefined) await write($, sessionFile(home, id), JSON.stringify({ ...session, billing: step.billing }))
   // The canonical row is the one readers take first, so the billing settled here must reach it too.
   if (step.billing !== 'unclear' && session) {
     const anchor = await lentAnchor($, id, session)
-    if (anchor && anchor.billing !== step.billing) await $.fs.write(sessionFile(home, anchor.sessionCanonicalId), JSON.stringify({ ...anchor, billing: step.billing }))
+    if (anchor && anchor.billing !== step.billing) await write($, sessionFile(home, anchor.sessionCanonicalId), JSON.stringify({ ...anchor, billing: step.billing }))
   }
-  if (step.drop) await $.process.run(['rm', '-f', spent]).catch(() => {})
+  if (step.drop) await $.process.run(['rm', '-f', spent]).catch(() => {}).finally(() => forget(spent))
   // A record caught mid-write is left for the next reading rather than started again from this one.
-  if (step.record && rec !== undefined) await $.fs.write(spent, JSON.stringify(step.record))
+  if (step.record && rec !== undefined) await write($, spent, JSON.stringify(step.record))
   return step.billing
 }
 
 const lcwCli = ($: EngineInterface) => `${$.plugin.root}/scripts/lcw.mjs`
 
-// Every fact the boxes are chosen from. The cheap files are read here, every 2 s; the run is refresh's, and the
-// repository's runs and the sleep check are slowFacts', at their own pace.
+// Every fact the boxes are chosen from. The cheap files are looked at here, every 2 s with a run and every 5 s without;
+// the run is refresh's, and the repository's runs and the sleep check are slowFacts', at their own pace.
 async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
   const home = await lcwHome($)
-  const [advisorModel, statusLine, session, cap, command, reading, notices, usage, update, cleanup] = await Promise.all([
+  const [advisorModel, statusLine, own, cap, command, reading, notices, update, cleanup] = await Promise.all([
     $.settings.read({ key: 'advisorModel' }).catch(() => 'unread'),
     // The user settings file alone: the one Put LCW's back writes.
     $.settings.read({ key: 'statusLine', source: 'user' }).catch(() => undefined),
-    readSession($, await $.session.id()),
+    markFacts($),
     readJson($, capFile(home)),
     readJson($, spendCommandFile(home)),
     readJson($, spendReadingFile(home)),
     readJson($, noticesFile(home)),
-    readJson($, usageFile(home)),
     readJson($, updateFile(home)),
     S.repoKey ? readJson($, cleanupFile(home, S.repoKey)) : null,
   ])
+  // The run is the one the card shows, so the box and the card tell the same story.
   const run = S.run
-  const money = run ? run.money : await readMoney($, session, null, null, now)
+  const session = own.session
+  const money = run ? run.money : own.money
   const runF = runFact(run?.state, S.sleep?.kept)
   const asked = runF?.asks?.length ? answerKey(runF) : ''
-  const quota = run ? run.quota : await readQuota($, session, session?.markPercent ?? TH.usageMarkPercent, now)
-  const week = usageFact({ state: run?.state, session: run?.session ?? session, usage: run ? run.usage : usage, money, quota, now })
+  const quota = run ? run.quota : own.quota
+  const week = usageFact({ state: run?.state, session: run?.session ?? session, usage: run ? run.usage : own.usage, money, quota, now })
   const endpoint = proxyQuotaEndpoint(await $.env.get('ANTHROPIC_BASE_URL'), await readJson($, quotaFile(home)), session, run?.session)
   const host = endpoint ? proxyQuotaHost(endpoint) : ''
   if (host && S.proxyNotice.host !== host) {
@@ -682,7 +763,7 @@ async function readKey($: EngineInterface) {
 // Nothing is written into the runs looked at, or they would look shown.
 async function scanRuns($: EngineInterface, now: number) {
   const dir = runsDir(await lcwHome($), S.repoKey!)
-  const entries = ((await $.fs.list(dir).catch(() => [])) as { name: string; kind: string }[]).filter((f) => f.kind === 'dir')
+  const entries = [...((await folder($, dir))?.values() ?? [])].filter((f) => f.kind === 'dir')
   const seen: RunSeen[] = []
   for (const f of entries) {
     const paths = runPaths(`${dir}/${f.name}`)
@@ -690,9 +771,9 @@ async function scanRuns($: EngineInterface, now: number) {
     const state = await readJson($, paths.state)
     if (state?.status === 'finished' || state?.status === 'stopped') S.closedRuns.add(paths.dir)
     if (!state?.id || state.status === 'finished' || state.status === 'stopped') continue
-    const files = (await $.fs.list(paths.dir).catch(() => [])) as { name: string; mtimeMs: number }[]
-    const time = (name: string) => files.find((x) => x.name === name)?.mtimeMs ?? 0
-    const drawn = Number(String((await $.fs.read(paths.modAlive).catch(() => '')) ?? '').trim()) || 0
+    const files = await folder($, paths.dir)
+    const time = (name: string) => files?.get(name)?.mtimeMs ?? 0
+    const drawn = Number(String((await readText($, paths.modAlive)) ?? '').trim()) || 0
     seen.push({ dir: paths.dir, state, shownAt: Math.max(drawn, time('state.json'), time('ledger.md')) })
   }
   for (const c of unfinishedCandidates(seen, now, S.run?.runDir, S.banner.dismissed)) {
@@ -749,9 +830,10 @@ async function assessCompletion($: EngineInterface) {
     if (run.gate || run.quota?.hold || run.quota?.blocked) return
     const money = await readMoney($, run.session, s, run.gate, now)
     if (usageFact({ state: s, session: run.session, usage: run.usage, money, quota: run.quota, now }).atMark) return
-    if (String(await $.fs.read(run.paths.checkpoint).catch(() => '')).trim() || (await draft($)) !== '') return
+    if (String((await readText($, run.paths.checkpoint)) ?? '').trim() || (await draft($)) !== '') return
     const agents = await $.agent.list()
     if (agents.some((a) => ['pending', 'running', 'waiting'].includes(a.status)) || blocked()) return
+    forget()
     const fresh = await readRun($, await $.clock.now())
     const snapshot = (r: Run) => JSON.stringify([r.runDir, r.state, r.session, r.gate, r.quota, r.usage])
     if (!fresh || snapshot(fresh) !== snapshot(run) || blocked()) return
@@ -765,7 +847,8 @@ async function assessCompletion($: EngineInterface) {
       const currentMoney = await readMoney($, run.session, s, run.gate, at)
       const currentAgents = await $.agent.list()
       if (currentAgents.some((a) => ['pending', 'running', 'waiting'].includes(a.status))) return
-      if (String(await $.fs.read(run.paths.checkpoint).catch(() => '')).trim()) return
+      if (String((await readText($, run.paths.checkpoint)) ?? '').trim()) return
+      forget()
       const current = await readRun($, await $.clock.now())
       if (!current || snapshot(current) !== snapshot(run)) return
       if (usageFact({ state: current.state, session: current.session, usage: current.usage, money: currentMoney, quota: current.quota, now: at }).atMark) return
@@ -868,6 +951,7 @@ async function fillReply($: EngineInterface, text: string, setup?: Banner) {
     if (typed === '' && setup) {
       // The final draft read can outlast a control change; take a bounded snapshot after each read.
       for (let pass = 0; pass < 2; pass++) {
+        forget()
         await refresh($).catch(() => {})
         const facts = await gather($, await $.clock.now())
         if (!sameBox(setup, S.interactive ? bannerFor(facts) : null, 'setup') || !facts.proxyQuota?.canSetup || watch?.changed || S.turnRunning || S.compacting || S.carry || S.owed) {
@@ -902,6 +986,7 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
     }
     last = r
   }
+  if (plan.steps?.length) forget()
   // A prompt still owed to the run (a reopen, a resume) is sent with it, not dropped for it.
   if (plan.owe && S.run) owe($, S.run.runDir, S.owed?.runDir === S.run.runDir ? S.owed.text + '\n\n' + plan.owe : plan.owe, 0)
   if (plan.prompt) {
@@ -909,14 +994,14 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
   }
   if (plan.notices) {
     const file = noticesFile(await lcwHome($))
-    await $.fs.write(file, JSON.stringify({ ...((await readJson($, file)) || {}), ...plan.notices }))
+    await write($, file, JSON.stringify({ ...((await readJson($, file)) || {}), ...plan.notices }))
   }
   if (plan.fillText !== undefined && !(await fillReply($, plan.fillText, plan.proxyQuotaChoice?.choice === 'setup' ? banner : undefined))) return
   if (plan.proxyQuotaChoice) {
     try {
       const { host, choice } = plan.proxyQuotaChoice
       const file = S.proxyNotice.host === host ? S.proxyNotice.file : await proxyQuotaNoticeFile(await lcwHome($), host)
-      await $.fs.write(file, JSON.stringify({ host, choice }))
+      await write($, file, JSON.stringify({ host, choice }))
     } catch {
       return $.ui.toast('LCW could not remember this choice. The setup offer stays available; try again.', { timeoutMs: 10000 })
     }
@@ -944,6 +1029,7 @@ async function pressBanner($: EngineInterface, id: string, drawn: Banner | null)
   if (S.pressing) return $.ui.toast('LCW is still on the last button you pressed.')
   S.pressing = true
   try {
+    forget()
     await refresh($).catch(() => {})
     const facts = await gather($, await $.clock.now())
     const fresh = S.interactive ? bannerFor(facts) : null
@@ -965,12 +1051,13 @@ async function pressBanner($: EngineInterface, id: string, drawn: Banner | null)
   // What the press changed is seen at once: the next run to name, the hold just started.
   if (kind === 'unfinished') S.runsAt = 0
   if (kind === 'awake') S.sleepAt = 0
+  if (kind === 'unfinished' || kind === 'awake') await slowFacts($).catch(() => {})
   await readBanner($).catch(() => {})
 }
 
 function writeAlive($: EngineInterface, run: Run, now: number) {
   S.alive = { runDir: run.runDir, at: now }
-  return $.fs.write(run.paths.modAlive, String(now))
+  return write($, run.paths.modAlive, String(now))
 }
 
 // Kept up while the box is hidden (a dialog over the prompt does not draw it), so the card comes back without a twin.
@@ -986,7 +1073,7 @@ async function heartbeat($: EngineInterface) {
 async function checkpoint($: EngineInterface) {
   const run = await readRun($, await $.clock.now())
   if (!run) return
-  const step = String((await $.fs.read(run.paths.checkpoint).catch(() => '')) ?? '').trim()
+  const step = String((await readText($, run.paths.checkpoint)) ?? '').trim()
   if (!step || S.compacting) return
   S.compacting = true
   // The step stays in its file until the compaction has happened: one refused because a turn has started, or
@@ -997,7 +1084,7 @@ async function checkpoint($: EngineInterface) {
     const text = resumePrompt($.plugin.root, step)
     // Kept before the step leaves its file, so a reload in between still sends it.
     await keepOwed($, { runDir: run.runDir, text })
-    await $.fs.write(run.paths.checkpoint, '')
+    await write($, run.paths.checkpoint, '')
     owe($, run.runDir, text, 0)
   })().catch(() => {}).finally(() => { S.compacting = false }))
 }
@@ -1006,7 +1093,7 @@ async function checkpoint($: EngineInterface) {
 // working is closed here; without it the creature would go on looking busy until the next turn ended.
 async function noteStopped($: EngineInterface) {
   const file = activityFile(await lcwHome($), await $.session.id())
-  await $.fs.write(file, JSON.stringify({ ...(await readJson($, file)), state: 'rest', at: await $.clock.now() }))
+  await write($, file, JSON.stringify({ ...(await readJson($, file)), state: 'rest', at: await $.clock.now() }))
 }
 
 async function start($: EngineInterface) {
@@ -1014,10 +1101,21 @@ async function start($: EngineInterface) {
   S.started = true
   S.startedAt = await $.clock.now()
   const quietly = (fn: () => Promise<void>) => () => void fn().catch(() => {})
-  $.clock.every(1000, quietly(() => refresh($)))
+  // With a run each look keeps its own pace; without one, it comes every IDLE_MS, since no card waits on it. The first is below.
+  const paced = (every: number, fn: () => Promise<void>) => {
+    let looked = S.startedAt
+    return quietly(async () => {
+      const now = await $.clock.now()
+      if (now - looked < (S.run ? every : IDLE_MS)) return
+      looked = now
+      await fn()
+    })
+  }
+  $.clock.every(1000, paced(1000, () => refresh($)))
   $.clock.every(2000, quietly(() => pollAgents($)))
   $.clock.every(5000, quietly(() => heartbeat($)))
-  $.clock.every(2000, quietly(() => readBanner($)))
+  $.clock.every(1000, paced(2000, () => readBanner($)))
+  // Its look over the repository's runs keeps its own pace, and without a run the rest reads no file.
   $.clock.every(2000, quietly(() => slowFacts($)))
   $.clock.every(1000, quietly(() => carryOn($)))
   // The one place that redraws: when something changed, or the card's motion has come to its next step.
@@ -1035,7 +1133,8 @@ async function start($: EngineInterface) {
   S.version = String((await readJson($, `${$.plugin.root}/.claude-plugin/plugin.json`))?.version ?? '')
   await refresh($).catch(() => {})
   await readBanner($).catch(() => {})
-  void slowFacts($).catch(() => {})
+  // What the first look over the repository's runs found shows at once, not at the next look.
+  void slowFacts($).then(() => readBanner($)).catch(() => {})
   if (!S.run) return
   await pollAgents($)
 }
@@ -1160,7 +1259,7 @@ export const register: Register = (on) => {
         // Another session's newer and higher figure for this week stands over this session's older one.
         const file = usageFile(await lcwHome($))
         const usage = mergeUsage(await readJson($, file), reading as any)
-        await $.fs.write(file, JSON.stringify(usage))
+        await write($, file, JSON.stringify(usage))
         const run = await readRun($, now)
         const gate = run && !run.quota ? gateFor(run.state, usage?.sevenDay, now) : null
         if (run && replacesGate(run.gate, gate)) await reconcileGate($, run, 'sync')

@@ -29,7 +29,6 @@ function engine(on: any, opts: { state?: object; drops?: number; kept?: Record<s
   })
   on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
   on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
-  on('fs.list', () => ({ value: [] }))
   on('process.run', (_: any, e: any) => { commands.push(e.argv); return { value: { exitCode: 1, stdout: '', stderr: '' } } })
   on('prompt.submit', (_: any, e: any) => {
     prompts.push(String(e.text))
