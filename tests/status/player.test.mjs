@@ -218,6 +218,44 @@ describe('when Node starts', { concurrency: true }, () => {
   })
 })
 
+describe('a record that reads as newer than the frames but holds the text they were drawn from', { concurrency: true }, () => {
+  /** A session with a run, drawn at S, and the run's state written again with the same text since the key's time. */
+  function rewritten() {
+    const s = scratch()
+    assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }).code, 0)
+    settle(s, inputOf(s))
+    tick(s, inputOf(s), S)
+    const dir = `${s.home}/frames/s1`, tag = fs.readFileSync(`${dir}/key`, 'utf8').split('\n')[2]
+    const old = Date.now() / 1000 - 100
+    fs.utimesSync(`${dir}/key`, old, old)
+    const state = `${runDir(s)}/state.json`
+    fs.writeFileSync(state, fs.readFileSync(state))
+    fs.utimesSync(state, old + 50, old + 50)
+    return { s, dir, tag, state }
+  }
+  const strip = ({ dir, tag }) => fs.readdirSync(`${dir}/${tag}`).map((n) => [n, fs.statSync(`${dir}/${tag}/${n}`).mtimeMs, fs.readFileSync(`${dir}/${tag}/${n}`, 'utf8')])
+
+  test('starts Node, which prints the saved frame, leaves the frames as they are and moves the key on', () => {
+    const r = rewritten(), { s, dir, tag } = r
+    const before = strip(r)
+    assert.equal(tick(s, inputOf(s), S + 1), fs.readFileSync(`${dir}/${tag}/${S + 1}`, 'utf8'))
+    assert.equal(starts(s), 2)
+    assert.equal(fs.readFileSync(`${dir}/key`, 'utf8').split('\n')[2], tag)
+    assert.deepEqual(strip(r), before)
+    tick(s, inputOf(s), S + 2)
+    assert.equal(starts(s), 2, 'the next tick plays')
+  })
+
+  test('a change written right after that start shows at the next tick', () => {
+    const { s, state } = rewritten()
+    tick(s, inputOf(s), S + 1)
+    fs.writeFileSync(state, JSON.stringify({ ...JSON.parse(fs.readFileSync(state, 'utf8')), name: 'renamed' }))
+    const after = Date.now() / 1000
+    fs.utimesSync(state, after, after)
+    assert.match(plain(tick(s, inputOf(s), S + 2)), /LCW Build · renamed/)
+  })
+})
+
 describe('a change in the second of the draw before it', { concurrency: true }, () => {
   for (const shell of SHELLS) {
     test(`shows at the next tick, in ${shell}`, () => {

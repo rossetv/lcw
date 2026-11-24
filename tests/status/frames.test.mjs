@@ -97,7 +97,7 @@ function launch(s, input, now, { at, home = s.home, tz = 'UTC', zone = '+0000' }
 function saved(home) {
   const dir = `${home}/frames/s1`
   const tag = fs.readFileSync(`${dir}/key`, 'utf8').split('\n')[2]
-  return new Map(fs.readdirSync(`${dir}/${tag}`).map((n) => [Number(n), fs.readFileSync(`${dir}/${tag}/${n}`, 'utf8')]))
+  return new Map(fs.readdirSync(`${dir}/${tag}`).filter((n) => /^\d+$/.test(n)).map((n) => [Number(n), fs.readFileSync(`${dir}/${tag}/${n}`, 'utf8')]))
 }
 /** Each saved frame against a fresh draw at its own second, each in a copy of the home as the draw ahead left it. */
 function compareFresh(s, input, frames, only = () => true, ms = 0) {
@@ -196,6 +196,20 @@ describe('each frame is what a fresh draw prints at its own second, across a val
     assert.equal(frames.size, 5)
     assert.equal(compareFresh(s, input, frames), 5)
   })
+})
+
+test('a draw ahead asks git again once its figures are 10 seconds old, so its strip runs whole, and shows none older than 15', () => {
+  const s = scratch()
+  const S = NOW / 1000
+  const gitAt = () => JSON.parse(fs.readFileSync(`${s.home}/cache/${fs.readdirSync(`${s.home}/cache`).find((n) => n.startsWith('git-'))}`, 'utf8')).at
+  const seconds = (from, n) => Array.from({ length: n }, (_, i) => from + i)
+  launch(s, baseInput(s), NOW, { at: S })
+  launch(s, baseInput(s, { model: { display_name: 'Nine' } }), NOW + 9000, { at: S + 9 })
+  assert.equal(gitAt(), NOW)
+  assert.deepEqual([...saved(s.home).keys()], seconds(S + 9, 7))
+  launch(s, baseInput(s, { model: { display_name: 'Ten' } }), NOW + 10_000, { at: S + 10 })
+  assert.equal(gitAt(), NOW + 10_000)
+  assert.deepEqual([...saved(s.home).keys()], seconds(S + 10, 16))
 })
 
 describe('what a draw saves', { concurrency: true }, () => {

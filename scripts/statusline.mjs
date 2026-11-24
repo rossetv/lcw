@@ -31,8 +31,11 @@ function windowSize(n) {
 /** The git figures the rows take from the session's folder: the main checkout and the branch, unless Claude Code gave them. */
 const wanted = (inp) => [...(inp.worktree?.original_cwd ? [] : ['main']), ...(inp.worktree?.branch ? [] : ['branch'])]
 
-/** Claude Code's input -> the renderer's input, plus the usage figures. `also` names more git figures of the folder to ask in the same go. */
-export function mapInput(inp, now = Date.now(), markPercent = DEFAULT_MARK, also = []) {
+/**
+ * Claude Code's input -> the renderer's input, plus the usage figures. `also` names more git figures of the folder to
+ * ask in the same go; git figures younger than `gitFresh` ms are taken as they are kept.
+ */
+export function mapInput(inp, now = Date.now(), markPercent = DEFAULT_MARK, also = [], gitFresh = undefined) {
   inp = inp && typeof inp === 'object' ? inp : {}
   const cwd = inp.cwd || inp.workspace?.current_dir || process.cwd()
   const seven = inp.rate_limits?.seven_day
@@ -41,7 +44,7 @@ export function mapInput(inp, now = Date.now(), markPercent = DEFAULT_MARK, also
   const resetMs = num(seven?.resets_at) ? seven.resets_at * 1000 : null
   const elapsed = elapsedPercent(resetMs, now)
   const want = [...wanted(inp), ...also]
-  const git = want.length ? gitOf(cwd, home(), now, want) : {}
+  const git = want.length ? gitOf(cwd, home(), now, want, gitFresh) : {}
   const repoPath = inp.worktree?.original_cwd || git.main
   return {
     input: {
@@ -137,7 +140,7 @@ function saveContext(file, tokens, window, now) {
  * Reads what the rows show, each file once, and records what this tick has new: the billing, the spend, the
  * context size, the newest weekly figure and the run's gate. What it returns is all a draw needs.
  */
-function readRecords(inp, now) {
+function readRecords(inp, now, gitFresh = undefined) {
   const h = home()
   let run = null
   const ids = sessionIds(inp)
@@ -161,7 +164,7 @@ function readRecords(inp, now) {
   const latest = run && Array.isArray(run.state.sweep?.waves) ? [...run.state.sweep.waves].reverse().find((x) => x?.worktree && there(x.worktree)) : null
   const runTree = latest ? latest.worktree : run?.state.worktree && there(run.state.worktree) ? run.state.worktree : null
   const runBranch = latest ? latest.branch ?? run.state.branch : run?.state.branch
-  const mapped = mapInput(inp, now, mark, runTree ? [] : ['diff'])
+  const mapped = mapInput(inp, now, mark, runTree ? [] : ['diff'], gitFresh)
   const input = mapped.input
   // The context's size for lcw checkpoint, which cannot see it: the share Claude Code reports of the window it reports.
   const pct = num(inp.context_window?.used_percentage), win = num(inp.context_window?.context_window_size)
@@ -192,7 +195,7 @@ function readRecords(inp, now) {
   // The git figures are kept for 15 seconds, and frames drawn ahead show them no longer than that.
   const gits = [mapped.git]
   try {
-    if (runTree) gits.push(gitOf(runTree, h, now, ['diff']))
+    if (runTree) gits.push(gitOf(runTree, h, now, ['diff'], gitFresh))
     input.diff = gits.at(-1).diff
   } catch {}
   let transcriptAt = 0
@@ -312,8 +315,10 @@ export async function main({ margin = 5, input } = {}) {
 // Frames ahead: one draw saves the rows for this second and the 15 after it, which scripts/bin/statusline.sh
 // prints with no Node while nothing the rows show has changed. What it saves, in <LCW home>/frames/<session id>/:
 //   <strip>/<second>  the rows for that second, one file each, in a folder of this draw's own
+//   <strip>/seen      the text of each watched file as the draw read it, for the launcher's check (scripts/bin/statusline.mjs)
 //   last              the rows this draw printed, for when a later draw fails
-//   key               what the player compares, written last and removed first, so it only ever names a whole strip:
+//   key               what the player compares, written last and removed first, so it only ever names a whole strip;
+//                     its time is the second before the draw read anything, and the launcher's check moves it on:
 //     <COLUMNS> <LCW_THEME> <zone>      as the player sees them, ${COLUMNS:-0} ${LCW_THEME:-dark} and date's %z
 //     <heartbeat file> <seconds>         the heartbeat the frames were drawn with, in whole seconds; empty with no run
 //     <strip>
@@ -321,6 +326,8 @@ export async function main({ margin = 5, input } = {}) {
 //     what must not change, then D:  /path (there, and not newer than key)  !/path (not there)  %/path (there)  +pid (running)
 //     the input cut at the values that may change, each piece followed by D
 const FRAMES = 16
+// A draw ahead asks git again once its figures are this old, so that no strip is cut to under 5 seconds by them.
+const GIT_AHEAD_MS = 10000
 const SESSION = /^[A-Za-z0-9_-]{1,128}$/
 // A real input is about 2 KB; the player stops reading one past this, and the time its check takes grows with the
 // square of the input's size.
@@ -420,7 +427,10 @@ export function keyText(text, { head, watched, strict = [], lenient = [] }) {
   return [...head, d, ...watched, d, ...pieces.flatMap((p) => [...p.split('\n'), d])].join('\n') + '\n'
 }
 
-/** The key for this draw, or null when no frame can be saved safely for this input. */
+/**
+ * The key for this draw and the text of each watched file that every read and write of this draw gave alike, or null
+ * when no frame can be saved safely for this input.
+ */
 function keyOf(text, f, inp, { zone, tag, paid }) {
   const { COLUMNS = '', LCW_THEME = '' } = process.env
   if (/\s/.test(COLUMNS + LCW_THEME) || Buffer.byteLength(text) > INPUT_BYTES) return null
@@ -428,7 +438,8 @@ function keyOf(text, f, inp, { zone, tag, paid }) {
   const beat = f.run ? `${f.run.paths.modAlive} ${Math.floor(f.alive / 1000)}` : ''
   if (!watched || (beat && !beat.startsWith('/'))) return null
   const strict = f.billing === 'subscription' ? [...IGNORED, 'total_cost_usd'] : IGNORED
-  return keyText(text, { head: [`${COLUMNS || '0'} ${LCW_THEME || 'dark'} ${zone}`, beat, tag], watched, strict, lenient: ALSO_IGNORED })
+  const key = keyText(text, { head: [`${COLUMNS || '0'} ${LCW_THEME || 'dark'} ${zone}`, beat, tag], watched, strict, lenient: ALSO_IGNORED })
+  return key && { key, seen: Object.fromEntries(heldFiles().filter(([file, there, t]) => there && typeof t === 'string' && watched.includes(file)).map(([file, , t]) => [file, t])) }
 }
 
 /**
@@ -459,10 +470,13 @@ function gateHoldsAt(f, t) {
 }
 
 /** Writes the strip, then `last`, then the key, each in place by a rename; clears strips older than any that can still be played. */
-function save(dir, { tag, frames, out, key, keyTime }) {
+function save(dir, { tag, frames, out, key, seen, keyTime }) {
   const strip = `${dir}/${tag}`
   fs.mkdirSync(strip, { recursive: true })
-  if (key) for (const [second, rows] of frames) fs.writeFileSync(`${strip}/${second}`, rows + '\n')
+  if (key) {
+    for (const [second, rows] of frames) fs.writeFileSync(`${strip}/${second}`, rows + '\n')
+    fs.writeFileSync(`${strip}/seen`, JSON.stringify(seen))
+  }
   fs.writeFileSync(`${strip}/last`, out)
   fs.renameSync(`${strip}/last`, `${dir}/last`)
   if (key) {
@@ -478,23 +492,25 @@ function save(dir, { tag, frames, out, key, keyTime }) {
 
 /**
  * Draws the rows for the second `at` names (date's %s%z, as the player read it) and for the 15 after it, saves
- * them for the player, and returns the rows for that second. Throws when the rows cannot be drawn.
+ * them for the player, and returns the rows for that second. Throws when the rows cannot be drawn. A caller that has
+ * read some records already gives their [path, text] pairs as `read`, and as `keyTime` the key's time it took before.
  */
-export async function ahead(text, { at, margin = 4 } = {}) {
+export async function ahead(text, { at, margin = 4, read = [], keyTime = null } = {}) {
   // A record written from the second before this read on reads as newer than the key, whatever the shell compares.
-  const keyTime = Math.floor(Date.now() / 1000) - 1
+  const own = Math.floor(Date.now() / 1000) - 1
+  keyTime = Number.isFinite(keyTime) ? Math.min(keyTime, own) : own
   text = String(text ?? '')
   let inp = {}
   try { inp = JSON.parse(text) } catch {}
   const id = sessionKey(text, inp)
   const dir = id && `${home()}/frames/${id}`
   if (dir) try { fs.rmSync(`${dir}/key`, { force: true }) } catch {}
-  holdReads()
+  holdReads(true, read)
   try {
     const now = clock()
     const told = /^(\d+)([+-]\d{4})$/.exec(String(at ?? ''))
     const first = told ? Number(told[1]) : Math.floor(now / 1000)
-    const f = readRecords(inp, now)
+    const f = readRecords(inp, now, GIT_AHEAD_MS)
     const look = surroundings(margin)
     const zone = zoneOf(frameTime(first, now))
     const until = deadline(f, now)
@@ -512,7 +528,7 @@ export async function ahead(text, { at, margin = 4 } = {}) {
     if (dir) {
       try {
         const tag = `${process.pid}-${randomBytes(4).toString('hex')}`
-        save(dir, { tag, frames, out, key: keyOf(text, f, inp, { zone, tag, paid }), keyTime })
+        save(dir, { tag, frames, out, ...keyOf(text, f, inp, { zone, tag, paid }), keyTime })
       } catch {}
     }
     return out

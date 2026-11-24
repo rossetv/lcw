@@ -6,7 +6,8 @@ import { execFileSync } from 'node:child_process'
 import { fnv1a32hex } from '../../lib/key.mjs'
 import { readJson, writeJson } from './store.mjs'
 
-// The status line runs every second; git runs at most once in this long for a folder, whatever the sessions.
+// The status line runs every second; git runs at most once in this long for a folder, whatever the sessions, unless
+// a caller asks for figures fresher than that.
 const FRESH_MS = 15000
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
@@ -85,14 +86,14 @@ const asking = (cwd) => {
   return { toplevel: once('rev-parse', '--show-toplevel'), common: once('rev-parse', '--git-common-dir'), branch: once('rev-parse', '--abbrev-ref', 'HEAD') }
 }
 /**
- * The git figures of a folder that `want` names, each asked of git at most once in FRESH_MS and kept in a record of
- * that folder alone: diff ({added, removed}, null outside git or when git fails), main (mainCheckout's answer) and
- * branch (null outside git).
+ * The git figures of a folder that `want` names, kept in a record of that folder alone and asked of git again once
+ * the record is `fresh` ms old (FRESH_MS at most): diff ({added, removed}, null outside git or when git fails), main
+ * (mainCheckout's answer) and branch (null outside git).
  */
-export function gitOf(cwd, home, now, want) {
+export function gitOf(cwd, home, now, want, fresh = FRESH_MS) {
   const file = `${home}/cache/git-${fnv1a32hex(cwd)}.json`
   const kept = readJson(file)
-  const facts = kept?.cwd === cwd && now - kept.at >= 0 && now - kept.at < FRESH_MS ? kept : { cwd, at: now }
+  const facts = kept?.cwd === cwd && now - kept.at >= 0 && now - kept.at < Math.min(fresh, FRESH_MS) ? kept : { cwd, at: now }
   const missing = want.filter((k) => !Object.hasOwn(facts, k))
   if (!missing.length) return facts
   // A failure is kept too, so a slow repository costs one try in each stretch and not one every second. A folder

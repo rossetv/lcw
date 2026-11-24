@@ -117,6 +117,20 @@ describe('one status line run', { concurrency: true }, () => {
     })
   }
 
+  test('a draw ahead after the launcher found a record changed reads that record no second time', () => {
+    const { repo, home, dir } = withRun()
+    const bin = installedLauncher()
+    // the first draw records the session's billing, which the second draws again from
+    launched(home, inputFor(repo), { bin })
+    launched(home, inputFor(repo), { now: NOW + 1000, bin })
+    const state = `${dir}/state.json`
+    fs.writeFileSync(state, JSON.stringify({ ...readJson(state), name: 'renamed' }))
+    const { reads, text } = launched(home, inputFor(repo), { now: NOW + 2000, bin })
+    assert.match(text.replace(/\x1b\[[0-9;]*m/g, ''), /LCW Build · renamed/)
+    assert.equal(reads[state], 1)
+    assert.deepEqual(Object.entries(reads).filter(([p, n]) => (p.startsWith(home) || p.startsWith(repo)) && n > 1), [])
+  })
+
   test('with nothing new it leaves the home as it was, byte for byte and time for time', () => {
     const { repo, home } = withRun()
     line(home, inputFor(repo))

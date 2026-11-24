@@ -7,25 +7,33 @@ export const home = () => process.env.LCW_HOME || `${process.env.HOME}/.lcw`
 // While a process holds its reads, each file is read from disk once: later reads get the same text, or what this
 // process wrote or removed since. The text is kept, not the parsed value, so no caller can change another's copy.
 let held = null
-// Every file read, written or removed while reads are held, and whether it was there after: what the reads depended on.
+// Every file read, written or removed while reads are held: whether it was there after, and its text when every read
+// and write of it gave the same one (undefined when they did not). What the reads depended on.
 let seen = null
+const note = (file, text) => { const was = seen.get(file); seen.set(file, { there: text !== null, text: !was || was.text === text ? text : undefined }) }
 
-/** Holds reads (see above) until called with false. Only a short process that reads its records once may hold them. */
-export function holdReads(on = true) { held = on ? new Map() : null; seen = on ? new Map() : null }
+/**
+ * Holds reads (see above) until called with false. Only a short process that reads its records once may hold them.
+ * `known` gives [path, text] pairs this process has already read from disk, which count as read once touched.
+ */
+export function holdReads(on = true, known = []) { held = on ? new Map(known) : null; seen = on ? new Map() : null }
 
-/** The files touched since reads were held, as [path, whether it is there]. */
-export const heldFiles = () => [...(seen ?? [])]
+/** The files touched since reads were held, as [path, whether it is there, its one text or undefined]. */
+export const heldFiles = () => [...(seen ?? [])].map(([file, { there, text }]) => [file, there, text])
 
 /** Forgets what was held, so the next reads come from disk: for work under a lock, where what was read before it may be old. */
 export function forgetReads() { if (held) held = new Map() }
 
 /** A file's text, or null when it cannot be read. */
 export function readText(file) {
-  if (held?.has(file)) return held.get(file)
+  if (held?.has(file)) {
+    const text = held.get(file)
+    if (!seen.has(file)) note(file, text)
+    return text
+  }
   let text = null
   try { text = fs.readFileSync(file, 'utf8') } catch {}
-  held?.set(file, text)
-  seen?.set(file, text !== null)
+  if (held) { held.set(file, text); note(file, text) }
   return text
 }
 
@@ -39,15 +47,13 @@ export function writeAtomic(file, text) {
   const tmp = `${file}.${process.pid}.tmp`
   fs.writeFileSync(tmp, text)
   fs.renameSync(tmp, file)
-  held?.set(file, String(text))
-  seen?.set(file, true)
+  if (held) { held.set(file, String(text)); note(file, String(text)) }
 }
 
 /** Removes a file if it is there. */
 export function removeFile(file) {
   if (fs.existsSync(file)) fs.rmSync(file, { force: true })
-  held?.set(file, null)
-  seen?.set(file, false)
+  if (held) { held.set(file, null); note(file, null) }
 }
 
 export const writeJson = (file, value) => writeAtomic(file, JSON.stringify(value, null, 2) + '\n')
