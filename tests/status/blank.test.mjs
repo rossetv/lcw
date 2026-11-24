@@ -205,6 +205,23 @@ test('a new session while LCW is broken prints exactly the approved line', () =>
   assert.equal(tick(s, { path: `${s.t}/fake:${process.env.PATH}` }), BROKEN)
 })
 
+test('code that does not load is looked into for its file and line once, not on every tick', () => {
+  const s = scratch()
+  fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'const x = = 1\n'))
+  // counts the Node runs that load the code alone, to find where it fails
+  const trace = `${s.t}/trace.mjs`
+  fs.writeFileSync(trace, `import fs from 'node:fs'\nif (process.execArgv.includes('--input-type=module')) fs.appendFileSync(${JSON.stringify(`${s.t}/looked`)}, 'x\\n')\n`)
+  const looks = () => (fs.existsSync(`${s.t}/looked`) ? fs.readFileSync(`${s.t}/looked`, 'utf8').length / 2 : 0)
+  const run = () => spawnSync(process.execPath, [`${s.home}/bin/statusline.mjs`, `${S}+0000`], { input: INPUT, encoding: 'utf8', env: env(s, { NODE_OPTIONS: `--import ${trace}` }), timeout: 15_000 })
+  for (let i = 0; i < 3; i++) run()
+  assert.equal(looks(), 1)
+  assert.equal(logLines(s).length, 1)
+  fs.writeFileSync(`${s.t}/a/scripts/statusline.mjs`, 'let let = 1\n')
+  run(); run()
+  assert.equal(looks(), 2)
+  assert.equal(logLines(s).length, 2)
+})
+
 test('a draw that fails prints the session\'s last rows again', () => {
   const s = scratch()
   fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'export async function ahead() { throw new Error("no") }\n'))

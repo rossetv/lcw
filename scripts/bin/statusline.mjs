@@ -18,12 +18,17 @@ const holds = (dir) => !!dir && path.isAbsolute(dir) && fs.existsSync(path.join(
 // A fault already among the last lines is not written again, so faults of a few sessions that take turns add nothing.
 const RECENT = 8
 
+// What a line says, less the place in the code it gives, which is looked up only for a fault not said yet.
+const bare = (what) => what.replace(/ at [^()]*:\d+\)/g, ')')
+/** What the last lines of the log say, without their times and places. */
+const recent = () => (read(LOG) ?? '').split('\n').filter(Boolean).slice(-RECENT).map((l) => bare(l.slice(l.indexOf(' ') + 1)))
+
 /** Writes one line saying what failed, unless a recent line already says it; the log is cut to its newest half past 64 KB. */
 function log(what, now = Date.now()) {
   try {
     const text = read(LOG) ?? ''
     const lines = text.split('\n').filter(Boolean)
-    if (lines.slice(-RECENT).some((l) => l.slice(l.indexOf(' ') + 1) === what)) return
+    if (lines.slice(-RECENT).some((l) => bare(l.slice(l.indexOf(' ') + 1)) === bare(what))) return
     const line = `${new Date(now).toISOString().replace(/\.\d+Z$/, 'Z')} ${what}\n`
     if (Buffer.byteLength(text) + Buffer.byteLength(line) > LOG_BYTES) {
       const tmp = `${LOG}.${process.pid}.tmp`
@@ -97,7 +102,8 @@ async function run() {
       let lcw
       const url = pathToFileURL(`${root}/scripts/statusline.mjs`).href
       try { lcw = await import(url) } catch (e) {
-        notes.push(`LCW's code in ${root} could not be loaded (${why(e, url)}): update or reinstall LCW.`)
+        const said = `LCW's code in ${root} could not be loaded (${String(e?.message ?? e).split('\n')[0]}): update or reinstall LCW.`
+        notes.push(recent().some((l) => l.includes(said)) ? said : `LCW's code in ${root} could not be loaded (${why(e, url)}): update or reinstall LCW.`)
         if (older) break
         if (gone) notes.unshift(`${gone}.`)
         return done(lastRows(text) ?? BROKEN)
