@@ -196,7 +196,9 @@ function readRecords(inp, now) {
     f.alive = Number(readText(run.paths.modAlive)?.trim()) || 0
     f.quiet = readJson(run.paths.quiet)
     f.gate = readJson(run.paths.gate)
-    f.cardMoney = readMoney({ sessionId: run.state.driver ?? ids, now, state: run.state })
+    // Only a card that is drawn needs its money, and a failure in it costs the card's money alone.
+    f.cardMoney = null
+    if (now - f.alive > 15000) try { f.cardMoney = readMoney({ sessionId: run.state.driver ?? ids, now, state: run.state }) } catch {}
     f.driverMark = driverMark(run.state)
   } else {
     // A finished run is no longer the session's run, but the session still points at it.
