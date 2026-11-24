@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmp, installedConfig } from './helpers.mjs'
+import { STATUS_FILES } from '../../scripts/lib/status-files.mjs'
 
 const SETUP = new URL('../../scripts/setup.mjs', import.meta.url).pathname
 const INSTALLED = installedConfig()
@@ -24,6 +25,10 @@ test('setup writes through a linked settings file to the file it names, and keep
     if (cmd !== 'uninstall') assert.deepEqual(read(`${dotfiles}/settings.json`).attribution, { commit: '', pr: '' }, cmd)
     assert.deepEqual(fs.readdirSync(dotfiles), ['settings.json'], 'no temp file is left beside it')
   }
+})
+
+test('the status line files setup and the session start copy are every file in scripts/bin, and only those', () => {
+  assert.deepEqual([...STATUS_FILES].sort(), fs.readdirSync(new URL('../../scripts/bin', import.meta.url)).sort())
 })
 
 test('setup keeps the settings file\'s mode', () => {

@@ -13,7 +13,7 @@ const setup = (home, settings, cmd, ...more) => {
   return { code: r.status, out: r.stdout, err: r.stderr }
 }
 const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'))
-const BIN = ['installed.mjs', 'statusline.mjs', 'statusline.sh']
+const BIN = fs.readdirSync(`${ROOT}/scripts/bin`)
 const BROKEN = 'LCW · status line could not load · see ~/.lcw/statusline.log\n'
 const playerCommand = (home) => `[ -r '${home}/bin/statusline.sh' ] && . '${home}/bin/statusline.sh'; node '${home}/bin/statusline.mjs' || printf '%s\\n' '${BROKEN.trim()}'`
 const lcwLine = (home) => ({ type: 'command', command: playerCommand(home), refreshInterval: 1, padding: 0 })

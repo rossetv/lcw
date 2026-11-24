@@ -147,7 +147,7 @@ test('a session start from the installed copy brings the status line\'s files up
   fs.mkdirSync(`${home}/bin`)
   fs.writeFileSync(`${home}/bin/statusline.mjs`, '// an older launcher\n')
   start(home)
-  for (const f of ['installed.mjs', 'statusline.mjs', 'statusline.sh']) assert.equal(fs.readFileSync(`${home}/bin/${f}`, 'utf8'), fs.readFileSync(`${root}/scripts/bin/${f}`, 'utf8'), f)
+  for (const f of fs.readdirSync(`${root}/scripts/bin`)) assert.equal(fs.readFileSync(`${home}/bin/${f}`, 'utf8'), fs.readFileSync(`${root}/scripts/bin/${f}`, 'utf8'), f)
   assert.equal(fs.readFileSync(`${home}/bin/setup-root`, 'utf8'), root + '\n')
   const none = tmp('home')
   start(none)

@@ -6,14 +6,13 @@ import { home, readJson, writeAtomic, writeJson } from './lib/store.mjs'
 import { noticesFile } from '../lib/key.mjs'
 import { STATUSLINE_MOVED, isLcwStatusLine, keepsOwnStatusLine, statusLineCommands } from '../lib/banner.mjs'
 import { isInstalled } from './bin/installed.mjs'
+import { STATUS_FILES, copyStatusFiles } from './lib/status-files.mjs'
 
 const [cmd, ...rest] = process.argv.slice(2)
 const i = rest.indexOf('--settings')
 const settingsPath = i >= 0 ? rest[i + 1] : `${process.env.CLAUDE_CONFIG_DIR || `${process.env.HOME}/.claude`}/settings.json`
 const lcw = home()
 const bin = `${lcw}/bin`
-// in this order: an older launcher still answers a newer player, and while there is no player the command runs the launcher alone
-const BIN_FILES = ['installed.mjs', 'statusline.mjs', 'statusline.sh']
 const setupRoot = `${bin}/setup-root`
 const prevFile = `${lcw}/previous-statusline.json`
 const addedDirFile = `${lcw}/added-directory`
@@ -82,7 +81,6 @@ function save(settings) {
 }
 
 const mine = (sl) => isLcwStatusLine(sl?.command, lcw)
-const read = (f) => { try { return fs.readFileSync(f, 'utf8') } catch { return null } }
 
 /** Turns on the advisor a run consults at every stage; leaves a choice the human already made. */
 function setAdvisor(s) {
@@ -90,15 +88,6 @@ function setAdvisor(s) {
   s.advisorModel = 'fable'
   writeAtomic(advisorFile, 'fable\n')
   out('set advisorModel to "fable": a second model reviews the work at every stage of a run')
-}
-
-/** Copies the status line's files into the LCW home as they are, each only when it differs, and notes the folder they came from. */
-function installBin() {
-  if (read(setupRoot) !== pluginRoot + '\n') writeAtomic(setupRoot, pluginRoot + '\n')
-  for (const f of BIN_FILES) {
-    const text = fs.readFileSync(`${pluginRoot}/scripts/bin/${f}`, 'utf8')
-    if (read(`${bin}/${f}`) !== text) writeAtomic(`${bin}/${f}`, text)
-  }
 }
 
 /**
@@ -115,7 +104,7 @@ function quietOlderMods() {
 
 /** Writes the status line's files and sets LCW's status rows, keeping the status line that was there. */
 function setStatusLine(s) {
-  installBin()
+  copyStatusFiles(pluginRoot, lcw)
   out(`wrote the status line's files in ${bin}`)
   // the line replaced is saved each time it is not LCW's own, so uninstall restores the newest one the person had
   if (s.statusLine && !mine(s.statusLine)) {
@@ -198,7 +187,7 @@ if (cmd === 'install') {
     let moved = false
     if (mine(s.statusLine) && s.statusLine.command.trim() !== command) {
       // LCW's own older command, brought up to date without a word; the rest of the setting stays as it is
-      installBin()
+      copyStatusFiles(pluginRoot, lcw)
       s.statusLine = { ...s.statusLine, command }
       quietOlderMods()
       moved = true
@@ -256,14 +245,14 @@ if (cmd === 'install') {
   done.push(advisorFile)
   if (fs.existsSync(settingsPath)) save(s)
   for (const f of done) fs.rmSync(f, { force: true })
-  for (const f of [...BIN_FILES.map((f) => `${bin}/${f}`), setupRoot]) if (fs.existsSync(f)) { fs.rmSync(f); out(`deleted ${f}`) }
+  for (const f of [...STATUS_FILES.map((f) => `${bin}/${f}`), setupRoot]) if (fs.existsSync(f)) { fs.rmSync(f); out(`deleted ${f}`) }
   // neither the status rows nor the attribution come back by themselves, until the person says "set up LCW"
   writeJson(noticesFile(lcw), { ...readJson(noticesFile(lcw)), auto: 'off' })
 } else if (cmd === 'status') {
   const s = fs.existsSync(settingsPath) ? load() : {}
   out(`settings: ${settingsPath}`)
   out(`statusLine: ${mine(s.statusLine) ? 'LCW' : s.statusLine ? 'another command' : 'none'}`)
-  out(`status line files: ${BIN_FILES.every((f) => fs.existsSync(`${bin}/${f}`)) ? 'present' : 'missing'}`)
+  out(`status line files: ${STATUS_FILES.every((f) => fs.existsSync(`${bin}/${f}`)) ? 'present' : 'missing'}`)
   out(`previous statusLine saved: ${fs.existsSync(prevFile) ? 'yes' : 'no'}`)
   out(`permissions.additionalDirectories has ${lcw}: ${s.permissions?.additionalDirectories?.includes(lcw) ? 'yes' : 'no'}`)
   out(`env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: ${s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH ?? 'unset'}`)
