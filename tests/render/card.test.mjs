@@ -494,9 +494,10 @@ test('a card that waits on the person pulses evenly, one step a second over a fo
   assert.equal(withYou.mode, 'with-you');
   const glyph = beat => renderCard(withYou, { width: 100, frame: true, beat }).flat().find(s => s.t === G.withYou).c;
   assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7].map(glyph), ['accent', 'accent@80', 'accent@60', 'accent@80', 'accent', 'accent@80', 'accent@60', 'accent@80']);
-  // Today's frame fades to @50: the beat dims it to @60, so its two steps are as long as each other.
+  // Each fade keeps its own depth: the frame goes down to @50, as it does when it moves fast, and half way is @75.
   const frame = beat => renderCard(buildView(inputsOf('NeedsYou')), { width: 100, frame: true, beat })[0][0].c;
-  assert.deepEqual([0, 1, 2, 3].map(frame), ['needsYou', 'needsYou@80', 'needsYou@60', 'needsYou@80']);
+  assert.deepEqual([0, 1, 2, 3].map(frame), ['needsYou', 'needsYou@75', 'needsYou@50', 'needsYou@75']);
+  assert.ok([...Array(28).keys()].some(tick => renderCard(buildView(inputsOf('NeedsYou')), { width: 100, frame: true, tick })[0][0].c === 'needsYou@50'));
 });
 
 test('the slow pulse changes colours only: its bars are full and its text is the still card\'s', () => {
