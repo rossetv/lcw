@@ -102,8 +102,9 @@ const lines = [
 try {
   const input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}')
   const cwd = input.cwd || process.cwd()
-  // a throwaway copy, later deleted, would leave every other session's status line pointing at nothing
-  if (isInstalled(root)) {
+  // a throwaway copy, later deleted, would leave every other session's status line pointing at nothing; and a session
+  // that clears or compacts runs the hooks of the version it started with, which may be older than the newest start's
+  if ((input.source === undefined || input.source === 'startup' || input.source === 'resume') && isInstalled(root)) {
     writeAtomic(`${home()}/plugin-root`, root)
     // where LCW's status line was set up, its files follow the installed plugin
     try { if (fs.existsSync(`${home()}/bin/statusline.mjs`)) copyStatusFiles(root, home()) } catch {}

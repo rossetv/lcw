@@ -154,6 +154,44 @@ test('a session start from the installed copy brings the status line\'s files up
   assert.ok(!fs.existsSync(`${none}/bin`), 'no status line of LCW\'s was set up there')
 })
 
+test('a session that clears or compacts leaves the pointer and the status line\'s files to the newest start; a start or a resume moves them, as an input with no source does', () => {
+  const repo = makeRepo()
+  const root = path.resolve(START_HOOK, '../..')
+  // two versions in Claude Code's cache, both counted as installed: an open session keeps the older one's hooks
+  const config = tmp('claude')
+  const cache = `${config}/plugins/cache/lcw/lcw`
+  const copy = (version) => {
+    const dir = `${cache}/${version}`
+    for (const d of ['scripts', 'lib', '.claude-plugin']) fs.cpSync(`${root}/${d}`, `${dir}/${d}`, { recursive: true })
+    fs.appendFileSync(`${dir}/scripts/bin/statusline.sh`, `# ${version}\n`)
+    return dir
+  }
+  const newer = copy('0.8.1'), older = copy('0.8.0')
+  fs.writeFileSync(`${config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'owner/lcw' } } }))
+  fs.writeFileSync(`${config}/plugins/installed_plugins.json`, JSON.stringify({ version: 2, plugins: { 'lcw@lcw': [{ scope: 'user', installPath: newer, version: '0.8.1' }] } }))
+  const start = (dir, home, source) => run(`${dir}/scripts/hook-session-start.mjs`, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo, ...(source ? { source } : {}) }), env: { CLAUDE_CONFIG_DIR: config, LCW_AUTH_STATUS_JSON: 'fail' } })
+  const snapshot = (home) => Object.fromEntries(['plugin-root', ...fs.readdirSync(`${home}/bin`).map((f) => `bin/${f}`)].map((f) => [f, fs.readFileSync(`${home}/${f}`, 'utf8')]))
+  const said = {}
+  for (const source of ['compact', 'clear', 'startup', 'resume', undefined]) {
+    const home = tmp('home')
+    fs.mkdirSync(`${home}/bin`)
+    fs.writeFileSync(`${home}/bin/statusline.mjs`, '// an older launcher\n')
+    start(newer, home, 'startup')
+    const before = snapshot(home)
+    assert.equal(before['plugin-root'], newer)
+    const r = start(older, home, source)
+    assert.equal(r.code, 0, r.err)
+    said[source] = r.out
+    if (source === 'compact' || source === 'clear') assert.deepEqual(snapshot(home), before, source)
+    else {
+      assert.equal(fs.readFileSync(`${home}/plugin-root`, 'utf8'), older, String(source))
+      assert.match(fs.readFileSync(`${home}/bin/statusline.sh`, 'utf8'), /# 0\.8\.0\n$/, String(source))
+      assert.equal(fs.readFileSync(`${home}/bin/setup-root`, 'utf8'), older + '\n', String(source))
+    }
+  }
+  for (const source of ['clear', 'startup', 'resume', undefined]) assert.equal(said[source], said.compact, String(source))
+})
+
 test('session-start hook with an unfinished run names it and the next step', () => {
   const t = started('carry')
   t.cli('stage', 'Spec')
