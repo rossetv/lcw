@@ -53,10 +53,10 @@ function folders() {
   return { first: gone ? null : pointer, gone, more }
 }
 
-/** One fresh draw by code from before frames ahead, which reads the input from stdin; null when it prints nothing. */
+/** One fresh draw by code from before frames ahead, which reads the input from stdin; null when it prints nothing in 3 seconds. */
 function freshFrom(root, text) {
   const code = `const { main } = await import(${JSON.stringify(pathToFileURL(`${root}/scripts/statusline.mjs`).href)}); await main({ margin: 4 })`
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { input: text, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] })
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { input: text, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 3000, killSignal: 'SIGKILL' })
   return r.status === 0 && r.stdout ? r.stdout : null
 }
 

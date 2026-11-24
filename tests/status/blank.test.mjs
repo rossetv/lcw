@@ -64,7 +64,7 @@ export async function main() { process.stdout.write('fresh from ' + JSON.parse(f
 const env = (s, more = {}) => ({ PATH: process.env.PATH, HOME: `${s.t}/h`, LCW_HOME: s.home, CLAUDE_CONFIG_DIR: s.config, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW), ...more })
 /** One run of the launcher, as the player starts it; it must end well and print something. */
 function launch(s, input = INPUT, args = [`${S}+0000`]) {
-  const r = spawnSync(process.execPath, [`${s.home}/bin/statusline.mjs`, ...args], { input, encoding: 'utf8', env: env(s) })
+  const r = spawnSync(process.execPath, [`${s.home}/bin/statusline.mjs`, ...args], { input, encoding: 'utf8', env: env(s), timeout: 15_000 })
   assert.equal(r.status, 0, r.stderr)
   return r.stdout
 }
@@ -130,6 +130,12 @@ test('a pointer at a folder whose code cannot draw ahead is passed over for the 
   fs.writeFileSync(`${s.home}/bin/setup-root`, ROOT + '\n')
   assert.match(plain(launch(s)), /Opus 5/)
   assert.ok(fs.existsSync(`${s.home}/frames/s1/key`), 'frames drawn ahead by the current code')
+})
+
+test('older code that hangs is given up on, and the session\'s last rows are printed', () => {
+  const s = scratch(plugin(`${tmp('old')}/old`, 'export async function main() { await new Promise(() => setInterval(() => {}, 1000)) }\n'))
+  const rows = lastRows(s)
+  assert.equal(launch(s), rows)
 })
 
 test('the installed plugin is tried when the folder LCW was set up from holds older code too', () => {
