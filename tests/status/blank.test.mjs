@@ -202,7 +202,7 @@ test('with the launcher missing, the command prints the approved line and says s
   assert.match(logLines(s)[0], /bin\/statusline\.mjs is missing/)
 })
 
-test('a log that cannot be written changes nothing on screen, and puts nothing on stderr', () => {
+test('a log that cannot be written changes nothing on screen, and puts nothing on stderr', { skip: process.getuid?.() === 0 && 'a folder made read-only does not stop root from writing in it' }, () => {
   const s = scratch()
   fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'syntax error here\n'))
   fs.chmodSync(s.home, 0o500)
