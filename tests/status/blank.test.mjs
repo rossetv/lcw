@@ -95,6 +95,34 @@ test('when the pointer\'s folder is gone, the launcher draws from the folder LCW
   assert.equal(launch(s), 'drawn by installed\n')
 })
 
+/** A stand-in for a plugin folder holding code from before frames ahead: one fresh draw from the input on stdin. */
+const older = (dir) => plugin(dir, `import fs from 'node:fs'
+export async function main() { process.stdout.write('fresh from ' + JSON.parse(fs.readFileSync(0, 'utf8')).session_id + ' by ${dir.split('/').pop()}\\n') }
+`)
+
+test('a pointer at a folder whose code cannot draw ahead is passed over for the folder LCW was set up from', () => {
+  const s = scratch(older(`${tmp('old')}/lcw`))
+  fs.writeFileSync(`${s.home}/bin/setup-root`, ROOT + '\n')
+  assert.match(plain(launch(s)), /Opus 5/)
+  assert.ok(fs.existsSync(`${s.home}/frames/s1/key`), 'frames drawn ahead by the current code')
+})
+
+test('the installed plugin is tried when the folder LCW was set up from holds older code too', () => {
+  const s = scratch(older(`${tmp('old')}/old`))
+  fs.writeFileSync(`${s.home}/bin/setup-root`, older(`${s.t}/older`) + '\n')
+  fs.mkdirSync(`${s.config}/plugins`, { recursive: true })
+  fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'o/lcw' } } }))
+  fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: plugin(`${s.t}/installed`) }] } }))
+  assert.equal(launch(s), 'drawn by installed\n')
+})
+
+test('when no folder holds code that can draw ahead, each tick is one fresh draw from the code there is, and no frames are saved', () => {
+  const s = scratch(older(`${tmp('old')}/old`))
+  fs.writeFileSync(`${s.home}/bin/setup-root`, older(`${s.t}/older`) + '\n')
+  assert.equal(launch(s), 'fresh from s1 by old\n')
+  assert.ok(!fs.existsSync(`${s.home}/frames`))
+})
+
 test('a record that names an older copy of the plugin is never followed', () => {
   const s = scratch(`${tmp('gone')}/lcw`)
   const moved = `${tmp('moved')}/lcw`
