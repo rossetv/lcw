@@ -13,6 +13,8 @@ import { signInKind } from '../lib/billing.mjs'
 import { noteQuotaSession, readSessionQuota, quotaLine, sessionIdentity } from './lib/quota-session.mjs'
 import { sessionFile } from '../lib/key.mjs'
 import { openWaves } from '../lib/banner.mjs'
+import { toldFile } from '../lib/mark.mjs'
+import { copyStatusFiles, isCurrentInstall } from './lib/status-files.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // a path as one shell word, so a folder with a space or a quote in it still runs
@@ -43,7 +45,8 @@ function settleBilling(ids, signedIn) {
   // A subscriber with an API key in the environment signs in as api_key too, so over a settled or unsettled
   // session a per-token sign-in leaves it unclear, for the session's own ticks to settle: a weekly figure or a reply without one.
   if (signedIn === 'payg' && (had === 'subscription' || had === 'unclear')) {
-    for (const { file, session } of rows) {
+    for (const { id, file, session } of rows) {
+      fs.rmSync(toldFile(home(), id), { force: true }) // the mod's record of the same note
       if (session?.billing === 'unclear' && session.toldPayg === undefined) continue
       const { toldPayg, ...rest } = session ?? {}
       writeJson(file, { ...rest, billing: 'unclear' })
@@ -98,7 +101,13 @@ const lines = [
 try {
   const input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}')
   const cwd = input.cwd || process.cwd()
-  writeAtomic(`${home()}/plugin-root`, root)
+  // a throwaway copy, later deleted, would leave every other session's status line pointing at nothing; and a session
+  // that clears or compacts runs the hooks of the version it started with, which may be older than the newest start's
+  if ((input.source === undefined || input.source === 'startup' || input.source === 'resume') && isCurrentInstall(root)) {
+    writeAtomic(`${home()}/plugin-root`, root)
+    // where LCW's status line was set up, its files follow the installed plugin
+    try { if (fs.existsSync(`${home()}/bin/statusline.mjs`)) copyStatusFiles(root, home()) } catch {}
+  }
   try { sweepTemp(home()) } catch {}
   lines.push(`LCW command line: ${cli} (add --session <id> only if CLAUDE_CODE_SESSION_ID is not set)`)
   // A resumed session is known by its transcript's name, as in the other hooks.

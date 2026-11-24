@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildView, renderCard, weekOf, weekShare } from '../../lib/card.mjs';
 import { renderStatusRows } from '../../lib/status.mjs';
 import { toPlain, toAnsi } from '../../lib/paint.mjs';
-import { hex } from '../../lib/theme.mjs';
+import { glyphs as G, hex } from '../../lib/theme.mjs';
 import { inputsOf, fixtures, NOW } from './boards.mjs';
 
 // A sweep's card in each of its states, and a build's beside them, as approved: every row but the agents', the rules
@@ -487,6 +487,22 @@ test('needs-you frame pulses', () => {
   const view = buildView(inputsOf('NeedsYou'));
   const c = tick => renderCard(view, { width: 100, frame: true, tick })[0][0].c;
   assert.notEqual(c(0), c(14));
+});
+
+test('a card that waits on the person pulses evenly, one step a second over a four-second beat, in its own colours', () => {
+  const withYou = buildView(inputsOf('StageBrainstorm'));
+  assert.equal(withYou.mode, 'with-you');
+  const glyph = beat => renderCard(withYou, { width: 100, frame: true, beat }).flat().find(s => s.t === G.withYou).c;
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7].map(glyph), ['accent', 'accent@80', 'accent@60', 'accent@80', 'accent', 'accent@80', 'accent@60', 'accent@80']);
+  // Each fade keeps its own depth: the frame goes down to @50, as it does when it moves fast, and half way is @75.
+  const frame = beat => renderCard(buildView(inputsOf('NeedsYou')), { width: 100, frame: true, beat })[0][0].c;
+  assert.deepEqual([0, 1, 2, 3].map(frame), ['needsYou', 'needsYou@75', 'needsYou@50', 'needsYou@75']);
+  assert.ok([...Array(28).keys()].some(tick => renderCard(buildView(inputsOf('NeedsYou')), { width: 100, frame: true, tick })[0][0].c === 'needsYou@50'));
+});
+
+test('the slow pulse changes colours only: its bars are full and its text is the still card\'s', () => {
+  const still = card('RunningA', { width: 126, frame: true });
+  for (const beat of [0, 2]) assert.equal(toPlain(card('RunningA', { width: 126, frame: true, beat })), toPlain(still));
 });
 
 test('buildView: quiet, stalled and waiting agents', () => {

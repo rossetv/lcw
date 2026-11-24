@@ -3,7 +3,7 @@
 import fs from 'node:fs'
 import { sessionFile, spendFile, spendDir, capFile, runsDir, runPaths, repoKey } from '../../lib/key.mjs'
 import { moneyFrom, recordReading, spendFileCounts, readingOf } from '../../lib/spend.mjs'
-import { home, readJson, writeJson } from './store.mjs'
+import { home, readJson, writeJson, removeFile } from './store.mjs'
 import { readSetting, readReading } from './spend-command.mjs'
 import { sessionBilling, sessionIdentity } from './quota-session.mjs'
 
@@ -45,7 +45,7 @@ export function recordSpend(sessionId, rawCost, now) {
 
 /** Takes a session's dollars back out: it turned out to be a subscription. */
 export function dropSpend(sessionId) {
-  fs.rmSync(spendFile(home(), sessionId), { force: true })
+  removeFile(spendFile(home(), sessionId))
 }
 
 /** Records the session's billing kind; the file is read and written only when the kind changes. */

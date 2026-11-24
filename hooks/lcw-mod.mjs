@@ -18,8 +18,20 @@ export function isShown(state, now) {
   return typeof at === 'number' && now - at <= TEN_MINUTES
 }
 
-/** Only a finished card holds still; every other state has a heartbeat. */
-export const isAnimating = (state) => state.status !== 'finished'
+/**
+ * How long a step of the card's motion lasts, in ms, for the card's mode (buildView's): 200 while a turn or an agent
+ * works, 1000 while the run waits on the person, 0 (it holds still) when paused or finished.
+ */
+export const cardPace = (mode, working) => (mode !== 'running' && mode !== 'with-you' ? 0 : working ? 200 : 1000)
+
+/**
+ * The card's motion at now, from the clock: the tick in 100 ms units, so a fade lasts as long at any pace, or at
+ * a pace of a second the beat, its count of seconds. step is the step's number; a redraw is due when it changes.
+ */
+export function cardMotion(pace, since, now) {
+  const step = Math.floor((now - since) / pace)
+  return pace >= 1000 ? { step, beat: step } : { step, tick: step * pace / 100 }
+}
 
 /** 'light' when Claude Code's theme setting names a light theme, else 'dark'. */
 export function themeFrom(configRows) {

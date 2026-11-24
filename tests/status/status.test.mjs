@@ -6,7 +6,10 @@ import { tmp, lcw, readJson, makeRepo, git } from '../core/helpers.mjs'
 import { mapInput } from '../../scripts/statusline.mjs'
 import { renderStatusRows } from '../../lib/status.mjs'
 import { toAnsi } from '../../lib/paint.mjs'
-import { diffOf } from '../../scripts/lib/diff.mjs'
+import { gitOf } from '../../scripts/lib/diff.mjs'
+
+// The lines added and removed, as the status line asks git for them.
+const diffOf = (cwd, home, now) => gitOf(cwd, home, now, ['diff']).diff
 
 const ROOT = new URL('../..', import.meta.url).pathname
 const LINE = ROOT + 'scripts/statusline.mjs'
@@ -282,11 +285,32 @@ test('the diff counts a branch from where it left main, with uncommitted edits a
   assert.deepEqual(diffOf(repo, home, now), { added: 5, removed: 1 })
   fs.writeFileSync(repo + '/more.txt', '1\n')
   assert.deepEqual(diffOf(repo, home, now + 1000), { added: 5, removed: 1 }, 'kept for a few seconds')
-  assert.deepEqual(diffOf(repo, home, now + 6000), { added: 6, removed: 1 })
+  assert.deepEqual(diffOf(repo, home, now + 15000), { added: 6, removed: 1 })
   const onMain = makeRepo()
   fs.writeFileSync(onMain + '/a.txt', 'uno\n'); fs.writeFileSync(onMain + '/b.txt', 'b\n')
   assert.deepEqual(diffOf(onMain, home, now), { added: 2, removed: 1 })
   assert.equal(diffOf(tmp('plain'), home, now), null)
+})
+
+test('a repository with no commit yet keeps what git said for 15 seconds, as any answer', () => {
+  const home = tmp('home'), fresh = tmp('fresh')
+  git(fresh, 'init', '-q', '-b', 'main')
+  const facts = gitOf(fresh, home, 1e12, ['main', 'branch', 'diff'])
+  assert.equal(facts.main, fresh)
+  assert.equal(fs.readdirSync(`${home}/cache`).length, 1)
+  fs.writeFileSync(fresh + '/a.txt', 'one\n'); git(fresh, 'add', '.'); git(fresh, 'commit', '-qm', 'one')
+  assert.equal(gitOf(fresh, home, 1e12 + 14_999, ['branch']).branch, null, 'git is not asked again')
+  assert.equal(gitOf(fresh, home, 1e12 + 15_000, ['branch']).branch, 'main')
+})
+
+test('a git that fails for another reason than "not a repository" is kept for 15 seconds too', () => {
+  const home = tmp('home'), bin = tmp('bin'), repo = makeRepo(), PATH = process.env.PATH
+  fs.writeFileSync(`${bin}/git`, '#!/bin/sh\necho "fatal: unable to read the index" >&2\nexit 128\n', { mode: 0o755 })
+  process.env.PATH = `${bin}:${PATH}`
+  let facts
+  try { facts = gitOf(repo, home, 1e12, ['branch', 'diff']) } finally { process.env.PATH = PATH }
+  assert.deepEqual([facts.branch, facts.diff], [null, null])
+  assert.equal(fs.readdirSync(`${home}/cache`).length, 1)
 })
 
 test('the diff column stands at the right edge of both rows, and gives way before the branch is shortened', () => {

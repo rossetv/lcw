@@ -17,7 +17,8 @@ type SpendRecord = import('../lib/spend.mjs').SpendRecord
 type Billing = import('../lib/billing.mjs').Billing
 
 export function isShown(state: any, now: number): boolean
-export function isAnimating(state: any): boolean
+export function cardPace(mode: string, working: boolean): 0 | 200 | 1000
+export function cardMotion(pace: number, since: number, now: number): { step: number; tick?: number; beat?: number }
 export function themeFrom(configRows: readonly { key: string; value: unknown }[] | undefined): 'dark' | 'light'
 export function trackAgents(list: readonly any[] | undefined, seen: Seen | undefined, now: number): { agents: CardAgent[]; seen: Seen }
 export function buttons(row: Row): { id?: string; spans: Span[] }[]

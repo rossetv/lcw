@@ -19,7 +19,7 @@ The card above the prompt shows the stage, the tasks, each agent with its model 
 /plugin install lcw@lcw
 ```
 
-The rows turn on by themselves, unless you already have a status line; then say "set up LCW". Needs macOS or Linux, Node 18 or later, and git.
+The rows turn on by themselves, unless you already have a status line; then say "set up LCW". If the rows ever go missing, `~/.lcw/statusline.log` says why; if it has nothing, say "set up LCW". Needs macOS or Linux, Node 18 or later, and git.
 
 ## Then just ask
 

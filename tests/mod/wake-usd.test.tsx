@@ -40,10 +40,11 @@ function engine(on: any, files: Record<string, string>, transcriptPath = '', mti
   on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
   on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
   on('fs.list', async (_: any, e: any) => {
+    if (e.path !== SPEND) throw new Error('only the spend folder is listed here')
     listed.push(e.path)
     if (held) await new Promise((resolve) => held!.push(resolve))
     const names = Object.keys(files).filter((p) => p.startsWith(e.path + '/')).map((p) => p.slice(e.path.length + 1))
-    return { value: names.map((name) => ({ name, kind: 'file', size: 1, mtimeMs: mtimes[e.path + '/' + name] ?? 0, isLink: false })) }
+    return { value: names.map((name) => ({ name, kind: 'file', size: files[e.path + '/' + name]!.length, mtimeMs: mtimes[e.path + '/' + name] ?? 0, isLink: false })) }
   })
   on('process.run', (_: any, e: any) => {
     if (e.argv[1]?.endsWith('/scripts/gate-reconcile.mjs')) {

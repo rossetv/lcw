@@ -21,6 +21,10 @@ function engine(on: any, files: Record<string, string>, opts: {
 } = {}) {
   const clock = mock.clock(on, { now: NOW })
   const times: Record<string, number> = {}
+  // Every change to a file moves its time on, as a file system's does, two changes in one moment included.
+  let changes = 0
+  const touch = (path: string) => { times[path] = clock.now() + ++changes / 1000 }
+  files = new Proxy(files, { set: (all, path: string, text) => { all[path] = text; touch(path); return true } })
   const runs: string[][] = []
   const prompts: { text: string; asUser?: boolean }[] = []
   const toasts: string[] = []
@@ -41,7 +45,7 @@ function engine(on: any, files: Record<string, string>, opts: {
     throw new Error('ENOENT')
   })
   on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
-  on('fs.write', (_: any, e: any) => { files[e.path] = e.text; times[e.path] = NOW; return { value: undefined } })
+  on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
   on('fs.list', (_: any, e: any) => {
     const kids = new Map<string, string>()
     for (const p of Object.keys(files)) {
@@ -50,7 +54,7 @@ function engine(on: any, files: Record<string, string>, opts: {
       kids.set(name, more.length ? 'dir' : 'file')
     }
     if (!kids.size) throw new Error('ENOENT')
-    return { value: [...kids].map(([name, kind]) => ({ name, kind, size: 1, isLink: false, mtimeMs: kind === 'dir' ? 0 : times[e.path + '/' + name] ?? NOW - 2 * HOUR })) }
+    return { value: [...kids].map(([name, kind]) => ({ name, kind, size: kind === 'dir' ? 0 : files[e.path + '/' + name]!.length, isLink: false, mtimeMs: kind === 'dir' ? 0 : times[e.path + '/' + name] ?? NOW - 2 * HOUR })) }
   })
   on('process.run', async (_: any, e: any) => {
     runs.push([...e.argv])
@@ -220,10 +224,11 @@ test('on pay-per-token billing Wait hides this climb to the mark; spend below it
   w.files['/lcw/spend/s1.json'] = spent(3500)
   await w.clock.advance(2000)
   expect(await band.find(atMark)).toBeUndefined()
+  // With no run the files are looked at every five seconds: the minute below is counted from the first look that sees it.
   w.files['/lcw/spend/s1.json'] = spent(1000)
-  await w.clock.advance(62000)
+  await w.clock.advance(66000)
   w.files['/lcw/spend/s1.json'] = spent(3500)
-  await w.clock.advance(2000)
+  await w.clock.advance(5000)
   expect(await band.find(atMark)).toBeDefined()
   await band.unmount()
 })
@@ -595,11 +600,27 @@ test('whether the computer can be kept awake is not asked again once Not now hid
   await band.unmount()
 })
 
+// A ledger that changes is a run some session is at work on, which is no longer left halfway: the scan does not read it.
+test('the ledger of a run left halfway is read once, not at every look over the runs', async ($, on) => {
+  const w = engine(on, leftHalfway())
+  await start($)
+  await w.clock.advance(100000)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /stopped halfway: old-run\./ })).toBeDefined()
+  expect(w.reads.filter((p) => p === OLD + '/ledger.md').length).toBe(1)
+  await band.unmount()
+})
+
 test('a finished run of the repository is read once a session, not at every look over the runs', async ($, on) => {
   const done = '/lcw/repos/repo-1/runs/r4/state.json'
   const w = engine(on, { ...leftHalfway(), [done]: JSON.stringify({ id: 'r4', name: 'shipped', status: 'finished', stage: 'Ship' }) })
   await start($)
-  await w.clock.advance(65000)
+  await w.clock.advance(31000)
+  // The open run moves on, as an open run's state does. The finished one is written too: a run found finished is not
+  // looked at again, whatever its file does.
+  w.files[OLD + '/state.json'] = JSON.stringify({ ...JSON.parse(w.files[OLD + '/state.json']!), stage: 'Review' })
+  w.files[done] = JSON.stringify({ ...JSON.parse(w.files[done]!), finishedAt: NOW })
+  await w.clock.advance(34000)
   expect(w.reads.filter((p) => p === done).length).toBe(1)
   expect(w.reads.filter((p) => p === OLD + '/state.json').length).toBeGreaterThan(1)
 })
@@ -612,7 +633,29 @@ test("a status line the person had before LCW shows the status-line box, and not
   const band = await $.ui.mount(BAND)
   expect(await band.find({ type: 'Text', text: /status rows were replaced/ })).toBeDefined()
   w.files['/lcw/notices.json'] = JSON.stringify({ auto: 'off' })
-  await w.clock.advance(2200)
+  await w.clock.advance(5200)
+  expect(await band.find({ type: 'Text', text: /status rows were replaced/ })).toBeUndefined()
+  await band.unmount()
+})
+
+test("LCW's player command is LCW's own: no box", async ($, on) => {
+  const command = `lcw_bin='/lcw/bin'; [ -r "$lcw_bin/statusline.sh" ] && . "$lcw_bin/statusline.sh"; node "$lcw_bin/statusline.mjs" || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'`
+  engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }) }, { settings: { statusLine: { type: 'command', command } } })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /status rows were replaced/ })).toBeUndefined()
+  await band.unmount()
+})
+
+test("another status line still shows the box after the notice setup writes when it moves LCW's command, and Keep mine keeps it away", async ($, on) => {
+  const settings = { statusLine: { type: 'command', command: 'starship statusline' } }
+  const w = engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }), '/lcw/notices.json': JSON.stringify({ statusline: 'moved' }) }, { settings })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /status rows were replaced/ })).toBeDefined()
+  await band.press({ key: 'banner:statusline:keep' })
+  expect(JSON.parse(w.files['/lcw/notices.json']!)).toEqual({ statusline: 'moved', statuslineKept: 'never' })
+  await w.clock.advance(5200)
   expect(await band.find({ type: 'Text', text: /status rows were replaced/ })).toBeUndefined()
   await band.unmount()
 })

@@ -86,8 +86,9 @@ export function weekOf(state: Record<string, any>, week?: { percentUsed?: number
 export function weekShare(state: Record<string, any>, week?: { percentUsed?: number; resetsAt?: string | null } | null): number | null;
 /**
  * The card as rows. opts.frame draws the box (not below 44 columns); opts.maxRows drops agent rows first
- * and says "N more agents"; opts.tick (ten a second, 0 on the card's first draw, which is when the bars fill)
- * moves the colours; without it everything holds still. A row wider than the card loses the end of its left group.
+ * and says "N more agents"; opts.tick (the time in 100 ms units, 0 on the card's first draw, which is when the bars fill)
+ * moves the colours, and opts.beat (the time in seconds) pulses them slowly instead; without either everything
+ * holds still. A row wider than the card loses the end of its left group.
  * A sweep with an open wave draws the waves row as the stage heading and one lane for each open wave (a hunt round
  * running beside them has its own); below about 60 columns the lanes are compact, and below 44 columns the narrow layout's.
  * Action ids on spans: toggle:<agentId> (the caret), view:<agentId> (the glyph and the description), more.

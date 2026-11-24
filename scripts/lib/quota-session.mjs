@@ -1,9 +1,10 @@
-import fs from 'node:fs'
 import { sessionFile, spendFile } from '../../lib/key.mjs'
 import { activeQuota, selectQuota, quotaOff, evaluateQuota, normalizeEndpoint } from '../../lib/quota.mjs'
-import { home, readJson, writeJson } from './store.mjs'
+import { home, readJson, writeJson, removeFile } from './store.mjs'
 import { readQuotaState, maybeRefreshQuota } from './quota-command.mjs'
 import { alive } from './awake.mjs'
+
+export { quotaLine } from '../../lib/mark.mjs'
 
 export function sessionIdentity(id) {
   if (!id) return id
@@ -62,24 +63,24 @@ export function noteQuotaSession(ids, { startup = false, endpoint = process.env.
     if (selection) next.quotaDefaultBilling = prior
     else delete next.quotaDefaultBilling
     if (JSON.stringify(next) !== JSON.stringify(session)) writeJson(sessionFile(home(), id), next)
-    if (selection) fs.rmSync(spendFile(home(), id), { force: true })
+    if (selection) removeFile(spendFile(home(), id))
   }
 }
 
-export function readSessionQuota(ids, now, mark) {
+/** The session's outside quota as it stands at now, or null; reads only, and starts nothing. */
+export function sessionQuota(ids, now, mark) {
   const resolved = [...new Set([].concat(ids ?? []).flatMap((id) => [sessionIdentity(id), id]))]
   const selection = records(resolved).find(({ session }) => Object.hasOwn(session, 'quotaSelection'))?.session.quotaSelection
-  const view = evaluateQuota(selection, readQuotaState(home()), now, mark)
+  return evaluateQuota(selection, readQuotaState(home()), now, mark)
+}
+
+/** sessionQuota, and a refresh of the figure in the background when it is due. */
+export function readSessionQuota(ids, now, mark) {
+  const view = sessionQuota(ids, now, mark)
   if (view) maybeRefreshQuota(home(), now)
   return view
 }
 
 export function quotaUsage(view, now) {
   return view ? { at: view.observedAt ?? now, source: view.sourceId, sevenDay: view.status === 'ok' ? { percentUsed: view.percentUsed, resetsAt: view.resetsAt } : null } : null
-}
-
-export function quotaLine(view) {
-  return view.status === 'ok'
-    ? `external week: ${view.percentUsed}% used${view.blocked ? '; provider refused new work' : ''}`
-    : `external quota: ${view.status}${view.code ? ` (${view.code})` : ''}; new work held`
 }

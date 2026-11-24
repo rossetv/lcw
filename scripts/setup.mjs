@@ -4,12 +4,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { home, readJson, writeAtomic, writeJson } from './lib/store.mjs'
 import { noticesFile } from '../lib/key.mjs'
+import { STATUSLINE_MOVED, isLcwStatusLine, keepsOwnStatusLine, statusLineCommands } from '../lib/banner.mjs'
+import { STATUS_FILES, copyStatusFiles, isCurrentInstall } from './lib/status-files.mjs'
 
 const [cmd, ...rest] = process.argv.slice(2)
 const i = rest.indexOf('--settings')
 const settingsPath = i >= 0 ? rest[i + 1] : `${process.env.CLAUDE_CONFIG_DIR || `${process.env.HOME}/.claude`}/settings.json`
 const lcw = home()
-const shim = `${lcw}/bin/statusline.mjs`
+const bin = `${lcw}/bin`
+const setupRoot = `${bin}/setup-root`
 const prevFile = `${lcw}/previous-statusline.json`
 const addedDirFile = `${lcw}/added-directory`
 const advisorFile = `${lcw}/set-advisor`
@@ -20,17 +23,9 @@ let quiet = false // auto prints only its own lines
 const out = (s) => quiet || console.log(s)
 const fail = (s) => { console.error(s); process.exit(1) }
 
-const shimText = `// Written by LCW setup. Follows the plugin folder across updates.
-import fs from 'node:fs'
-let root = ${JSON.stringify(pluginRoot)}
-try { root = fs.readFileSync(new URL('../plugin-root', import.meta.url), 'utf8').trim() || root } catch {}
-const { main } = await import(\`\${root}/scripts/statusline.mjs\`)
-// Under the padding setup writes beside this command, Claude Code shows COLUMNS - 4 cells of each row.
-await main({ margin: 4 })
-`
-const quoted = (p) => `'${p.replace(/'/g, `'\\''`)}'`
-// a path with a space or a quote in it is quoted for the shell; a plain one stays bare, as installs before this wrote it
-const command = `node ${/^[\w@%+=:,./-]+$/.test(shim) ? shim : quoted(shim)}`
+const lines = statusLineCommands(lcw)
+// on Windows a path with a space or a quote in it is quoted for the shell, and a plain one stays bare, as before
+const command = process.platform !== 'win32' ? lines.player : /^[\w@%+=:,./-]+$/.test(bin) ? lines.node[0] : lines.node[1]
 
 function load() {
   if (!fs.existsSync(settingsPath)) return {}
@@ -84,7 +79,7 @@ function save(settings) {
   }
 }
 
-const mine = (sl) => [`node ${shim}`, `node ${quoted(shim)}`].includes(sl?.command)
+const mine = (sl) => isLcwStatusLine(sl?.command, lcw)
 
 /** Turns on the advisor a run consults at every stage; leaves a choice the human already made. */
 function setAdvisor(s) {
@@ -94,19 +89,32 @@ function setAdvisor(s) {
   out('set advisorModel to "fable": a second model reviews the work at every stage of a run')
 }
 
-/** Writes the shim and sets LCW's status rows, keeping the status line that was there. */
+/**
+ * Before a command older mods do not know as LCW's goes in the settings: their "replaced" box stays away while any
+ * statusline notice is set. They read the notices and the settings together, so the settings wait a moment behind it.
+ */
+function quietOlderMods() {
+  if (lines.node.includes(command)) return
+  const notices = readJson(noticesFile(lcw)) ?? {}
+  if (notices.statusline) return
+  writeJson(noticesFile(lcw), { ...notices, statusline: STATUSLINE_MOVED })
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300)
+}
+
+/** Writes the status line's files and sets LCW's status rows, keeping the status line that was there. */
 function setStatusLine(s) {
-  writeAtomic(shim, shimText)
-  out(`wrote ${shim}`)
+  copyStatusFiles(pluginRoot, lcw)
+  out(`wrote the status line's files in ${bin}`)
   // the line replaced is saved each time it is not LCW's own, so uninstall restores the newest one the person had
   if (s.statusLine && !mine(s.statusLine)) {
     writeAtomic(prevFile, JSON.stringify(s.statusLine, null, 2) + '\n')
     out(`saved your previous statusLine to ${prevFile}`)
   } else if (!s.statusLine) fs.rmSync(prevFile, { force: true }) // the person deleted the saved line: uninstall must not bring it back
   // every second, the shortest Claude Code allows: the mascot moves once a second. A padding of 0 starts the
-  // rows two cells in and shows COLUMNS - 4 of them whole (seen in 2.1.327; the shim tells the script how much
+  // rows two cells in and shows COLUMNS - 4 of them whole (seen in 2.1.327; the launcher tells the script how much
   // room it has).
   s.statusLine = { type: 'command', command, refreshInterval: 1, padding: 0 }
+  quietOlderMods()
   out(`set statusLine to: ${command}`)
 }
 
@@ -171,19 +179,27 @@ if (cmd === 'install') {
   // Runs on an interactive session's first draw: prints a line for each thing it turned on, and nothing otherwise.
   quiet = true
   const notices = readJson(noticesFile(lcw)) ?? {}
-  if (notices.auto !== 'off') {
+  // a session started from a throwaway copy, or from a version older than the installed one, changes nothing
+  if (notices.auto !== 'off' && isCurrentInstall(pluginRoot)) {
     const s = load()
     const said = []
-    if (!s.statusLine && notices.statusline !== 'never' && !projectStatusLine()) {
+    let moved = false
+    if (mine(s.statusLine) && s.statusLine.command.trim() !== command) {
+      // LCW's own older command, brought up to date without a word; the rest of the setting stays as it is
+      copyStatusFiles(pluginRoot, lcw)
+      s.statusLine = { ...s.statusLine, command }
+      quietOlderMods()
+      moved = true
+    } else if (!s.statusLine && !keepsOwnStatusLine(notices) && !projectStatusLine()) {
       setStatusLine(s)
       said.push('LCW turned on its status rows. Say "uninstall LCW" to undo it.')
     }
     const attributionChanged = setAttributionOff(s)
     const tell = attributionChanged && !notices.attributionTold // the first time on a machine only
     if (tell) said.push('LCW turned off the AI attribution Claude Code adds to commits and pull requests. Say "uninstall LCW" to put it back.')
-    if (attributionChanged || said.length) {
+    if (attributionChanged || said.length || moved) {
       save(s)
-      if (tell) writeJson(noticesFile(lcw), { ...notices, attributionTold: true })
+      if (tell) writeJson(noticesFile(lcw), { ...readJson(noticesFile(lcw)), attributionTold: true })
       for (const line of said) console.log(line)
     }
   }
@@ -228,14 +244,14 @@ if (cmd === 'install') {
   done.push(advisorFile)
   if (fs.existsSync(settingsPath)) save(s)
   for (const f of done) fs.rmSync(f, { force: true })
-  if (fs.existsSync(shim)) { fs.rmSync(shim); out(`deleted ${shim}`) }
+  for (const f of [...STATUS_FILES.map((f) => `${bin}/${f}`), setupRoot]) if (fs.existsSync(f)) { fs.rmSync(f); out(`deleted ${f}`) }
   // neither the status rows nor the attribution come back by themselves, until the person says "set up LCW"
   writeJson(noticesFile(lcw), { ...readJson(noticesFile(lcw)), auto: 'off' })
 } else if (cmd === 'status') {
   const s = fs.existsSync(settingsPath) ? load() : {}
   out(`settings: ${settingsPath}`)
   out(`statusLine: ${mine(s.statusLine) ? 'LCW' : s.statusLine ? 'another command' : 'none'}`)
-  out(`shim: ${fs.existsSync(shim) ? 'present' : 'missing'}`)
+  out(`status line files: ${STATUS_FILES.every((f) => fs.existsSync(`${bin}/${f}`)) ? 'present' : 'missing'}`)
   out(`previous statusLine saved: ${fs.existsSync(prevFile) ? 'yes' : 'no'}`)
   out(`permissions.additionalDirectories has ${lcw}: ${s.permissions?.additionalDirectories?.includes(lcw) ? 'yes' : 'no'}`)
   out(`env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: ${s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH ?? 'unset'}`)

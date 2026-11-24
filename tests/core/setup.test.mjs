@@ -2,11 +2,13 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { tmp } from './helpers.mjs'
+import { tmp, installedConfig } from './helpers.mjs'
+import { STATUS_FILES } from '../../scripts/lib/status-files.mjs'
 
 const SETUP = new URL('../../scripts/setup.mjs', import.meta.url).pathname
+const INSTALLED = installedConfig()
 const setup = (home, settings, cmd) => {
-  const r = spawnSync('node', [SETUP, cmd, '--settings', settings], { cwd: tmp('cwd'), encoding: 'utf8', env: { ...process.env, LCW_HOME: home } })
+  const r = spawnSync('node', [SETUP, cmd, '--settings', settings], { cwd: tmp('cwd'), encoding: 'utf8', env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: INSTALLED } })
   return { code: r.status, out: r.stdout, err: r.stderr }
 }
 const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'))
@@ -25,6 +27,10 @@ test('setup writes through a linked settings file to the file it names, and keep
   }
 })
 
+test('the status line files setup and the session start copy are every file in scripts/bin, and only those', () => {
+  assert.deepEqual([...STATUS_FILES].sort(), fs.readdirSync(new URL('../../scripts/bin', import.meta.url)).sort())
+})
+
 test('setup keeps the settings file\'s mode', () => {
   const home = tmp('home'), settings = tmp('s') + '/settings.json'
   fs.writeFileSync(settings, JSON.stringify({ theme: 'dark' }))
@@ -35,19 +41,22 @@ test('setup keeps the settings file\'s mode', () => {
   }
 })
 
-test('the status line runs from a home with a space in its path, and a plain path is written as before', () => {
+test('the status line runs from a home with a space or a quote in its path', () => {
   const home = tmp('my home') + '/.lcw', settings = tmp('s') + '/settings.json'
   assert.equal(setup(home, settings, 'install').code, 0)
   const { command } = read(settings).statusLine
   const input = JSON.stringify({ model: { display_name: 'Opus 5' }, cwd: tmp('cwd') })
   const r = spawnSync('sh', ['-c', command], { input, encoding: 'utf8', env: { ...process.env, LCW_HOME: home, COLUMNS: '100' } })
   assert.equal(r.status, 0, r.stderr)
-  assert.ok(r.stdout.trim(), 'it printed the rows')
+  assert.match(r.stdout, /Opus 5/, 'it printed the rows')
   assert.match(setup(home, settings, 'status').out, /statusLine: LCW/)
 
-  const plain = tmp('home'), other = tmp('s') + '/settings.json'
-  setup(plain, other, 'install')
-  assert.equal(read(other).statusLine.command, `node ${plain}/bin/statusline.mjs`)
+  const quote = tmp("it's") + '/.lcw', other = tmp('s') + '/settings.json'
+  setup(quote, other, 'install')
+  const q = `'${quote.replace(/'/g, `'\\''`)}`
+  assert.equal(read(other).statusLine.command, `lcw_bin=${q}/bin'; [ -r "$lcw_bin/statusline.sh" ] && . "$lcw_bin/statusline.sh"; node "$lcw_bin/statusline.mjs" || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'`)
+  const s = spawnSync('sh', ['-c', read(other).statusLine.command], { input, encoding: 'utf8', env: { ...process.env, LCW_HOME: quote, COLUMNS: '100' } })
+  assert.match(s.stdout, /Opus 5/, s.stderr)
 })
 
 test('a status line installed before paths were quoted is still LCW\'s own, and uninstall takes it out', () => {

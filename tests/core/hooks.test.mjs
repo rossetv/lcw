@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
-import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
+import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, installedConfig, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
 import * as gate from '../../scripts/lib/gate.mjs'
 
 process.env.TZ = 'Europe/Dublin'
@@ -108,7 +108,7 @@ test('gate hook allows a run whose percent gate has expired once the new week is
 test('session-start hook without a run prints the rule and the command', () => {
   const home = tmp('home')
   const repo = makeRepo()
-  const r = run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }) })
+  const r = run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }), env: { CLAUDE_CONFIG_DIR: installedConfig() } })
   assert.equal(r.code, 0)
   assert.match(r.out, /lcw:lcw skill/)
   assert.match(r.out, /open goal[^\n]*load the lcw:lcw skill/, 'an open goal loads the skill as a large change does')
@@ -120,6 +120,142 @@ test('session-start hook without a run prints the rule and the command', () => {
   assert.ok(!/past LCW runs/.test(r.out))
   assert.ok(r.out.split('\n').length <= 25)
   assert.ok(fs.existsSync(`${fs.readFileSync(`${home}/plugin-root`, 'utf8').trim()}/scripts/lcw.mjs`))
+})
+
+test('a session start from a throwaway copy leaves the pointer and the status line\'s files alone, whether there are any or not', () => {
+  const repo = makeRepo()
+  const env = { CLAUDE_CONFIG_DIR: installedConfig(tmp('installed')) }
+  const start = (home) => run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }), env })
+  const fresh = tmp('home')
+  assert.match(start(fresh).out, /LCW command line: /)
+  assert.ok(!fs.existsSync(`${fresh}/plugin-root`))
+  const pointed = tmp('home')
+  fs.writeFileSync(`${pointed}/plugin-root`, '/the/installed/plugin')
+  fs.mkdirSync(`${pointed}/bin`)
+  fs.writeFileSync(`${pointed}/bin/statusline.mjs`, '// an older launcher\n')
+  start(pointed)
+  assert.equal(fs.readFileSync(`${pointed}/plugin-root`, 'utf8'), '/the/installed/plugin')
+  assert.deepEqual(fs.readdirSync(`${pointed}/bin`), ['statusline.mjs'])
+  assert.equal(fs.readFileSync(`${pointed}/bin/statusline.mjs`, 'utf8'), '// an older launcher\n')
+})
+
+test('a session start from the installed copy brings the status line\'s files up to date where LCW\'s status line was set up, and adds none elsewhere', () => {
+  const repo = makeRepo()
+  const root = path.resolve(START_HOOK, '../..')
+  const start = (home) => run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }), env: { CLAUDE_CONFIG_DIR: installedConfig() } })
+  const home = tmp('home')
+  fs.mkdirSync(`${home}/bin`)
+  fs.writeFileSync(`${home}/bin/statusline.mjs`, '// an older launcher\n')
+  start(home)
+  for (const f of fs.readdirSync(`${root}/scripts/bin`)) assert.equal(fs.readFileSync(`${home}/bin/${f}`, 'utf8'), fs.readFileSync(`${root}/scripts/bin/${f}`, 'utf8'), f)
+  assert.equal(fs.readFileSync(`${home}/bin/setup-root`, 'utf8'), root + '\n')
+  const none = tmp('home')
+  start(none)
+  assert.ok(!fs.existsSync(`${none}/bin`), 'no status line of LCW\'s was set up there')
+})
+
+/** A copy of this plugin at dir, as Claude Code keeps one or as a checkout holds it, its player marked with the folder's name. */
+function pluginCopy(dir) {
+  const root = path.resolve(START_HOOK, '../..')
+  for (const d of ['scripts', 'lib', '.claude-plugin']) fs.cpSync(`${root}/${d}`, `${dir}/${d}`, { recursive: true })
+  fs.appendFileSync(`${dir}/scripts/bin/statusline.sh`, `# ${path.basename(dir)}\n`)
+  return dir
+}
+
+/**
+ * A scratch Claude Code config folder with these marketplaces and install records (null: no record file), the
+ * session-start hook of a copy run against it, and a home where LCW's status line was set up.
+ */
+function claudeWith(config, markets, plugins) {
+  fs.mkdirSync(`${config}/plugins`, { recursive: true })
+  fs.writeFileSync(`${config}/plugins/known_marketplaces.json`, JSON.stringify(markets))
+  if (plugins) fs.writeFileSync(`${config}/plugins/installed_plugins.json`, JSON.stringify({ version: 2, plugins }))
+  const repo = makeRepo()
+  const start = (dir, home, source) => run(`${dir}/scripts/hook-session-start.mjs`, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo, ...(source ? { source } : {}) }), env: { CLAUDE_CONFIG_DIR: config, LCW_AUTH_STATUS_JSON: 'fail' } })
+  const home = () => {
+    const h = tmp('home')
+    fs.mkdirSync(`${h}/bin`)
+    fs.writeFileSync(`${h}/bin/statusline.mjs`, '// an older launcher\n')
+    return h
+  }
+  return { start, home }
+}
+const pointerAndFiles = (home) => Object.fromEntries(['plugin-root', ...fs.readdirSync(`${home}/bin`).map((f) => `bin/${f}`)].map((f) => [f, fs.readFileSync(`${home}/${f}`, 'utf8')]))
+/** Whether the pointer, setup-root and the player in home are the ones of the copy at dir. */
+const movedTo = (home, dir) => fs.existsSync(`${home}/plugin-root`) && fs.readFileSync(`${home}/plugin-root`, 'utf8') === dir
+  && fs.readFileSync(`${home}/bin/setup-root`, 'utf8') === dir + '\n'
+  && fs.readFileSync(`${home}/bin/statusline.sh`, 'utf8') === fs.readFileSync(`${dir}/scripts/bin/statusline.sh`, 'utf8')
+/** Versions in Claude Code's cache, as an update leaves them; the install records name those given, in that order. */
+function cached(recorded) {
+  const config = tmp('claude')
+  const v = Object.fromEntries(['0.8.1', '0.8.0', '0.7.9'].map((n) => [n, pluginCopy(`${config}/plugins/cache/lcw/lcw/${n}`)]))
+  const records = recorded && recorded.map(([n, scope]) => ({ scope, installPath: v[n], version: n, ...(scope === 'project' ? { projectPath: '/a/project' } : {}) }))
+  return { v, ...claudeWith(config, { lcw: { source: { source: 'github', repo: 'owner/lcw' } } }, records && { 'lcw@lcw': records }) }
+}
+
+test('the installed version\'s start moves the pointer and the status line\'s files; an older version still open never moves them back, at any source', () => {
+  const c = cached([['0.8.1', 'user']])
+  const said = {}
+  for (const source of ['compact', 'clear', 'startup', 'resume', undefined]) {
+    const home = c.home()
+    c.start(c.v['0.8.1'], home, 'startup')
+    assert.ok(movedTo(home, c.v['0.8.1']))
+    const before = pointerAndFiles(home)
+    const r = c.start(c.v['0.8.0'], home, source)
+    assert.equal(r.code, 0, r.err)
+    said[source] = r.out
+    assert.deepEqual(pointerAndFiles(home), before, String(source))
+  }
+  for (const source of ['clear', 'startup', 'resume', undefined]) assert.equal(said[source], said.compact, 'what the hook prints does not depend on the source')
+})
+
+test('with no install record a cached version that starts or resumes moves the pointer and the files, as an input with no source does; one that clears or compacts does not', () => {
+  const c = cached(null)
+  for (const source of ['compact', 'clear', 'startup', 'resume', undefined]) {
+    const home = c.home()
+    c.start(c.v['0.8.1'], home, 'startup')
+    const before = pointerAndFiles(home)
+    c.start(c.v['0.8.0'], home, source)
+    if (source === 'compact' || source === 'clear') assert.deepEqual(pointerAndFiles(home), before, source)
+    else assert.ok(movedTo(home, c.v['0.8.0']), String(source))
+  }
+})
+
+test('every version an install record names counts, whatever the order of the records; a cached one none names moves nothing', () => {
+  const c = cached([['0.8.0', 'project'], ['0.8.1', 'user']])
+  const fresh = c.home()
+  c.start(c.v['0.8.1'], fresh, 'startup')
+  assert.ok(movedTo(fresh, c.v['0.8.1']), 'the user\'s version, recorded second')
+  const home = c.home()
+  c.start(c.v['0.8.0'], home, 'startup')
+  assert.ok(movedTo(home, c.v['0.8.0']), 'the project\'s version, recorded first')
+  c.start(c.v['0.8.1'], home, 'resume')
+  assert.ok(movedTo(home, c.v['0.8.1']), 'a resume')
+  const before = pointerAndFiles(home)
+  c.start(c.v['0.7.9'], home, 'startup')
+  assert.deepEqual(pointerAndFiles(home), before, 'no record names it')
+})
+
+test('a checkout a directory marketplace loads is the installed copy, listed after another marketplace offering the plugin', () => {
+  const other = tmp('claude')
+  const b = claudeWith(other, { tools: { source: { source: 'github', repo: 'owner/tools' } }, lcw: { source: { source: 'directory', path: pluginCopy(`${tmp('dev')}/lcw`) } } },
+    { 'lcw@tools': [{ scope: 'user', installPath: pluginCopy(`${other}/plugins/cache/tools/lcw/1.0.0`), version: '1.0.0' }] })
+  const checkoutB = readJson(`${other}/plugins/known_marketplaces.json`).lcw.source.path
+  const home = b.home()
+  b.start(checkoutB, home, 'startup')
+  assert.ok(movedTo(home, checkoutB))
+})
+
+test('a checkout a directory marketplace loads is the installed copy, and the older cached copy its install record names is not', () => {
+  const config = tmp('claude')
+  const checkout = pluginCopy(`${tmp('dev')}/lcw`), stale = pluginCopy(`${config}/plugins/cache/lcw/lcw/0.6.22`)
+  const c = claudeWith(config, { lcw: { source: { source: 'directory', path: checkout } } }, { 'lcw@lcw': [{ scope: 'user', installPath: stale, version: '0.6.22' }] })
+  const h = c.home()
+  c.start(checkout, h, 'startup')
+  assert.ok(movedTo(h, checkout))
+  const before = pointerAndFiles(h)
+  c.start(stale, h, 'startup')
+  assert.deepEqual(pointerAndFiles(h), before, 'the older copy the record names is not the one loaded')
 })
 
 test('session-start hook with an unfinished run names it and the next step', () => {
@@ -394,7 +530,7 @@ const spawnGate = (home, repo, id = 'p1') => withEnv(clock, () => run(GATE_HOOK,
 test('session start on a per-token sign-in states the mark in dollars, asks for the cap, and keeps nothing of the sign-in report', () => {
   const home = tmp('home')
   const repo = makeRepo()
-  const out = startNote(home, repo, KEY)
+  const out = startNote(home, repo, { ...KEY, CLAUDE_CONFIG_DIR: installedConfig() })
   assert.match(out, /billed per token/)
   assert.ok(out.includes('A spend command, set with lcw spend-command, can supply the 7-day figure; set, change or turn it off only on the user\'s explicit words, as with the mark.'), 'the spend command clause')
   assert.ok(out.includes('$3,000 (75% of the $4,000 weekly cap, assumed)'), 'the mark in dollars')
@@ -459,9 +595,12 @@ test('session start under an API key leaves a settled subscription unclear and s
   const repo = makeRepo()
   const home = tmp('home')
   writeSession(home, 'p1', { billing: 'subscription' })
+  fs.mkdirSync(`${home}/told`)
+  fs.writeFileSync(`${home}/told/p1.json`, JSON.stringify({ payg: true }))
   const out = startNote(home, repo, KEY)
   assert.doesNotMatch(out, /per token/)
   assert.equal(sessionOf(home, 'p1').billing, 'unclear')
+  assert.ok(!fs.existsSync(`${home}/told/p1.json`), 'the mod\'s record of the note goes with it, so the note is said again')
   const other = tmp('home')
   writeSession(other, 'p1', { billing: 'payg', toldPayg: true })
   spent(other, 'p1', 40)
