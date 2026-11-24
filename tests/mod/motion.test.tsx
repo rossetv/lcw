@@ -14,13 +14,13 @@ const state = (over: object) => JSON.stringify({ id: 'a', name: 'a', status: 'ru
 const PAUSED = { status: 'paused', pausedReason: 'human' }
 const WITH_YOU = { status: 'with-you', stage: 'Brainstorm' }
 
-function engine(on: any, over: object) {
+function engine(on: any, over: object, agents: unknown[] = []) {
   const clock = mock.clock(on, { now: NOW })
   let t = NOW
   const files: Record<string, string> = {
     '/lcw/sessions/s1.json': JSON.stringify({ runDir: RUN }), [RUN + '/state.json']: state(over), [RUN + '/mod-alive']: String(NOW - 1000),
   }
-  const w = { files, redraws: 0, advance: async (ms: number) => { await clock.advance(ms); t += ms }, age: () => t - Number(files[RUN + '/mod-alive']) }
+  const w = { files, redraws: 0, theme: 'dark', advance: async (ms: number) => { await clock.advance(ms); t += ms }, age: () => t - Number(files[RUN + '/mod-alive']) }
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
@@ -33,8 +33,8 @@ function engine(on: any, over: object) {
   on('fs.list', () => ({ value: [] }))
   on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '' } }))
   on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
-  on('agent.list', () => ({ value: [] }))
-  on('config.list', () => ({ value: [] }))
+  on('agent.list', () => ({ value: agents }))
+  on('config.list', () => ({ value: [{ key: 'theme', value: w.theme }] }))
   on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
   on('ui.invalidate', (_: any, e: any, next: any) => { w.redraws++; return next(e) })
   return w
@@ -65,6 +65,32 @@ test('a card that waits on the person is redrawn once a second', async ($, on) =
 test('a card with a turn at work is redrawn five times a second', async ($, on) => {
   const w = engine(on, {})
   expect(await redrawsOverTen($, w, true)).toBe(50)
+})
+
+// An agent at the card's start, listed long enough that its times on the card do not change within the stretch.
+const agent = (status: string, over: object = {}) => ({
+  id: 'a1', description: 'Add date filters', type: 'lcw:worker', status, kind: 'local_agent', taskStatus: 'running',
+  model: 'sonnet', startTime: NOW - 600000, tokenCount: 10, ...over,
+})
+
+test('a card whose only agent waits is redrawn once a second', async ($, on) => {
+  const w = engine(on, {}, [agent('waiting')])
+  expect(await redrawsOverTen($, w)).toBe(10)
+})
+
+test('a card whose only agent has finished and is still listed is redrawn once a second', async ($, on) => {
+  const w = engine(on, {}, [agent('running', { taskStatus: 'completed' })])
+  expect(await redrawsOverTen($, w)).toBe(10)
+})
+
+test('a card with an agent running is redrawn five times a second', async ($, on) => {
+  const w = engine(on, {}, [agent('running')])
+  expect(await redrawsOverTen($, w)).toBe(50)
+})
+
+test('a card with an agent pending is redrawn five times a second', async ($, on) => {
+  const w = engine(on, {}, [agent('pending')])
+  expect(await redrawsOverTen($, w)).toBe(50)
 })
 
 test('a change on a paused card is drawn within a second', async ($, on) => {

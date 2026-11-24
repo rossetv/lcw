@@ -433,7 +433,8 @@ function cardView(run: Run, now: number) {
   return buildView({ state, agents: S.agents, usage: run.usage, gate: run.gate, money: run.money, quota: run.quota, now, ui: S.ui })
 }
 
-const working = () => S.turnRunning || S.agents.length > 0
+// An agent that waits (at a permission prompt, say), or has finished and is still listed, leaves the run waiting on the person.
+const working = () => S.turnRunning || S.agents.some((a) => (a.status === 'running' || a.status === 'pending') && !a.held)
 
 // The step of the card's motion at now, '' while it holds still.
 const stepAt = (pace: number, now: number) => (pace ? pace + ':' + cardMotion(pace, S.shownSince, now).step : '')
