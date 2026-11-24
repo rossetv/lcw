@@ -218,7 +218,7 @@ test('whether the computer can be kept awake is asked only while the box could s
   assert.equal(awakeCheckWanted({ ...state, stage: 'Brainstorm' }, {}, new Set()), false)
 })
 
-test("the status line is LCW's only when it is a command setup wrote, the player's or the node one; any other command is another one", () => {
+test("the status line is LCW's only when it is a command setup wrote for this home, the player's or the node one; another home's, on purpose, is another one", () => {
   assert.equal(statusLineFact(undefined, '/lcw'), null)
   assert.deepEqual(statusLineFact({ type: 'command', command: 'node /lcw/bin/statusline.mjs' }, '/lcw'), { command: 'node /lcw/bin/statusline.mjs', mine: true })
   assert.deepEqual(statusLineFact({ command: 'starship statusline' }, '/lcw'), { command: 'starship statusline', mine: false })

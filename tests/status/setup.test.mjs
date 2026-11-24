@@ -374,6 +374,18 @@ test('a Keep mine chosen before is kept when LCW\'s own command moves', () => {
   assert.deepEqual(notices(home), { statusline: 'never' })
 })
 
+test('auto under one LCW home leaves a command that names another home\'s files as it is, old or new', () => {
+  for (const line of [oldLine, lcwLine]) {
+    const a = tmp('a'), b = tmp('b'), settings = tmp('s') + '/settings.json'
+    fs.writeFileSync(settings, JSON.stringify({ statusLine: line(a), attribution: { commit: '', pr: '' } }))
+    const before = fs.readFileSync(settings, 'utf8')
+    const r = setup(b, settings, 'auto')
+    assert.equal(r.code, 0, r.err)
+    assert.equal(fs.readFileSync(settings, 'utf8'), before, line(a).command)
+    assert.deepEqual(fs.readdirSync(b), [])
+  }
+})
+
 test('auto from a throwaway copy changes no setting and no file, whatever the status line', () => {
   const elsewhere = installedConfig(tmp('installed'))
   for (const line of [undefined, oldLine]) {
