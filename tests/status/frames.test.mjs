@@ -86,9 +86,9 @@ const baseInput = (s, extra = {}) => ({
   rate_limits: { seven_day: { used_percentage: 31, resets_at: NOW / 1000 + 3 * 86400 } }, ...extra,
 })
 /** One run of the launcher at `now`: with `at`, the draw ahead for that second; without, one fresh draw. */
-function launch(s, input, now, { at, home = s.home } = {}) {
-  const env = { PATH: process.env.PATH, HOME: `${s.t}/h`, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(now) }
-  const r = spawnSync(process.execPath, [`${home}/bin/statusline.mjs`, ...(at === undefined ? [] : [`${at}+0000`])], { input: JSON.stringify(input), encoding: 'utf8', env })
+function launch(s, input, now, { at, home = s.home, tz = 'UTC', zone = '+0000' } = {}) {
+  const env = { PATH: process.env.PATH, HOME: `${s.t}/h`, LCW_HOME: home, COLUMNS: '120', TZ: tz, LCW_NOW: String(now) }
+  const r = spawnSync(process.execPath, [`${home}/bin/statusline.mjs`, ...(at === undefined ? [] : [`${at}${zone}`])], { input: JSON.stringify(input), encoding: 'utf8', env })
   assert.equal(r.status, 0, r.stderr)
   return r.stdout
 }
@@ -153,6 +153,14 @@ describe('each frame is what a fresh draw prints at its own second, across a val
     assert.ok(!/LCW Build/.test(frames.get(S + 15)), 'no card while the mod draws it')
     // the player shows a frame only while the heartbeat is at most 15 seconds old at the start of its second
     assert.equal(compareFresh(s, baseInput(s), frames, (x) => x - (NOW - 10_000) / 1000 <= 15), 6)
+  })
+
+  test('the clocks go forward part-way: the frames stop at the change, as they are for one offset only', () => {
+    const s = scratch()
+    const change = Date.UTC(2026, 2, 29, 1) / 1000
+    launch(s, baseInput(s), (change - 5) * 1000, { at: change - 5, tz: 'Europe/London' })
+    assert.deepEqual([...saved(s.home).keys()], [0, 1, 2, 3, 4].map((i) => change - 5 + i))
+    assert.match(fs.readFileSync(`${s.home}/frames/s1/key`, 'utf8'), /^120 dark \+0000\n/)
   })
 
   /** A session billed per token whose week holds `usd` in a quarter-hour that leaves the week five seconds into the frames. */
