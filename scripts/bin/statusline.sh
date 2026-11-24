@@ -98,17 +98,25 @@ if [ -r "$lcw_launcher" ]; then
   if [ "$lcw_r" = 0 ] && [ -n "$lcw_out" ]; then printf '%s' "$lcw_out"; exit 0; fi
   case $lcw_r in
     127) lcw_m="node was not found: put Node on the PATH that Claude Code runs the status line with" ;;
-    *) lcw_m="the status line's Node run ended with status $lcw_r and printed nothing" ;;
+    *) lcw_m="the status line's launcher $lcw_launcher ended with status $lcw_r and printed nothing: run LCW setup again to put it back, or run it in a terminal to see why" ;;
   esac
 else
   lcw_m="$lcw_launcher is missing: run LCW setup again"
 fi
 
-# Nothing drawn: one line in the log, unless the last line says the same, then the session's last rows.
+# Nothing drawn: one line in the log, then the session's last rows. A fault one of the last 8 lines already gives is
+# not written again, so the faults of a few sessions that take turns add nothing, and the log is never taken past
+# 64 KB here (Node cuts it to its newest half when it writes).
 lcw_log=$lcw_h/statusline.log
-lcw_l=
-if [ -f "$lcw_log" ] && [ -r "$lcw_log" ]; then while IFS= read -r lcw_w; do lcw_l=$lcw_w; done < "$lcw_log"; fi
-if [ "${lcw_l#* }" != "$lcw_m" ]; then
+lcw_r1= lcw_r2= lcw_r3= lcw_r4= lcw_r5= lcw_r6= lcw_r7= lcw_r8= lcw_q=0
+if [ -f "$lcw_log" ] && [ -r "$lcw_log" ]; then
+  while IFS= read -r lcw_w; do
+    lcw_q=$((lcw_q + ${#lcw_w} + 1))
+    lcw_r8=$lcw_r7 lcw_r7=$lcw_r6 lcw_r6=$lcw_r5 lcw_r5=$lcw_r4 lcw_r4=$lcw_r3 lcw_r3=$lcw_r2 lcw_r2=$lcw_r1 lcw_r1=${lcw_w#* }
+  done < "$lcw_log"
+fi
+case $lcw_m in "$lcw_r1"|"$lcw_r2"|"$lcw_r3"|"$lcw_r4"|"$lcw_r5"|"$lcw_r6"|"$lcw_r7"|"$lcw_r8") lcw_q=65536 ;; esac
+if [ $((lcw_q + ${#lcw_m} + 22)) -le 65536 ]; then
   if [ -n "$lcw_s" ]; then
     # The UTC date of the second, from the days since 1970 (H. Hinnant's civil_from_days).
     lcw_q=$((lcw_s / 86400 + 719468)); lcw_e=$((lcw_q / 146097)); lcw_q=$((lcw_q - lcw_e * 146097))

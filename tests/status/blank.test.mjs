@@ -102,7 +102,7 @@ test('the same fault leaves one line in the log, however many draws meet it', ()
   assert.equal(launch(s), 'drawn by installed\n')
   assert.equal(launch(s), 'drawn by installed\n')
   assert.equal(logLines(s).length, 1)
-  assert.match(logLines(s)[0], /drawing from .*\/installed\./)
+  assert.match(logLines(s)[0], /drawn from .*\/installed,/)
   fs.rmSync(`${s.t}/installed`, { recursive: true })
   assert.equal(launch(s), 'fresh from s1 by older\n')
   assert.equal(launch(s), 'fresh from s1 by older\n')
@@ -120,7 +120,7 @@ test('when the pointer\'s folder is gone, the launcher draws from the folder LCW
   assert.equal(launch(s), 'drawn by setup\n')
   assert.equal(launch(s), 'drawn by setup\n')
   assert.equal(logLines(s).length, 1, 'one line, not one a tick')
-  assert.match(logLines(s)[0], /is gone; drawing from .*\/setup/)
+  assert.match(logLines(s)[0], /is gone; the rows are drawn from .*\/setup/)
   fs.rmSync(`${s.t}/setup`, { recursive: true })
   assert.equal(launch(s), 'drawn by installed\n')
 })
@@ -173,7 +173,7 @@ test('a record that names an older copy of the plugin is never followed', () => 
   fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'directory', path: moved } } }))
   fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: plugin(`${s.t}/old`) }] } }))
   assert.equal(launch(s), BROKEN)
-  assert.match(logLines(s)[0], /no installed copy of LCW was found/)
+  assert.match(logLines(s)[0], /no other copy of LCW was found: install LCW again/)
 })
 
 test('a syntax error in LCW\'s code keeps the rows on screen, writes one line, and the next tick after the repair is live', () => {
@@ -211,6 +211,39 @@ test('with no Node to start, the command prints the last rows, or the approved l
   assert.equal(tick(s), rows)
   assert.equal(logLines(s).length, 1)
   assert.match(logLines(s)[0], new RegExp(`^${new Date(NOW).toISOString().slice(0, 19)}Z node was not found`))
+})
+
+test('two faults that take turns, one a tick, leave one line each', () => {
+  const s = scratch()
+  const withNode = `${s.t}/fake:${process.env.PATH}`
+  // one session has no Node to start; another's launcher is broken, then its plugin's code
+  fs.writeFileSync(`${s.home}/bin/statusline.mjs`, 'this is not javascript\n')
+  for (let i = 0; i < 4; i++) { tick(s); tick(s, { path: withNode }) }
+  assert.equal(logLines(s).length, 2)
+  assert.match(logLines(s)[1], /ended with status 1 and printed nothing: .*setup/)
+  fs.copyFileSync(`${ROOT}/scripts/bin/statusline.mjs`, `${s.home}/bin/statusline.mjs`)
+  fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'const x = = 1\n'))
+  for (let i = 0; i < 4; i++) { tick(s); launch(s) }
+  assert.equal(logLines(s).length, 3)
+})
+
+test('the command adds nothing to a log that would pass 64 KB, whoever writes it', () => {
+  const s = scratch()
+  const old = Array.from({ length: 1000 }, (_, i) => `2026-01-01T00:00:00Z line ${String(i).padStart(3, '0')} ${'x'.repeat(50)}\n`).join('')
+  fs.writeFileSync(`${s.home}/statusline.log`, old.slice(0, old.lastIndexOf('\n', 65_500) + 1))
+  tick(s)
+  assert.ok(fs.statSync(`${s.home}/statusline.log`).size <= 64 * 1024)
+})
+
+test('a line names what to do: nothing when the rows came from another folder, and the file of code that does not load', () => {
+  const s = scratch(`${tmp('gone')}/lcw`)
+  fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
+  launch(s)
+  assert.match(logLines(s)[0], /is gone; the rows are drawn from .*\/setup, and nothing needs doing/)
+  assert.doesNotMatch(logLines(s)[0], /setup again/)
+  fs.writeFileSync(`${s.t}/setup/scripts/statusline.mjs`, 'export const a = 1\nconst x = = 1\n')
+  launch(s)
+  assert.match(logLines(s)[1], new RegExp(`could not be loaded \\(.* at ${s.t}/setup/scripts/statusline\\.mjs:2\\)`))
 })
 
 test('with the launcher missing, the command prints the approved line and says so in the log', () => {
