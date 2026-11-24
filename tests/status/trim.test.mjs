@@ -17,7 +17,11 @@ import cp from 'node:child_process'
 import { syncBuiltinESMExports } from 'node:module'
 const reads = {}, gits = []
 const read = fs.readFileSync, write = fs.writeFileSync, exec = cp.execFileSync
-fs.readFileSync = function (p, ...a) { if (typeof p === 'string') reads[p] = (reads[p] ?? 0) + 1; return read.call(this, p, ...a) }
+const count = (p) => { if (typeof p === 'string') reads[p] = (reads[p] ?? 0) + 1 }
+// every way a file is read: whole, as a handle, as a stream; the promise forms too
+for (const [o, names] of [[fs, ['readFileSync', 'readFile', 'openSync', 'open', 'createReadStream']], [fs.promises, ['readFile', 'open']]]) {
+  for (const n of names) { const f = o[n]; o[n] = function (p, ...a) { count(p); return f.call(this, p, ...a) } }
+}
 cp.execFileSync = function (c, a, ...r) { if (c === 'git') gits.push(a.join(' ')); return exec.call(this, c, a, ...r) }
 syncBuiltinESMExports()
 process.on('exit', () => write(process.env.TRACE_OUT, JSON.stringify({ reads, gits })))
@@ -31,6 +35,28 @@ function line(home, input, { now = NOW, trace = false } = {}) {
   const r = spawnSync('node', [...(out ? ['--import', TRACER] : []), LINE], { input: JSON.stringify(input), encoding: 'utf8', env })
   assert.equal(r.status, 0, r.stderr)
   return { text: r.stdout.replace(/\x1b\[[0-9;]*m/g, ''), ...(out ? readJson(out) : {}) }
+}
+
+const LAUNCHER = new URL('../../scripts/bin/statusline.mjs', import.meta.url).pathname
+const ROOT = new URL('../..', import.meta.url).pathname.replace(/\/$/, '')
+
+/** One run of the launcher the settings' command starts, as it draws frames ahead from the second `at`. */
+function launched(home, input, { now = NOW, bin } = {}) {
+  const env = { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(now), TRACE_OUT: `${tmp('trace')}/out.json` }
+  delete env.CLAUDE_PID
+  const r = spawnSync('node', ['--import', TRACER, bin, `${Math.floor(now / 1000)}+0000`], { input: JSON.stringify(input), encoding: 'utf8', env })
+  assert.equal(r.status, 0, r.stderr)
+  assert.ok(!r.stdout.includes('could not'), r.stdout)
+  return { text: r.stdout, ...readJson(env.TRACE_OUT) }
+}
+
+/** The launcher beside a pointer to this plugin, as setup leaves them in the home. */
+function installedLauncher() {
+  const dir = tmp('installed')
+  fs.mkdirSync(`${dir}/bin`)
+  fs.copyFileSync(LAUNCHER, `${dir}/bin/statusline.mjs`)
+  fs.writeFileSync(`${dir}/plugin-root`, ROOT + '\n')
+  return `${dir}/bin/statusline.mjs`
 }
 
 const inputFor = (cwd, extra = {}) => ({
@@ -73,6 +99,20 @@ describe('one status line run', { concurrency: true }, () => {
       assert.deepEqual(mine.filter(([, n]) => n > 1), [])
     }
   })
+
+  for (const [name, make] of [['a session with a run', withRun], ['a session with no run', () => ({ repo: makeRepo(), home: tmp('home') })]]) {
+    test(`frames drawn ahead read no file more than once, for ${name}`, () => {
+      const { repo, home } = make()
+      const bin = installedLauncher()
+      for (const now of [NOW, NOW + 1000]) {
+        const { reads, text } = launched(home, inputFor(repo), { now, bin })
+        assert.match(text, /Opus 5/)
+        const mine = Object.entries(reads).filter(([p]) => p.startsWith(home) || p.startsWith(repo))
+        assert.ok(mine.length > 2, 'the run reads its records')
+        assert.deepEqual(mine.filter(([, n]) => n > 1), [])
+      }
+    })
+  }
 
   test('with nothing new it leaves the home as it was, byte for byte and time for time', () => {
     const { repo, home } = withRun()
