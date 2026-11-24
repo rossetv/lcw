@@ -13,6 +13,7 @@ import { signInKind } from '../lib/billing.mjs'
 import { noteQuotaSession, readSessionQuota, quotaLine, sessionIdentity } from './lib/quota-session.mjs'
 import { sessionFile } from '../lib/key.mjs'
 import { openWaves } from '../lib/banner.mjs'
+import { isInstalled } from './bin/installed.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // a path as one shell word, so a folder with a space or a quote in it still runs
@@ -98,7 +99,8 @@ const lines = [
 try {
   const input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}')
   const cwd = input.cwd || process.cwd()
-  writeAtomic(`${home()}/plugin-root`, root)
+  // a throwaway copy, later deleted, would leave every other session's status line pointing at nothing
+  if (isInstalled(root)) writeAtomic(`${home()}/plugin-root`, root)
   try { sweepTemp(home()) } catch {}
   lines.push(`LCW command line: ${cli} (add --session <id> only if CLAUDE_CODE_SESSION_ID is not set)`)
   // A resumed session is known by its transcript's name, as in the other hooks.

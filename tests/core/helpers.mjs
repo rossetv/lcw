@@ -16,6 +16,8 @@ export const tmp = (label) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir
 // No test may reach the real home. Every process a test starts inherits this throwaway HOME, so code that
 // loses LCW_HOME falls back to a temporary folder and not to the person's own ~/.lcw.
 process.env.HOME = tmp('home-guard')
+// nor Claude Code's real config folder, which would decide whether the plugin under test counts as installed
+delete process.env.CLAUDE_CONFIG_DIR
 
 const gitEnv = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
 
@@ -54,6 +56,15 @@ export function fakeClaude() {
   return child
 }
 export const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'))
+
+/** A scratch Claude Code config folder whose records name `plugin` as the installed LCW; pass it as CLAUDE_CONFIG_DIR. */
+export function installedConfig(plugin = root) {
+  const dir = tmp('claude')
+  fs.mkdirSync(`${dir}/plugins`)
+  fs.writeFileSync(`${dir}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'owner/lcw' }, installLocation: `${dir}/plugins/marketplaces/lcw` } }))
+  fs.writeFileSync(`${dir}/plugins/installed_plugins.json`, JSON.stringify({ version: 2, plugins: { 'lcw@lcw': [{ scope: 'user', installPath: plugin, version: '1.0.0' }] } }))
+  return dir
+}
 
 /** A repo, a home and a started run; returns paths and a bound helper. */
 export function started(name = 'demo') {

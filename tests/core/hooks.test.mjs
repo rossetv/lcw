@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
-import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
+import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, installedConfig, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
 import * as gate from '../../scripts/lib/gate.mjs'
 
 process.env.TZ = 'Europe/Dublin'
@@ -108,7 +108,7 @@ test('gate hook allows a run whose percent gate has expired once the new week is
 test('session-start hook without a run prints the rule and the command', () => {
   const home = tmp('home')
   const repo = makeRepo()
-  const r = run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }) })
+  const r = run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }), env: { CLAUDE_CONFIG_DIR: installedConfig() } })
   assert.equal(r.code, 0)
   assert.match(r.out, /lcw:lcw skill/)
   assert.match(r.out, /open goal[^\n]*load the lcw:lcw skill/, 'an open goal loads the skill as a large change does')
@@ -120,6 +120,19 @@ test('session-start hook without a run prints the rule and the command', () => {
   assert.ok(!/past LCW runs/.test(r.out))
   assert.ok(r.out.split('\n').length <= 25)
   assert.ok(fs.existsSync(`${fs.readFileSync(`${home}/plugin-root`, 'utf8').trim()}/scripts/lcw.mjs`))
+})
+
+test('a session start from a throwaway copy leaves the pointer alone, whether there is one or not', () => {
+  const repo = makeRepo()
+  const env = { CLAUDE_CONFIG_DIR: installedConfig(tmp('installed')) }
+  const start = (home) => run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }), env })
+  const fresh = tmp('home')
+  assert.match(start(fresh).out, /LCW command line: /)
+  assert.ok(!fs.existsSync(`${fresh}/plugin-root`))
+  const pointed = tmp('home')
+  fs.writeFileSync(`${pointed}/plugin-root`, '/the/installed/plugin')
+  start(pointed)
+  assert.equal(fs.readFileSync(`${pointed}/plugin-root`, 'utf8'), '/the/installed/plugin')
 })
 
 test('session-start hook with an unfinished run names it and the next step', () => {
@@ -394,7 +407,7 @@ const spawnGate = (home, repo, id = 'p1') => withEnv(clock, () => run(GATE_HOOK,
 test('session start on a per-token sign-in states the mark in dollars, asks for the cap, and keeps nothing of the sign-in report', () => {
   const home = tmp('home')
   const repo = makeRepo()
-  const out = startNote(home, repo, KEY)
+  const out = startNote(home, repo, { ...KEY, CLAUDE_CONFIG_DIR: installedConfig() })
   assert.match(out, /billed per token/)
   assert.ok(out.includes('A spend command, set with lcw spend-command, can supply the 7-day figure; set, change or turn it off only on the user\'s explicit words, as with the mark.'), 'the spend command clause')
   assert.ok(out.includes('$3,000 (75% of the $4,000 weekly cap, assumed)'), 'the mark in dollars')
