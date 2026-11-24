@@ -39,25 +39,18 @@ function lastRows(text) {
 
 /**
  * The plugin folders to draw from, in order: the one the pointer names, then the folder LCW was set up from and the
- * installed plugin's, which are looked up only when `more` is asked for.
+ * installed plugin's, which are looked up only when `more` is asked for. `gone` says what is wrong with the pointer.
  */
 function folders() {
   const pointer = read(new URL('../plugin-root', import.meta.url))?.trim()
-  let rest = null
   const more = async () => {
-    if (rest) return rest
     const setup = read(new URL('./setup-root', import.meta.url))?.trim()
     let installed = null
     try { installed = (await import('./installed.mjs')).installedFolder() } catch {}
-    rest = [...new Set([setup, installed].filter(holds))].filter((dir) => dir !== pointer)
-    if (!holds(pointer)) {
-      const gone = pointer ? `the plugin folder ${pointer} named in ${home}/plugin-root is gone` : `${home}/plugin-root names no plugin folder`
-      if (rest.length) log(`${gone}; drawing from ${rest[0]}. Run LCW setup again to point at it.`)
-      else log(`${gone}, and no installed copy of LCW was found. Install LCW again, or run its setup.`)
-    }
-    return rest
+    return [...new Set([setup, installed].filter(holds))].filter((dir) => dir !== pointer)
   }
-  return { first: holds(pointer) ? pointer : null, more }
+  const gone = holds(pointer) ? null : pointer ? `the plugin folder ${pointer} named in ${home}/plugin-root is gone` : `${home}/plugin-root names no plugin folder`
+  return { first: gone ? null : pointer, gone, more }
 }
 
 /** One fresh draw by code from before frames ahead, which reads the input from stdin; null when it prints nothing. */
@@ -71,8 +64,12 @@ async function run() {
   let text = ''
   try { text = fs.readFileSync(0, 'utf8') } catch {}
   const at = process.argv[2]
+  // What went wrong this draw, written as one line once the draw is settled, so the same fault writes the same line.
+  const notes = []
+  const done = (out) => { if (notes.length) log(notes.join('; ') + '. Run LCW setup again, or reinstall LCW.'); return out }
   try {
-    const { first, more } = folders()
+    const { first, gone, more } = folders()
+    if (gone) notes.push(gone)
     // A folder whose code is older than frames ahead, as a session open from before an update can leave the
     // pointer at, is passed over for one that can draw ahead; with none, the older code draws afresh each tick.
     let older = null
@@ -81,26 +78,27 @@ async function run() {
       const root = list[i]
       let lcw
       try { lcw = await import(pathToFileURL(`${root}/scripts/statusline.mjs`).href) } catch (e) {
-        log(`LCW's code in ${root} could not be loaded (${String(e?.message ?? e).split('\n')[0]}). Update or reinstall LCW.`)
+        notes.push(`LCW's code in ${root} could not be loaded (${String(e?.message ?? e).split('\n')[0]})`)
         if (older) break
-        return lastRows(text) ?? BROKEN
+        return done(lastRows(text) ?? BROKEN)
       }
       if (typeof lcw.ahead !== 'function') {
         if (!older && first && at !== undefined) list.push(...await more())
         older ??= root
         continue
       }
-      if (at === undefined) { await lcw.main({ margin: 4, input: text }); return '' }
-      if (older) log(`LCW's code in ${older} is older than this status line; drawing from ${root}. Run LCW setup again.`)
-      try { return await lcw.ahead(text, { at, margin: 4 }) } catch (e) {
-        log(`The status line could not be drawn (${String(e?.message ?? e).split('\n')[0]}). Update or reinstall LCW if it goes on.`)
-        return lastRows(text) ?? BROKEN
+      if (older && at !== undefined) notes.push(`LCW's code in ${older} is older than this status line`)
+      if (gone || (older && at !== undefined)) notes.push(`drawing from ${root}`)
+      if (at === undefined) { done(); await lcw.main({ margin: 4, input: text }); return '' }
+      try { return done(await lcw.ahead(text, { at, margin: 4 })) } catch (e) {
+        notes.push(`the status line could not be drawn (${String(e?.message ?? e).split('\n')[0]})`)
+        return done(lastRows(text) ?? BROKEN)
       }
     }
-    if (!older) return lastRows(text) ?? BROKEN
-    if (at !== undefined) log(`LCW's code in ${older} is older than this status line, and no newer copy was found; each tick is drawn afresh. Run LCW setup again.`)
-    return freshFrom(older, text) ?? lastRows(text) ?? BROKEN
-  } catch { return lastRows(text) ?? BROKEN }
+    if (!older) { notes.push('no installed copy of LCW was found'); return done(lastRows(text) ?? BROKEN) }
+    if (at !== undefined) notes.push(`LCW's code in ${older} is older than this status line and no newer copy was found, so each tick is drawn afresh`)
+    return done(freshFrom(older, text) ?? lastRows(text) ?? BROKEN)
+  } catch { return done(lastRows(text) ?? BROKEN) }
 }
 
 process.stdout.on('error', () => {})

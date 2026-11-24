@@ -93,6 +93,23 @@ test('a draw from a good pointer looks for no other copy of LCW', () => {
   assert.ok(!fs.existsSync(`${s.home}/looked`))
 })
 
+test('the same fault leaves one line in the log, however many draws meet it', () => {
+  const s = scratch(`${tmp('gone')}/lcw`)
+  fs.writeFileSync(`${s.home}/bin/setup-root`, older(`${s.t}/older`) + '\n')
+  fs.mkdirSync(`${s.config}/plugins`, { recursive: true })
+  fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'o/lcw' } } }))
+  fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: plugin(`${s.t}/installed`) }] } }))
+  assert.equal(launch(s), 'drawn by installed\n')
+  assert.equal(launch(s), 'drawn by installed\n')
+  assert.equal(logLines(s).length, 1)
+  assert.match(logLines(s)[0], /drawing from .*\/installed\./)
+  fs.rmSync(`${s.t}/installed`, { recursive: true })
+  assert.equal(launch(s), 'fresh from s1 by older\n')
+  assert.equal(launch(s), 'fresh from s1 by older\n')
+  assert.equal(logLines(s).length, 2)
+  assert.match(logLines(s)[1], /drawn afresh/)
+})
+
 test('when the pointer\'s folder is gone, the launcher draws from the folder LCW was set up from, then from the installed plugin', () => {
   const s = scratch(`${tmp('gone')}/lcw`)
   fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
