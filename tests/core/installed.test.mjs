@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { tmp } from './helpers.mjs'
-import { isInstalled, installedFolder } from '../../scripts/bin/installed.mjs'
+import { isInstalled, installedFolder, installedFolders } from '../../scripts/bin/installed.mjs'
 
 const write = (file, body) => { fs.mkdirSync(file.slice(0, file.lastIndexOf('/')), { recursive: true }); fs.writeFileSync(file, typeof body === 'string' ? body : JSON.stringify(body)) }
 const plugin = (dir) => { write(`${dir}/.claude-plugin/plugin.json`, { name: 'lcw', version: '1.0.0' }); return dir }
@@ -65,6 +65,19 @@ test('another kind of marketplace counts its recorded install path and its cache
   assert.equal(installedFolder(), current)
 })
 
+test('every recorded folder that still holds the plugin is listed, whatever the scope, the marketplace or the order', () => {
+  const { conf, current } = githubMarket()
+  const project = plugin(`${conf}/plugins/cache/tools/lcw/1.9.0`)
+  const gone = `${conf}/plugins/cache/tools/lcw/1.8.0`
+  const market = tmp('market')
+  write(`${market}/.claude-plugin/marketplace.json`, { name: 'dev', plugins: [{ name: 'lcw', source: './' }] })
+  plugin(market)
+  write(`${conf}/plugins/known_marketplaces.json`, { tools: { source: { source: 'github', repo: 'owner/tools' } }, dev: { source: { source: 'directory', path: market } } })
+  write(`${conf}/plugins/installed_plugins.json`, { version: 2, plugins: { 'lcw@tools': [{ scope: 'project', installPath: project }, { installPath: gone }, { scope: 'user', installPath: current }] } })
+  assert.deepEqual(installedFolders(), [project, current, market])
+  assert.equal(installedFolder(), project, 'the first one stays the answer of the older function')
+})
+
 test('a path through a link to the installed folder counts as installed', () => {
   const { live } = directoryMarket()
   const link = `${tmp('link')}/lcw`
@@ -102,6 +115,7 @@ test('missing, unreadable and malformed records mean not installed, and nothing 
     config(records)
     assert.equal(isInstalled(copy), false, JSON.stringify(records))
     assert.equal(installedFolder(), null, JSON.stringify(records))
+    assert.deepEqual(installedFolders(), [], JSON.stringify(records))
   }
   const conf = config({})
   fs.mkdirSync(`${conf}/plugins/known_marketplaces.json`, { recursive: true })

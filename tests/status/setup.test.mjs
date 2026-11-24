@@ -386,31 +386,43 @@ test('auto under one LCW home leaves a command that names another home\'s files 
   }
 })
 
-test('auto from a version older than the installed one changes nothing; the installed one, or any cached one with no install record, brings LCW\'s command up to date', () => {
+/** A copy of this plugin at dir, as Claude Code keeps one or as a checkout holds it. */
+const pluginCopy = (dir) => { for (const d of ['scripts', 'lib', '.claude-plugin']) fs.cpSync(`${ROOT}/${d}`, `${dir}/${d}`, { recursive: true }); return dir }
+/** Claude Code's records in config: these marketplaces, and these install records unless null. */
+const records = (config, markets, plugins) => {
+  fs.mkdirSync(`${config}/plugins`, { recursive: true })
+  fs.writeFileSync(`${config}/plugins/known_marketplaces.json`, JSON.stringify(markets))
+  if (plugins) fs.writeFileSync(`${config}/plugins/installed_plugins.json`, JSON.stringify({ version: 2, plugins }))
+  else fs.rmSync(`${config}/plugins/installed_plugins.json`, { force: true })
+}
+/** Whether auto from the copy at dir, under these records, moves LCW's older command to the new one; it writes no file when it does not. */
+function autoMoves(dir, config) {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ statusLine: oldLine(home), attribution: { commit: '', pr: '' } }))
+  const r = spawnSync('node', [`${dir}/scripts/setup.mjs`, 'auto', '--settings', settings], { encoding: 'utf8', env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: config } })
+  assert.equal(r.status, 0, r.stderr)
+  const command = read(settings).statusLine.command
+  if (command === oldLine(home).command) { assert.ok(!fs.existsSync(home + '/bin')); return false }
+  assert.equal(command, playerCommand(home))
+  return true
+}
+
+test('auto moves LCW\'s command only from a version an install record names, in any order; a cached one none names changes nothing, unless there are no records', () => {
   const config = tmp('claude')
-  const copy = (version) => {
-    const dir = `${config}/plugins/cache/lcw/lcw/${version}`
-    for (const d of ['scripts', 'lib', '.claude-plugin']) fs.cpSync(`${ROOT}/${d}`, `${dir}/${d}`, { recursive: true })
-    return dir
-  }
-  const newer = copy('0.8.1'), older = copy('0.8.0')
-  fs.writeFileSync(`${config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'owner/lcw' } } }))
-  const record = JSON.stringify({ version: 2, plugins: { 'lcw@lcw': [{ scope: 'user', installPath: newer, version: '0.8.1' }] } })
-  const auto = (dir, recorded) => {
-    if (recorded) fs.writeFileSync(`${config}/plugins/installed_plugins.json`, record)
-    else fs.rmSync(`${config}/plugins/installed_plugins.json`, { force: true })
-    const home = tmp('home'), settings = tmp('s') + '/settings.json'
-    fs.writeFileSync(settings, JSON.stringify({ statusLine: oldLine(home), attribution: { commit: '', pr: '' } }))
-    const r = spawnSync('node', [`${dir}/scripts/setup.mjs`, 'auto', '--settings', settings], { encoding: 'utf8', env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: config } })
-    assert.equal(r.status, 0, r.stderr)
-    return { command: read(settings).statusLine.command, files: fs.existsSync(home + '/bin') ? fs.readdirSync(home + '/bin') : [], home }
-  }
-  const old = auto(older, true)
-  assert.deepEqual([old.command, old.files], [oldLine(old.home).command, []])
-  const current = auto(newer, true)
-  assert.equal(current.command, playerCommand(current.home))
-  const unrecorded = auto(older, false)
-  assert.equal(unrecorded.command, playerCommand(unrecorded.home))
+  const v = Object.fromEntries(['0.8.1', '0.8.0', '0.7.9'].map((n) => [n, pluginCopy(`${config}/plugins/cache/lcw/lcw/${n}`)]))
+  const market = { lcw: { source: { source: 'github', repo: 'owner/lcw' } } }
+  records(config, market, { 'lcw@lcw': [{ scope: 'project', projectPath: '/a/project', installPath: v['0.8.0'] }, { scope: 'user', installPath: v['0.8.1'] }] })
+  assert.deepEqual(['0.8.1', '0.8.0', '0.7.9'].map((n) => autoMoves(v[n], config)), [true, true, false])
+  records(config, market, null)
+  assert.equal(autoMoves(v['0.7.9'], config), true)
+})
+
+test('auto moves LCW\'s command from the checkout a directory marketplace loads, not from the older cached copy its record names', () => {
+  const config = tmp('claude')
+  const checkout = pluginCopy(`${tmp('dev')}/lcw`), stale = pluginCopy(`${config}/plugins/cache/lcw/lcw/0.6.22`)
+  records(config, { lcw: { source: { source: 'directory', path: checkout } } }, { 'lcw@lcw': [{ scope: 'user', installPath: stale }] })
+  assert.equal(autoMoves(checkout, config), true)
+  assert.equal(autoMoves(stale, config), false)
 })
 
 test('auto from a throwaway copy changes no setting and no file, whatever the status line', () => {

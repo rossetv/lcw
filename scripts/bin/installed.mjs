@@ -41,6 +41,13 @@ export function isInstalled(folder) {
   } catch { return false }
 }
 
+/** Every folder the records give as the installed plugin that still exists and holds it, by real path, in record order. */
+export function installedFolders() {
+  try {
+    return places().folders.filter((f) => readJson(path.join(f, '.claude-plugin', 'plugin.json'))?.name === NAME).map(real).filter(Boolean)
+  } catch { return [] }
+}
+
 /** The installed plugin's folder, if it still exists and holds the plugin; null otherwise. */
 export function installedFolder() {
   try {
