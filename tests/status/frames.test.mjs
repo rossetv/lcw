@@ -231,6 +231,24 @@ describe('what a draw saves', { concurrency: true }, () => {
     assert.equal(compareFresh(s, baseInput(s), new Map([[S + 3, frames.get(S + 3)]])), 1)
   })
 
+  test('the sweep clears git records not written for a day, and every old diff record', () => {
+    const home = tmp('home')
+    aged(`${home}/cache/git-00000001.json`, DAY + 1000)
+    aged(`${home}/cache/git-00000002.json`, DAY - 1000)
+    aged(`${home}/cache/diff-00000003.json`, 1000)
+    aged(`${home}/cache/context-s1.json`, 2 * DAY)
+    sweepTemp(home, NOW)
+    assert.deepEqual(fs.readdirSync(`${home}/cache`).sort(), ['context-s1.json', 'git-00000002.json'])
+  })
+
+  test('the sweep clears records of once-only notes not written for a week', () => {
+    const home = tmp('home')
+    aged(`${home}/told/old.json`, 7 * DAY + 1000)
+    aged(`${home}/told/live.json`, 7 * DAY - 1000)
+    sweepTemp(home, NOW)
+    assert.deepEqual(fs.readdirSync(`${home}/told`), ['live.json'])
+  })
+
   test('the sweep clears a session\'s frames once they are a day old, and leaves a live session\'s', () => {
     const home = tmp('home')
     aged(`${home}/frames/old/1/1`, 0); fs.utimesSync(`${home}/frames/old`, (NOW - DAY - 1000) / 1000, (NOW - DAY - 1000) / 1000)

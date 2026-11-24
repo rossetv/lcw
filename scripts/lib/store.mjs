@@ -59,13 +59,15 @@ export const writeJson = (file, value) => writeAtomic(file, JSON.stringify(value
  * each session start would cost more with every run.
  */
 export function sweepTemp(lcwHome, now = Date.now()) {
-  for (const dir of [lcwHome, ...['bin', 'cache', 'sessions', 'spend', 'activity', 'places'].map((d) => `${lcwHome}/${d}`)]) {
+  for (const dir of [lcwHome, ...['bin', 'cache', 'sessions', 'spend', 'activity', 'places', 'told'].map((d) => `${lcwHome}/${d}`)]) {
     let names = []
     try { names = fs.readdirSync(dir) } catch { continue }
     for (const name of names) {
-      // a folder's git record is asked again at its next tick; diff records are no longer read at all
+      // a folder's git record is asked again at its next tick; diff records are no longer read at all; the record of a
+      // once-only note is kept a week past its session's last word
       const cache = dir === `${lcwHome}/cache`
-      const age = /\.\d+\.tmp$/.test(name) ? 3600_000 : cache && /^git-.*\.json$/.test(name) ? 86400_000 : cache && /^diff-.*\.json$/.test(name) ? 0 : null
+      const age = /\.\d+\.tmp$/.test(name) ? 3600_000 : cache && /^git-.*\.json$/.test(name) ? 86400_000 : cache && /^diff-.*\.json$/.test(name) ? 0
+        : dir === `${lcwHome}/told` && name.endsWith('.json') ? 7 * 86400_000 : null
       if (age === null) continue
       try { if (now - fs.statSync(`${dir}/${name}`).mtimeMs >= age) fs.rmSync(`${dir}/${name}`, { force: true }) } catch {}
     }
