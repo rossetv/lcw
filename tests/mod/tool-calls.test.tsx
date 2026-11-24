@@ -173,9 +173,9 @@ test('a call the person interrupted, or a subagent\'s failed call, is not counte
   expect(w.written).toEqual([])
 })
 
-test('a hook beneath that fails after a tool call, a good one or a failed one, leaves the call going on', async ($, on) => {
+test('a hook beneath that fails after a tool call does not keep the stop at the mark from being said, nor break the call', async ($, on) => {
   engine(on, filesFor(atMark), { beneath: () => { throw new Error('beneath') } })
-  expect(await call($, 'tool')).toEqual({})
+  expect(said(await call($, 'tool'))).toBe(atMark.expect.tool)
   expect(await fail($, 'toolu_1')).toEqual({})
 })
 
