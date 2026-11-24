@@ -92,6 +92,21 @@ function noteClaudePid(id) {
   if (session?.claudePid !== claudePid && !claudeAlive(session?.claudePid)) writeJson(file, { ...session, claudePid })
 }
 
+/**
+ * Where LCW's status line was set up, its files in the LCW home follow the installed plugin, as setup copies them:
+ * each only when it differs, the player last.
+ */
+function keepStatusLineFiles() {
+  const bin = `${home()}/bin`
+  if (!fs.existsSync(`${bin}/statusline.mjs`)) return
+  const read = (f) => { try { return fs.readFileSync(f, 'utf8') } catch { return null } }
+  if (read(`${bin}/setup-root`) !== root + '\n') writeAtomic(`${bin}/setup-root`, root + '\n')
+  for (const f of ['installed.mjs', 'statusline.mjs', 'statusline.sh']) {
+    const text = fs.readFileSync(`${root}/scripts/bin/${f}`, 'utf8')
+    if (read(`${bin}/${f}`) !== text) writeAtomic(`${bin}/${f}`, text)
+  }
+}
+
 const hasGit = () => { try { execFileSync('git', ['--version'], { stdio: 'ignore', timeout: 3000 }); return true } catch { return false } }
 
 const lines = [
@@ -102,7 +117,10 @@ try {
   const input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}')
   const cwd = input.cwd || process.cwd()
   // a throwaway copy, later deleted, would leave every other session's status line pointing at nothing
-  if (isInstalled(root)) writeAtomic(`${home()}/plugin-root`, root)
+  if (isInstalled(root)) {
+    writeAtomic(`${home()}/plugin-root`, root)
+    try { keepStatusLineFiles() } catch {}
+  }
   try { sweepTemp(home()) } catch {}
   lines.push(`LCW command line: ${cli} (add --session <id> only if CLAUDE_CODE_SESSION_ID is not set)`)
   // A resumed session is known by its transcript's name, as in the other hooks.

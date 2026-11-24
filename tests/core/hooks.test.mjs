@@ -122,7 +122,7 @@ test('session-start hook without a run prints the rule and the command', () => {
   assert.ok(fs.existsSync(`${fs.readFileSync(`${home}/plugin-root`, 'utf8').trim()}/scripts/lcw.mjs`))
 })
 
-test('a session start from a throwaway copy leaves the pointer alone, whether there is one or not', () => {
+test('a session start from a throwaway copy leaves the pointer and the status line\'s files alone, whether there are any or not', () => {
   const repo = makeRepo()
   const env = { CLAUDE_CONFIG_DIR: installedConfig(tmp('installed')) }
   const start = (home) => run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }), env })
@@ -131,8 +131,27 @@ test('a session start from a throwaway copy leaves the pointer alone, whether th
   assert.ok(!fs.existsSync(`${fresh}/plugin-root`))
   const pointed = tmp('home')
   fs.writeFileSync(`${pointed}/plugin-root`, '/the/installed/plugin')
+  fs.mkdirSync(`${pointed}/bin`)
+  fs.writeFileSync(`${pointed}/bin/statusline.mjs`, '// an older launcher\n')
   start(pointed)
   assert.equal(fs.readFileSync(`${pointed}/plugin-root`, 'utf8'), '/the/installed/plugin')
+  assert.deepEqual(fs.readdirSync(`${pointed}/bin`), ['statusline.mjs'])
+  assert.equal(fs.readFileSync(`${pointed}/bin/statusline.mjs`, 'utf8'), '// an older launcher\n')
+})
+
+test('a session start from the installed copy brings the status line\'s files up to date where LCW\'s status line was set up, and adds none elsewhere', () => {
+  const repo = makeRepo()
+  const root = path.resolve(START_HOOK, '../..')
+  const start = (home) => run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }), env: { CLAUDE_CONFIG_DIR: installedConfig() } })
+  const home = tmp('home')
+  fs.mkdirSync(`${home}/bin`)
+  fs.writeFileSync(`${home}/bin/statusline.mjs`, '// an older launcher\n')
+  start(home)
+  for (const f of ['installed.mjs', 'statusline.mjs', 'statusline.sh']) assert.equal(fs.readFileSync(`${home}/bin/${f}`, 'utf8'), fs.readFileSync(`${root}/scripts/bin/${f}`, 'utf8'), f)
+  assert.equal(fs.readFileSync(`${home}/bin/setup-root`, 'utf8'), root + '\n')
+  const none = tmp('home')
+  start(none)
+  assert.ok(!fs.existsSync(`${none}/bin`), 'no status line of LCW\'s was set up there')
 })
 
 test('session-start hook with an unfinished run names it and the next step', () => {

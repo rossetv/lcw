@@ -627,6 +627,28 @@ test("a status line the person had before LCW shows the status-line box, and not
   await band.unmount()
 })
 
+test("LCW's player command is LCW's own: no box", async ($, on) => {
+  const command = "[ -r '/lcw/bin/statusline.sh' ] && . '/lcw/bin/statusline.sh'; node '/lcw/bin/statusline.mjs' || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'"
+  engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }) }, { settings: { statusLine: { type: 'command', command } } })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /status rows were replaced/ })).toBeUndefined()
+  await band.unmount()
+})
+
+test("another status line still shows the box after the notice setup writes when it moves LCW's command, and Keep mine keeps it away", async ($, on) => {
+  const settings = { statusLine: { type: 'command', command: 'starship statusline' } }
+  const w = engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }), '/lcw/notices.json': JSON.stringify({ statusline: 'moved' }) }, { settings })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /status rows were replaced/ })).toBeDefined()
+  await band.press({ key: 'banner:statusline:keep' })
+  expect(JSON.parse(w.files['/lcw/notices.json']!)).toEqual({ statusline: 'moved', statuslineKept: 'never' })
+  await w.clock.advance(5200)
+  expect(await band.find({ type: 'Text', text: /status rows were replaced/ })).toBeUndefined()
+  await band.unmount()
+})
+
 test("a status line from a project's settings, which Put LCW's back cannot change, shows no box", async ($, on) => {
   const project = { statusLine: { type: 'command', command: 'starship statusline' } }
   engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }) }, { project })

@@ -3,7 +3,7 @@
 import { thresholds as TH } from '../lib/theme.mjs'
 import { DEFAULT_CAP_USD } from '../lib/spend.mjs'
 import { dollars } from '../lib/format.mjs'
-import { openWaves, workOf } from '../lib/banner.mjs'
+import { isLcwStatusLine, openWaves, workOf } from '../lib/banner.mjs'
 import { activeQuota, normalizeEndpoint, quotaOff } from '../lib/quota.mjs'
 
 export function proxyQuotaEndpoint(value, configuration, ...sessions) {
@@ -141,15 +141,13 @@ export function claudeCommand(args) {
 export const spendFailingFact = (reading) => (reading ? { fails: reading.fails, since: reading.failingSince ?? undefined, lastError: reading.lastError } : null)
 
 /**
- * The status line in the person's own user settings, as the boxes read it: mine when it is LCW's own (setup's shim),
- * null when there is none. Another command there, one that replaced LCW's or one the person had before LCW, is what
- * Put LCW's back changes; a project's status line is not, so it is never read here.
+ * The status line in the person's own user settings, as the boxes read it: mine when it is a command LCW's setup
+ * wrote, null when there is none. Another command there, one that replaced LCW's or one the person had before LCW, is
+ * what Put LCW's back changes; a project's status line is not, so it is never read here.
  */
 export function statusLineFact(setting, lcwHome) {
   const command = typeof setting?.command === 'string' ? setting.command.trim() : ''
-  const shim = `${lcwHome}/bin/statusline.mjs`
-  // setup quotes a path the shell would split; installs made before it did hold the bare path
-  return command ? { command, mine: command === `node ${shim}` || command === `node '${shim.replace(/'/g, `'\\''`)}'` } : null
+  return command ? { command, mine: isLcwStatusLine(command, lcwHome) } : null
 }
 
 /** The next step the run last recorded: its ledger's last checkpoint line, or null. */
@@ -364,7 +362,7 @@ export function pressPlan(banner, option, facts, ctx) {
       if (option === 'discuss') return { prompt: { text: discussPrompt(root, facts?.cleanup, cleanupPath) }, dismiss: true }
       return { steps: [{ ...script('cleanup.mjs', 'apply'), timeoutMs: 120000 }], toast: 'output', dismiss: true }
     case 'statusline':
-      if (option === 'keep') return { notices: { statusline: 'never' }, dismiss: true }
+      if (option === 'keep') return { notices: { statuslineKept: 'never' }, dismiss: true }
       return { steps: [script('setup.mjs', 'statusline')], fail: "LCW could not put its status rows back: ", toast: "LCW's status rows are back.", dismiss: true }
     case 'advisor':
       if (option === 'never') return { notices: { advisor: 'never' }, dismiss: true }

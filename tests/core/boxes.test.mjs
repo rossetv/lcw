@@ -113,7 +113,7 @@ test('the never buttons write the notice the box is kept off by', () => {
   assert.deepEqual(press({ now: NOW, repoKey: 'repo-1', cleanup }, 'never').notices, { 'cleanup:repo-1': 'never' })
   const updated = { running: '0.2.0', updated: { to: '0.2.0', bullets: ['x'] } }
   assert.deepEqual(press({ now: NOW, update: updated }, 'ok').notices, { 'whatsnew:0.2.0': 'never' })
-  assert.deepEqual(press({ now: NOW, statusLine: { command: 'starship', mine: false } }, 'keep').notices, { statusline: 'never' })
+  assert.deepEqual(press({ now: NOW, statusLine: { command: 'starship', mine: false } }, 'keep').notices, { statuslineKept: 'never' })
   const off = press({ now: NOW, billing: 'payg', spendCommandSet: true, capSet: true, spendFailing: { fails: 3, since: NOW - MIN } }, 'off')
   assert.deepEqual(off.notices, { spend: 'never' })
   assert.deepEqual(argvs(off), ['spend-command off --session s1'])
@@ -218,10 +218,19 @@ test('whether the computer can be kept awake is asked only while the box could s
   assert.equal(awakeCheckWanted({ ...state, stage: 'Brainstorm' }, {}, new Set()), false)
 })
 
-test("the status line is LCW's only when it is setup's shim; any other command is another one", () => {
+test("the status line is LCW's only when it is a command setup wrote, the player's or the node one; any other command is another one", () => {
   assert.equal(statusLineFact(undefined, '/lcw'), null)
   assert.deepEqual(statusLineFact({ type: 'command', command: 'node /lcw/bin/statusline.mjs' }, '/lcw'), { command: 'node /lcw/bin/statusline.mjs', mine: true })
   assert.deepEqual(statusLineFact({ command: 'starship statusline' }, '/lcw'), { command: 'starship statusline', mine: false })
+  const player = (h) => `[ -r '${h}/bin/statusline.sh' ] && . '${h}/bin/statusline.sh'; node '${h}/bin/statusline.mjs' || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'`
+  assert.equal(statusLineFact({ command: player('/lcw') }, '/lcw').mine, true)
+  assert.equal(statusLineFact({ command: player('/other') }, '/lcw').mine, false)
+})
+
+test("the replaced box keeps away under Keep mine, old or new, but not for the notice setup writes when it moves LCW's command", () => {
+  const facts = (notices) => ({ now: NOW, advisorModel: 'fable', statusLine: { command: 'starship', mine: false }, notices })
+  assert.equal(bannerFor(facts({ statusline: 'moved' }))?.kind, 'statusline')
+  for (const kept of [{ statusline: 'never' }, { statusline: 'moved', statuslineKept: 'never' }]) assert.equal(bannerFor(facts(kept))?.kind, undefined, JSON.stringify(kept))
 })
 
 test("the status line is LCW's with its path quoted or bare, so a home with a space in it is still known", () => {
