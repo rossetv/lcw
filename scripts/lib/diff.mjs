@@ -4,15 +4,19 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fnv1a32hex } from '../../lib/key.mjs'
-import { readJson, writeJson, git, mainCheckout } from './store.mjs'
+import { readJson, writeJson, mainCheckout } from './store.mjs'
 
 // The status line runs every second; git runs at most once in this long for a folder, whatever the sessions.
 const FRESH_MS = 15000
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
 // It runs beside the person's own git commands, so it never takes the index lock to refresh the index.
-const run = (cwd, ...args) => execFileSync('git', ['--no-optional-locks', '-c', 'diff.autoRefreshIndex=false', ...args], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000, maxBuffer: 64 << 20 })
+// Its messages in English, so "not a git repository" can be told from any other failure.
+const run = (cwd, ...args) => execFileSync('git', ['--no-optional-locks', '-c', 'diff.autoRefreshIndex=false', ...args], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000, maxBuffer: 64 << 20, env: { ...process.env, LC_ALL: 'C' } })
 const tryRun = (cwd, ...args) => { try { return run(cwd, ...args).trim() } catch { return null } }
+const OUTSIDE = Symbol('outside git')
+/** git's answer; OUTSIDE when git says the folder is in no repository, null when it fails in any other way. */
+const answer = (cwd, ...args) => { try { return run(cwd, ...args).trim() } catch (e) { return /not a git repository/.test(String(e.stderr ?? '')) ? OUTSIDE : null } }
 const verify = (cwd, ref) => tryRun(cwd, 'rev-parse', '--verify', '-q', ref + '^{commit}') !== null
 
 /** Where the count starts: where the branch left the default branch; on the default branch itself, its last commit. */
@@ -52,15 +56,18 @@ function count(top) {
   return { added, removed }
 }
 
-const OUTSIDE = Symbol('outside git')
 const ask = {
   diff: (cwd) => {
-    const top = tryRun(cwd, 'rev-parse', '--show-toplevel')
-    if (!top) return OUTSIDE
+    const top = answer(cwd, 'rev-parse', '--show-toplevel')
+    if (!top || top === OUTSIDE) return top
     try { return count(top) } catch { return null }
   },
-  main: (cwd) => (tryRun(cwd, 'rev-parse', '--git-common-dir') === null ? OUTSIDE : mainCheckout(cwd)),
-  branch: (cwd) => { try { return git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD') } catch { return OUTSIDE } },
+  main: (cwd) => {
+    const common = answer(cwd, 'rev-parse', '--git-common-dir')
+    return common === OUTSIDE ? OUTSIDE : common === null ? cwd : mainCheckout(cwd)
+  },
+  // a repository with no commit yet has no branch to name
+  branch: (cwd) => answer(cwd, 'rev-parse', '--abbrev-ref', 'HEAD') || null,
 }
 /**
  * The git figures of a folder that `want` names, each asked of git at most once in FRESH_MS and kept in a record of
