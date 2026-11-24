@@ -14,6 +14,7 @@ import { noteQuotaSession, readSessionQuota, quotaLine, sessionIdentity } from '
 import { sessionFile } from '../lib/key.mjs'
 import { openWaves } from '../lib/banner.mjs'
 import { isInstalled } from './bin/installed.mjs'
+import { toldFile } from '../lib/mark.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // a path as one shell word, so a folder with a space or a quote in it still runs
@@ -44,7 +45,8 @@ function settleBilling(ids, signedIn) {
   // A subscriber with an API key in the environment signs in as api_key too, so over a settled or unsettled
   // session a per-token sign-in leaves it unclear, for the session's own ticks to settle: a weekly figure or a reply without one.
   if (signedIn === 'payg' && (had === 'subscription' || had === 'unclear')) {
-    for (const { file, session } of rows) {
+    for (const { id, file, session } of rows) {
+      fs.rmSync(toldFile(home(), id), { force: true }) // the mod's record of the same note
       if (session?.billing === 'unclear' && session.toldPayg === undefined) continue
       const { toldPayg, ...rest } = session ?? {}
       writeJson(file, { ...rest, billing: 'unclear' })
