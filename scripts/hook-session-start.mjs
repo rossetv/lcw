@@ -13,9 +13,8 @@ import { signInKind } from '../lib/billing.mjs'
 import { noteQuotaSession, readSessionQuota, quotaLine, sessionIdentity } from './lib/quota-session.mjs'
 import { sessionFile } from '../lib/key.mjs'
 import { openWaves } from '../lib/banner.mjs'
-import { isInstalled } from './bin/installed.mjs'
 import { toldFile } from '../lib/mark.mjs'
-import { copyStatusFiles } from './lib/status-files.mjs'
+import { copyStatusFiles, isCurrentInstall } from './lib/status-files.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // a path as one shell word, so a folder with a space or a quote in it still runs
@@ -104,7 +103,7 @@ try {
   const cwd = input.cwd || process.cwd()
   // a throwaway copy, later deleted, would leave every other session's status line pointing at nothing; and a session
   // that clears or compacts runs the hooks of the version it started with, which may be older than the newest start's
-  if ((input.source === undefined || input.source === 'startup' || input.source === 'resume') && isInstalled(root)) {
+  if ((input.source === undefined || input.source === 'startup' || input.source === 'resume') && isCurrentInstall(root)) {
     writeAtomic(`${home()}/plugin-root`, root)
     // where LCW's status line was set up, its files follow the installed plugin
     try { if (fs.existsSync(`${home()}/bin/statusline.mjs`)) copyStatusFiles(root, home()) } catch {}

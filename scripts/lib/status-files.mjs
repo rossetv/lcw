@@ -1,9 +1,20 @@
 // The status line's files, which setup and the session-start hook copy from the plugin's scripts/bin into the LCW home.
 import fs from 'node:fs'
 import { writeAtomic } from './store.mjs'
+import { installedFolder, isInstalled } from '../bin/installed.mjs'
 
 // in this order: an older launcher still answers a newer player, and while there is no player the command runs the launcher alone
 export const STATUS_FILES = ['installed.mjs', 'statusline.mjs', 'statusline.sh']
+
+/**
+ * Whether the plugin at root is the one installed now: an older version left in the cache counts as installed, but a
+ * session still open on it must not move the status line back. With no readable install record, any installed copy is.
+ */
+export function isCurrentInstall(root) {
+  if (!isInstalled(root)) return false
+  const current = installedFolder()
+  try { return current === null || current === fs.realpathSync(root) } catch { return false }
+}
 
 const read = (f) => { try { return fs.readFileSync(f, 'utf8') } catch { return null } }
 

@@ -5,8 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { home, readJson, writeAtomic, writeJson } from './lib/store.mjs'
 import { noticesFile } from '../lib/key.mjs'
 import { STATUSLINE_MOVED, isLcwStatusLine, keepsOwnStatusLine, statusLineCommands } from '../lib/banner.mjs'
-import { isInstalled } from './bin/installed.mjs'
-import { STATUS_FILES, copyStatusFiles } from './lib/status-files.mjs'
+import { STATUS_FILES, copyStatusFiles, isCurrentInstall } from './lib/status-files.mjs'
 
 const [cmd, ...rest] = process.argv.slice(2)
 const i = rest.indexOf('--settings')
@@ -180,8 +179,8 @@ if (cmd === 'install') {
   // Runs on an interactive session's first draw: prints a line for each thing it turned on, and nothing otherwise.
   quiet = true
   const notices = readJson(noticesFile(lcw)) ?? {}
-  // a session started from a throwaway copy changes nothing: the settings would name files that copy may take with it
-  if (notices.auto !== 'off' && isInstalled(pluginRoot)) {
+  // a session started from a throwaway copy, or from a version older than the installed one, changes nothing
+  if (notices.auto !== 'off' && isCurrentInstall(pluginRoot)) {
     const s = load()
     const said = []
     let moved = false

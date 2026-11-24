@@ -154,42 +154,66 @@ test('a session start from the installed copy brings the status line\'s files up
   assert.ok(!fs.existsSync(`${none}/bin`), 'no status line of LCW\'s was set up there')
 })
 
-test('a session that clears or compacts leaves the pointer and the status line\'s files to the newest start; a start or a resume moves them, as an input with no source does', () => {
-  const repo = makeRepo()
+/**
+ * Two versions in a scratch Claude Code cache, both copies of this plugin, the older one's player marked; the install
+ * record names the newer one unless `record` is false. A session left open since an update runs the older one's hooks.
+ */
+function twoVersions({ record = true } = {}) {
   const root = path.resolve(START_HOOK, '../..')
-  // two versions in Claude Code's cache, both counted as installed: an open session keeps the older one's hooks
   const config = tmp('claude')
-  const cache = `${config}/plugins/cache/lcw/lcw`
   const copy = (version) => {
-    const dir = `${cache}/${version}`
+    const dir = `${config}/plugins/cache/lcw/lcw/${version}`
     for (const d of ['scripts', 'lib', '.claude-plugin']) fs.cpSync(`${root}/${d}`, `${dir}/${d}`, { recursive: true })
     fs.appendFileSync(`${dir}/scripts/bin/statusline.sh`, `# ${version}\n`)
     return dir
   }
   const newer = copy('0.8.1'), older = copy('0.8.0')
   fs.writeFileSync(`${config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'owner/lcw' } } }))
-  fs.writeFileSync(`${config}/plugins/installed_plugins.json`, JSON.stringify({ version: 2, plugins: { 'lcw@lcw': [{ scope: 'user', installPath: newer, version: '0.8.1' }] } }))
+  if (record) fs.writeFileSync(`${config}/plugins/installed_plugins.json`, JSON.stringify({ version: 2, plugins: { 'lcw@lcw': [{ scope: 'user', installPath: newer, version: '0.8.1' }] } }))
+  const repo = makeRepo()
   const start = (dir, home, source) => run(`${dir}/scripts/hook-session-start.mjs`, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo, ...(source ? { source } : {}) }), env: { CLAUDE_CONFIG_DIR: config, LCW_AUTH_STATUS_JSON: 'fail' } })
-  const snapshot = (home) => Object.fromEntries(['plugin-root', ...fs.readdirSync(`${home}/bin`).map((f) => `bin/${f}`)].map((f) => [f, fs.readFileSync(`${home}/${f}`, 'utf8')]))
+  /** A home where LCW's status line was set up, then the newer version's session started. */
+  const home = () => {
+    const h = tmp('home')
+    fs.mkdirSync(`${h}/bin`)
+    fs.writeFileSync(`${h}/bin/statusline.mjs`, '// an older launcher\n')
+    start(newer, h, 'startup')
+    return h
+  }
+  return { config, newer, older, start, home }
+}
+const pointerAndFiles = (home) => Object.fromEntries(['plugin-root', ...fs.readdirSync(`${home}/bin`).map((f) => `bin/${f}`)].map((f) => [f, fs.readFileSync(`${home}/${f}`, 'utf8')]))
+
+test('the installed version\'s start moves the pointer and the status line\'s files; an older version still open never moves them back, at any source', () => {
+  const v = twoVersions()
   const said = {}
   for (const source of ['compact', 'clear', 'startup', 'resume', undefined]) {
-    const home = tmp('home')
-    fs.mkdirSync(`${home}/bin`)
-    fs.writeFileSync(`${home}/bin/statusline.mjs`, '// an older launcher\n')
-    start(newer, home, 'startup')
-    const before = snapshot(home)
-    assert.equal(before['plugin-root'], newer)
-    const r = start(older, home, source)
+    const home = v.home()
+    const before = pointerAndFiles(home)
+    assert.equal(before['plugin-root'], v.newer)
+    assert.equal(before['bin/setup-root'], v.newer + '\n')
+    assert.equal(before['bin/statusline.sh'], fs.readFileSync(`${v.newer}/scripts/bin/statusline.sh`, 'utf8'))
+    const r = v.start(v.older, home, source)
     assert.equal(r.code, 0, r.err)
     said[source] = r.out
-    if (source === 'compact' || source === 'clear') assert.deepEqual(snapshot(home), before, source)
+    assert.deepEqual(pointerAndFiles(home), before, String(source))
+  }
+  for (const source of ['clear', 'startup', 'resume', undefined]) assert.equal(said[source], said.compact, 'what the hook prints does not depend on the source')
+})
+
+test('with no install record a cached version that starts or resumes moves the pointer and the files, as an input with no source does; one that clears or compacts does not', () => {
+  const v = twoVersions({ record: false })
+  for (const source of ['compact', 'clear', 'startup', 'resume', undefined]) {
+    const home = v.home()
+    const before = pointerAndFiles(home)
+    v.start(v.older, home, source)
+    if (source === 'compact' || source === 'clear') assert.deepEqual(pointerAndFiles(home), before, source)
     else {
-      assert.equal(fs.readFileSync(`${home}/plugin-root`, 'utf8'), older, String(source))
+      assert.equal(fs.readFileSync(`${home}/plugin-root`, 'utf8'), v.older, String(source))
+      assert.equal(fs.readFileSync(`${home}/bin/setup-root`, 'utf8'), v.older + '\n', String(source))
       assert.match(fs.readFileSync(`${home}/bin/statusline.sh`, 'utf8'), /# 0\.8\.0\n$/, String(source))
-      assert.equal(fs.readFileSync(`${home}/bin/setup-root`, 'utf8'), older + '\n', String(source))
     }
   }
-  for (const source of ['clear', 'startup', 'resume', undefined]) assert.equal(said[source], said.compact, String(source))
 })
 
 test('session-start hook with an unfinished run names it and the next step', () => {

@@ -386,6 +386,33 @@ test('auto under one LCW home leaves a command that names another home\'s files 
   }
 })
 
+test('auto from a version older than the installed one changes nothing; the installed one, or any cached one with no install record, brings LCW\'s command up to date', () => {
+  const config = tmp('claude')
+  const copy = (version) => {
+    const dir = `${config}/plugins/cache/lcw/lcw/${version}`
+    for (const d of ['scripts', 'lib', '.claude-plugin']) fs.cpSync(`${ROOT}/${d}`, `${dir}/${d}`, { recursive: true })
+    return dir
+  }
+  const newer = copy('0.8.1'), older = copy('0.8.0')
+  fs.writeFileSync(`${config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'owner/lcw' } } }))
+  const record = JSON.stringify({ version: 2, plugins: { 'lcw@lcw': [{ scope: 'user', installPath: newer, version: '0.8.1' }] } })
+  const auto = (dir, recorded) => {
+    if (recorded) fs.writeFileSync(`${config}/plugins/installed_plugins.json`, record)
+    else fs.rmSync(`${config}/plugins/installed_plugins.json`, { force: true })
+    const home = tmp('home'), settings = tmp('s') + '/settings.json'
+    fs.writeFileSync(settings, JSON.stringify({ statusLine: oldLine(home), attribution: { commit: '', pr: '' } }))
+    const r = spawnSync('node', [`${dir}/scripts/setup.mjs`, 'auto', '--settings', settings], { encoding: 'utf8', env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: config } })
+    assert.equal(r.status, 0, r.stderr)
+    return { command: read(settings).statusLine.command, files: fs.existsSync(home + '/bin') ? fs.readdirSync(home + '/bin') : [], home }
+  }
+  const old = auto(older, true)
+  assert.deepEqual([old.command, old.files], [oldLine(old.home).command, []])
+  const current = auto(newer, true)
+  assert.equal(current.command, playerCommand(current.home))
+  const unrecorded = auto(older, false)
+  assert.equal(unrecorded.command, playerCommand(unrecorded.home))
+})
+
 test('auto from a throwaway copy changes no setting and no file, whatever the status line', () => {
   const elsewhere = installedConfig(tmp('installed'))
   for (const line of [undefined, oldLine]) {
