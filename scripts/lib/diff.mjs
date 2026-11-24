@@ -52,16 +52,16 @@ function count(top) {
   return { added, removed }
 }
 
+const OUTSIDE = Symbol('outside git')
 const ask = {
   diff: (cwd) => {
     const top = tryRun(cwd, 'rev-parse', '--show-toplevel')
-    if (!top) return null
+    if (!top) return OUTSIDE
     try { return count(top) } catch { return null }
   },
-  main: (cwd) => mainCheckout(cwd),
-  branch: (cwd) => { try { return git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD') } catch { return null } },
+  main: (cwd) => (tryRun(cwd, 'rev-parse', '--git-common-dir') === null ? OUTSIDE : mainCheckout(cwd)),
+  branch: (cwd) => { try { return git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD') } catch { return OUTSIDE } },
 }
-
 /**
  * The git figures of a folder that `want` names, each asked of git at most once in FRESH_MS and kept in a record of
  * that folder alone: diff ({added, removed}, null outside git or when git fails), main (mainCheckout's answer) and
@@ -73,9 +73,15 @@ export function gitOf(cwd, home, now, want) {
   const facts = kept?.cwd === cwd && now - kept.at >= 0 && now - kept.at < FRESH_MS ? kept : { cwd, at: now }
   const missing = want.filter((k) => !Object.hasOwn(facts, k))
   if (!missing.length) return facts
-  // A failure is kept too, so a slow repository costs one try in each stretch and not one every second.
-  for (const k of missing) facts[k] = ask[k](cwd)
-  try { writeJson(file, facts) } catch {}
+  // A failure is kept too, so a slow repository costs one try in each stretch and not one every second. A folder
+  // outside git gets no record: one for every folder a session ever stood in would pile up.
+  let outside = false
+  for (const k of missing) {
+    const v = outside ? OUTSIDE : ask[k](cwd)
+    outside ||= v === OUTSIDE
+    facts[k] = v !== OUTSIDE ? v : k === 'main' ? cwd : null
+  }
+  if (!outside) try { writeJson(file, facts) } catch {}
   return facts
 }
 
