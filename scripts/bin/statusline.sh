@@ -98,7 +98,7 @@ fi
 # Nothing drawn: one line in the log, unless the last line says the same, then the session's last rows.
 lcw_log=$lcw_h/statusline.log
 lcw_l=
-if [ -r "$lcw_log" ]; then while IFS= read -r lcw_w; do lcw_l=$lcw_w; done < "$lcw_log"; fi
+if [ -f "$lcw_log" ] && [ -r "$lcw_log" ]; then while IFS= read -r lcw_w; do lcw_l=$lcw_w; done < "$lcw_log"; fi
 if [ "${lcw_l#* }" != "$lcw_m" ]; then
   if [ -n "$lcw_s" ]; then
     # The UTC date of the second, from the days since 1970 (H. Hinnant's civil_from_days).

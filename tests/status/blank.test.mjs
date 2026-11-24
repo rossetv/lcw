@@ -189,6 +189,12 @@ test('a log that cannot be written changes nothing on screen, and puts nothing o
     assert.equal(launch(s), BROKEN)
   } finally { fs.chmodSync(s.home, 0o700) }
   assert.deepEqual(logLines(s), [])
+  // nor a log that is a folder
+  fs.mkdirSync(`${s.home}/statusline.log`)
+  for (const shell of ['/bin/sh', '/bin/bash', '/bin/zsh', '/bin/dash'].filter((x) => fs.existsSync(x))) {
+    const r = spawnSync(shell, ['-c', `. '${s.home}/bin/statusline.sh'`], { input: INPUT, encoding: 'utf8', env: env(s, { PATH: `${s.t}/fake`, LCW_FAKE_DATE: `${S}+0000` }) })
+    assert.deepEqual([r.status, r.stdout, r.stderr], [0, BROKEN, ''], shell)
+  }
 })
 
 test('the log is cut to its newest half once it passes 64 KB', () => {
