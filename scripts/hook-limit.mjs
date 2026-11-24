@@ -1,5 +1,5 @@
-// While a session is at its usage mark, tells Claude to stop: once on each prompt, and again after every tool call
-// for as long as it keeps going. It only adds a line for Claude to read. It never blocks a prompt or a tool, and
+// While a session is at its usage mark, tells Claude to stop: once on each prompt and, for a session whose list of
+// hooks still runs it there, after every tool call (the mod says that now). It only adds a line for Claude to read. It never blocks a prompt or a tool, and
 // whatever goes wrong it exits 0. On a prompt it also records that the session is working, for the mascot.
 import fs from 'node:fs'
 import path from 'node:path'
@@ -13,7 +13,7 @@ try {
   if ((event === 'UserPromptSubmit' || event === 'PostToolUse') && !inAgent) {
     const { findRun } = await import('./lib/runs.mjs')
     const { readUsage, sessionIds, sessionMark, driverMark, applyGate } = await import('./lib/gate.mjs')
-    const { atMark, lcwOnly, stopTexts } = await import('../lib/mark.mjs')
+    const { atMark, lcwOnly, stopTexts, toldFile, lcwCommand } = await import('../lib/mark.mjs')
     const { noteQuotaSession, readSessionQuota } = await import('./lib/quota-session.mjs')
     const { readMoney } = await import('./lib/money.mjs')
     const { home, readJson, writeJson } = await import('./lib/store.mjs')
@@ -42,16 +42,14 @@ try {
     const driverMoney = run && !driverQuota ? readMoney({ sessionId: run.state.driver, now, state: run.state }) : null
     const driverHeld = run && !driverQuota && atMark(driverMark(run.state), usage, now, driverMoney)
     if (run) applyGate(run.paths, run.state, usage, now, driverMoney)
-    // A session that settled as pay-per-token after its start is told once, as session start tells the others.
+    // A session that settled as pay-per-token after its start is told once, as session start tells the others; the
+    // mod, which tells it after a tool call, keeps its own record of that.
     const file = sessionFile(home(), ids[0])
     const session = readJson(file)
     let cli = null
-    if (money && !ids.some((id) => readJson(sessionFile(home(), id))?.toldPayg)) {
+    if (money && !ids.some((id) => readJson(sessionFile(home(), id))?.toldPayg || readJson(toldFile(home(), id))?.payg)) {
       writeJson(file, { ...session, toldPayg: true })
-      const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-      // one shell word, so a plugin folder with a space or a quote in its path still runs
-      const script = `${root}/scripts/lcw.mjs`
-      cli = `node ${/^[\w@%+=:,./-]+$/.test(script) ? script : `'${script.replace(/'/g, `'\\''`)}'`}`
+      cli = lcwCommand(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'))
     }
     const texts = stopTexts({ event, lcwCall, hasRun: !!run, cli, money, quota, heldQuota, mark, usage, now, driverHeld, driverMoney, driverMark: run ? driverMark(run.state) : null })
     if (texts.length) said = JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: texts.join('\n') } })

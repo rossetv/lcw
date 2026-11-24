@@ -11,6 +11,8 @@ import { moneyFrom, readingOf, spendFileCounts } from '../lib/spend.mjs'
 import { buildView, renderCard } from '../lib/card.mjs'
 import { hex, thresholds as TH } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
+import { atMark, lcwCommand, lcwOnly, stopTexts, toldFile } from '../lib/mark.mjs'
+import { next as nextActivity } from '../lib/activity.mjs'
 import { activeQuota, CLAIM_MS, evaluateQuota, quotaOff, REFRESH_MS } from '../lib/quota.mjs'
 import type { QuotaView } from '../lib/quota.mjs'
 import {
@@ -1096,6 +1098,50 @@ async function noteStopped($: EngineInterface) {
   await write($, file, JSON.stringify({ ...(await readJson($, file)), state: 'rest', at: await $.clock.now() }))
 }
 
+// What Claude is told after one of the session's own tool calls: the stop at the mark and the once-only note on
+// pay-per-token billing, in the words and cases of the limit hook. A finished run is no run here, as it is no run to the hook.
+async function afterTool($: EngineInterface, command: unknown) {
+  const f = await markFacts($)
+  const run = f.run && !['finished', 'stopped'].includes(f.run.state.status) ? f.run : null
+  const driverMark: number | null = run ? run.state.markPercent ?? TH.usageMarkPercent : null
+  const driverMoney = run && !run.quota ? run.money : null
+  let cli: string | null = null
+  if (f.money) {
+    const home = await lcwHome($)
+    const ids = [...new Set([await $.session.id(), await spendName($)])]
+    const told = await Promise.all(ids.flatMap((id) => [
+      readJson($, sessionFile(home, id)).then((s) => !!s?.toldPayg), readJson($, toldFile(home, id)).then((t) => !!t?.payg),
+    ]))
+    if (!told.includes(true)) {
+      // Recorded before it is said: a note not recorded would be said again after every call.
+      await write($, toldFile(home, ids[0]!), JSON.stringify({ payg: true }))
+      cli = lcwCommand($.plugin.root)
+    }
+  }
+  return stopTexts({
+    event: 'PostToolUse', lcwCall: lcwOnly(command), hasRun: !!run, cli, money: f.money, quota: f.quota,
+    heldQuota: f.quota?.hold ? f.quota : run?.quota?.hold ? run.quota : null, mark: f.mark, usage: f.usage, now: f.now,
+    driverHeld: !!run && !run.quota && atMark(driverMark, f.usage, f.now, driverMoney), driverMoney, driverMark,
+  })
+}
+
+// One failed call counted at a time, so two that fail together are both counted.
+let counting: Promise<unknown> = Promise.resolve()
+
+// A failed tool call of the session's own, counted in the record the activity hook keeps, under the name it uses.
+function countFailure($: EngineInterface, e: Parameters<typeof nextActivity>[0] & { session_id?: string; transcript_path?: string }) {
+  const name = e.transcript_path ? e.transcript_path.split('/').pop()!.replace(/\.jsonl$/, '') : e.session_id
+  counting = counting.catch(() => {}).then(async () => {
+    if (!name) return
+    const file = activityFile(await lcwHome($), name)
+    // The hooks write it too: read as it stands, not as a look a moment ago saw it.
+    forget(file)
+    const record = nextActivity(e, await readJson($, file), await $.clock.now())
+    if (record) await write($, file, JSON.stringify(record))
+  })
+  return counting
+}
+
 async function start($: EngineInterface) {
   if (S.started) return
   S.started = true
@@ -1236,6 +1282,23 @@ export const register: Register = (on) => {
     const result = await next(e)
     try { if (!e.agent_id) setCarry($, carryFailed(S.carry, e.error, await $.clock.now())) } catch {}
     return result
+  })
+
+  // After each of the session's own tool calls: the stop at the mark, said here with no process. A subagent's call
+  // says nothing: its orchestrator is the one to stop. agent_id is present, with no value, on the session's own calls.
+  // Worked out before the hooks beneath run, so an older list of hooks that still has the limit hook finds the note recorded.
+  on('classic.PostToolUse', async ($, e, next) => {
+    let texts: string[] = []
+    try { if (!e.agent_id) texts = await afterTool($, e.tool_input && (e.tool_input as any).command) } catch {}
+    const result = await next(e)
+    return texts.length ? { ...result, additionalContext: [...(result?.additionalContext ?? []), texts.join('\n')] } : result
+  })
+
+  // A failed call of the session's own moves the mascot. Counted before the hooks beneath run, so the activity hook of
+  // an older list of hooks finds it counted.
+  on('classic.PostToolUseFailure', async ($, e, next) => {
+    try { if (!e.agent_id) await countFailure($, e) } catch {}
+    return next(e)
   })
 
   on('session.stop', async ($, e, next) => {

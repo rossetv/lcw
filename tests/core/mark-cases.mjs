@@ -176,6 +176,25 @@ export const cases = [
     expect: { prompt: driverStop('80% of the week used, mark 75%'), tool: driverStop('80% of the week used, mark 75%'), lcw: null, agent: null },
   },
   {
+    name: 'after a tool call, an outside quota that refuses new work holds the session below the mark',
+    sessions: { p1: { billing: 'subscription' } },
+    quota: { p1: 'blocked' },
+    expect: { tool: quotaStop('external week: 42% used; provider refused new work', false), lcw: null, agent: null },
+  },
+  {
+    name: 'after a tool call, an outside quota that cannot be read holds the session',
+    sessions: { p1: { billing: 'subscription' } },
+    quota: { p1: 'missing' },
+    expect: { tool: quotaStop('external quota: unavailable (config-unavailable); new work held', false), lcw: null, agent: null },
+  },
+  {
+    name: 'after a tool call, the note gives a stated cap and a mark set in dollars',
+    sessions: { p1: { billing: 'payg', markUsd: 4500 } },
+    spend: { p1: 100 },
+    cap: 5000,
+    expect: { tool: note('$4,500, as the user set it', false), agent: null },
+  },
+  {
     name: 'the run\'s driver at its mark in dollars',
     sessions: { p1: { billing: 'subscription' }, drv: PAYG },
     spend: { drv: 3500 },

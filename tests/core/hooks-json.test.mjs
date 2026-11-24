@@ -14,3 +14,7 @@ test('before a tool call the agent gate and the question hook stay', () => {
   assert.deepEqual(scripts('PreToolUse', 'Agent|Task'), ['hook-agent-gate.mjs'])
   assert.deepEqual(scripts('PreToolUse', 'AskUserQuestion'), ['hook-activity.mjs'])
 })
+
+test('a tool call that ends, well or not, starts no LCW process: the mod answers it', () => {
+  assert.deepEqual([hooks.PostToolUse, hooks.PostToolUseFailure], [undefined, undefined])
+})

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawn } from 'node:child_process'
 import { tmp, makeRepo, run, readJson, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
-import { usageFile, activityFile } from '../../lib/key.mjs'
+import { usageFile, activityFile, sessionFile, spendFile } from '../../lib/key.mjs'
+import { toldFile } from '../../lib/mark.mjs'
 import { cases } from './mark-cases.mjs'
 
 const NOW = Date.UTC(2026, 5, 10, 12, 0, 0)
@@ -58,4 +59,22 @@ test('the limit hook records nothing for a tool call, a subagent or a prompt wit
   assert.equal(same({ session_id: 'p1', cwd: repo, hook_event_name: 'UserPromptSubmit', agent_id: 'a1' }), was)
   run(LIMIT_HOOK, [], { home, cwd: repo, input: JSON.stringify({ cwd: repo, hook_event_name: 'UserPromptSubmit' }) })
   assert.deepEqual(fs.readdirSync(`${home}/activity`), ['p1.json'])
+})
+
+test('the pay-per-token note at a prompt is said unless the session file or the mod\'s own record says it was', () => {
+  const quarter = Math.floor(NOW / 900000)
+  const said = (session, told) => {
+    const { home, repo } = setup()
+    fs.writeFileSync(usageFile(home), '{}')
+    fs.mkdirSync(`${home}/sessions`, { recursive: true })
+    fs.writeFileSync(sessionFile(home, 'p1'), JSON.stringify(session))
+    fs.mkdirSync(`${home}/spend`)
+    fs.writeFileSync(spendFile(home, 'p1'), JSON.stringify({ v: 1, base: 0, max: 100, q: { [quarter]: 100 } }))
+    if (told) { fs.mkdirSync(`${home}/told`); fs.writeFileSync(toldFile(home, 'p1'), JSON.stringify(told)) }
+    const r = run(LIMIT_HOOK, [], { home, cwd: repo, env: { LCW_NOW: String(NOW) }, input: prompt(repo) })
+    return /billed per token/.test(r.out)
+  }
+  assert.equal(said({ billing: 'payg' }), true)
+  assert.equal(said({ billing: 'payg', toldPayg: true }), false)
+  assert.equal(said({ billing: 'payg' }, { payg: true }), false)
 })
