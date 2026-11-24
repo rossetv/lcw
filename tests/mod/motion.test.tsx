@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { hex } from '../../lib/theme.mjs'
 
 // The card is redrawn when what it shows changes or its motion is due: five steps a second while work is in flight,
 // one while the run waits on the person, none when it is paused.
@@ -116,5 +117,22 @@ test('a paused card that holds still keeps its heartbeat every five seconds', as
     expect(w.age()).toBeLessThanOrEqual(5000)
   }
   expect(w.redraws).toBe(0)
+  await band.unmount()
+})
+
+test('a theme changed while the card is paused redraws it once, in the new colours', async ($, on) => {
+  const w = engine(on, PAUSED)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await w.advance(2050)
+  const colours = async () => new Set((await band.findAll({ type: 'Text' })).map((t: any) => t.props.color).filter(Boolean))
+  expect([...await colours()]).toContain(hex('dark', 'text'))
+  w.redraws = 0
+  w.theme = 'light'
+  await w.advance(10000)
+  expect(w.redraws).toBe(1)
+  const now = await colours()
+  expect([...now]).toContain(hex('light', 'text'))
+  expect([...now]).not.toContain(hex('dark', 'text'))
   await band.unmount()
 })
