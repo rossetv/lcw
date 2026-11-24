@@ -154,7 +154,7 @@ describe('when Node starts', { concurrency: true }, () => {
     test(`${what} shows at the next tick`, () => {
       const s = scratch()
       assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }).code, 0)
-      fs.writeFileSync(`${runDir(s)}/mod-alive`, String(S * 1000))
+      fs.writeFileSync(`${runDir(s)}/mod-alive`, String(S * 1000 + 437))
       settle(s, inputOf(s))
       tick(s, inputOf(s), S); tick(s, inputOf(s), S + 1)
       assert.equal(starts(s), 1)
@@ -169,20 +169,25 @@ describe('when Node starts', { concurrency: true }, () => {
     assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }).code, 0)
     settle(s, inputOf(s))
     assert.match(plain(tick(s, inputOf(s), S)), /LCW Build/)
-    fs.writeFileSync(`${runDir(s)}/mod-alive`, String(S * 1000 + 1000))
+    fs.writeFileSync(`${runDir(s)}/mod-alive`, String(S * 1000 + 1437))
     assert.doesNotMatch(plain(tick(s, inputOf(s), S + 1)), /LCW Build/)
     assert.equal(starts(s), 2)
   })
 
-  test('the card comes back at the first tick past 15 seconds after the last heartbeat', () => {
+  test('the card comes back at the first tick past 15 seconds after the last heartbeat, by the millisecond', () => {
     const s = scratch()
     assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }).code, 0)
-    fs.writeFileSync(`${runDir(s)}/mod-alive`, String(S * 1000 - 10_000))
+    // 15 s old at S + 4.563: whether the mod runs in the second S + 4 depends on the moment, so Node draws it
+    fs.writeFileSync(`${runDir(s)}/mod-alive`, String(S * 1000 - 10_437))
     settle(s, inputOf(s))
-    for (let x = S; x <= S + 5; x++) assert.doesNotMatch(plain(tick(s, inputOf(s), x)), /LCW Build/)
+    for (let x = S; x <= S + 3; x++) assert.doesNotMatch(plain(tick(s, inputOf(s), x)), /LCW Build/)
     assert.equal(starts(s), 1)
-    assert.match(plain(tick(s, inputOf(s), S + 6)), /LCW Build/)
+    assert.doesNotMatch(plain(tick(s, inputOf(s), S + 4, { env: { LCW_NOW: String((S + 4) * 1000 + 500) } })), /LCW Build/)
     assert.equal(starts(s), 2)
+    assert.match(plain(tick(s, inputOf(s), S + 4, { env: { LCW_NOW: String((S + 4) * 1000 + 600) } })), /LCW Build/)
+    assert.equal(starts(s), 3)
+    assert.match(plain(tick(s, inputOf(s), S + 5)), /LCW Build/)
+    assert.equal(starts(s), 3, 'past the second where it turned, the frame is played')
   })
 
   test('the conversation written again while the session waits on the person ends the wait at the next tick', () => {

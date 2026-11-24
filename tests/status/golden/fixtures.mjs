@@ -50,6 +50,12 @@ const defs = [
   { name: 'too-narrow-for-mascot', columns: '50' },
   { name: 'theme-light', theme: 'light', setup: activity('working') },
   { name: 'night-hour', now: Date.UTC(2026, 2, 10, 3, 0, 0), setup: activity('rest') },
+  // A heartbeat that is not on a whole second: a mod that stopped, its last beat 9.5 s before a first second that
+  // falls 100, 437 or 999 ms into a second, so that it turns 15 s old within the sixth; and a mod that keeps beating.
+  ...[100, 437, 999].map((ms) => ({ name: `run-heartbeat-stops-${ms}`, now: NOW0 + ms, ...(ms === 437 ? { sameAs: 'run-heartbeat-stops-100' } : {}),
+    setup: withRun((c) => fs.writeFileSync(c.runDir() + '/mod-alive', String(NOW0 - 9500))) })),
+  { name: 'run-heartbeat-off-the-second', now: NOW0 + 437, beat: true, setup: withRun((c) => {
+    fs.writeFileSync(c.runDir() + '/quiet-agents.json', JSON.stringify({ quiet: 2, stalled: 0 })); heartbeat(0)(c) }) },
 ]
 
 export const fixtures = defs.map((d) => ({ columns: '120', theme: 'dark', tz: 'Europe/London', now: NOW0, ...d }))

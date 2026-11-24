@@ -65,11 +65,8 @@ export function mapInput(inp, now = Date.now(), markPercent = DEFAULT_MARK, also
   }
 }
 
-/**
- * Whether the run's mod is drawing it: its heartbeat is at most 15 seconds old. Frames drawn ahead judge it at the
- * start of the second they are drawn for, as the player does, so a frame never takes the heartbeat for older than it is.
- */
-const modRunning = (f, now) => f.running ?? now - f.alive <= 15000
+/** Whether the run's mod is drawing it: its heartbeat is at most 15 seconds old at the moment drawn for. */
+const modRunning = (f, now) => now - f.alive <= 15000
 
 /** What a run adds to the mascot's mood: its questions, its pause, how its requirements, tasks and agents stand. */
 function runFacts(f, now, share) {
@@ -138,10 +135,9 @@ function saveContext(file, tokens, window, now) {
 
 /**
  * Reads what the rows show, each file once, and records what this tick has new: the billing, the spend, the
- * context size, the newest weekly figure and the run's gate. What it returns is all a draw needs. With `second`,
- * the frames to draw are for that second and those after it.
+ * context size, the newest weekly figure and the run's gate. What it returns is all a draw needs.
  */
-function readRecords(inp, now, { second } = {}) {
+function readRecords(inp, now) {
   const h = home()
   let run = null
   const ids = sessionIds(inp)
@@ -211,7 +207,6 @@ function readRecords(inp, now, { second } = {}) {
   }
   if (run) {
     f.alive = Number(readText(run.paths.modAlive)?.trim()) || 0
-    if (second != null) f.running = second - Math.floor(f.alive / 1000) <= 15
     f.quiet = readJson(run.paths.quiet)
     f.gate = readJson(run.paths.gate)
     f.driverMark = driverMark(run.state)
@@ -320,7 +315,7 @@ export async function main({ margin = 5, input } = {}) {
 //   last              the rows this draw printed, for when a later draw fails
 //   key               what the player compares, written last and removed first, so it only ever names a whole strip:
 //     <COLUMNS> <LCW_THEME> <zone>      as the player sees them, ${COLUMNS:-0} ${LCW_THEME:-dark} and date's %z
-//     <heartbeat file> <1|0>             whether the mod was running at the first second; empty with no run
+//     <heartbeat file> <seconds>         the heartbeat the frames were drawn with, in whole seconds; empty with no run
 //     <strip>
 //     D                                  a line that is none of the others
 //     what must not change, then D:  /path (there, and not newer than key)  !/path (not there)  %/path (there)  +pid (running)
@@ -427,7 +422,7 @@ function keyOf(text, f, inp, { zone, tag, paid }) {
   const { COLUMNS = '', LCW_THEME = '' } = process.env
   if (/\s/.test(COLUMNS + LCW_THEME)) return null
   const watched = watchedOf(f, inp, paid)
-  const beat = f.run ? `${f.run.paths.modAlive} ${f.running ? 1 : 0}` : ''
+  const beat = f.run ? `${f.run.paths.modAlive} ${Math.floor(f.alive / 1000)}` : ''
   if (!watched || (beat && !beat.startsWith('/'))) return null
   const strict = f.billing === 'subscription' ? [...IGNORED, 'total_cost_usd'] : IGNORED
   return keyText(text, { head: [`${COLUMNS || '0'} ${LCW_THEME || 'dark'} ${zone}`, beat, tag], watched, strict, lenient: ALSO_IGNORED })
@@ -496,7 +491,7 @@ export async function ahead(text, { at, margin = 4 } = {}) {
     const now = clock()
     const told = /^(\d+)([+-]\d{4})$/.exec(String(at ?? ''))
     const first = told ? Number(told[1]) : Math.floor(now / 1000)
-    const f = readRecords(inp, now, { second: first })
+    const f = readRecords(inp, now)
     const look = surroundings(margin)
     const zone = zoneOf(frameTime(first, now))
     const until = deadline(f, now)

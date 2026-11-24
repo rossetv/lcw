@@ -58,15 +58,16 @@ process.stdout.write(spawnSync(${JSON.stringify(shell)}, ['-c', '. "' + bin + '/
 }
 
 describe('frames drawn ahead and played back print the pinned bytes, second by second', { concurrency: true }, () => {
-  const runs = [...fixtures.map((f) => [f, 'sh']), ...SHELLS.filter((s) => s !== 'sh').flatMap((s) => ['run-fresh-heartbeat', 'activity-yawning'].map((n) => [fixtures.find((f) => f.name === n), s]))]
+  const runs = [...fixtures.map((f) => [f, 'sh']), ...SHELLS.filter((s) => s !== 'sh').flatMap((s) => ['run-fresh-heartbeat', 'activity-yawning', 'run-heartbeat-stops-999'].map((n) => [fixtures.find((f) => f.name === n), s]))]
   for (const [f, shell] of runs) {
     test(`${f.name} in ${shell}`, async () => {
       const root = playerRoot(shell)
       const want = JSON.parse(fs.readFileSync(expectedFile(f), 'utf8'))
       const got = await drawFixture(root, f)
       for (const [i, bytes] of got.entries()) assert.equal(bytes, want[i], `${f.name}, second ${i}`)
-      // one draw before the first second gives the next 15; the 16th needs another
-      assert.equal(starts(root), 2)
+      // one draw before the first second gives the next 15 and the 16th needs another; a mod that stops costs one
+      // more, in the second its heartbeat turns 15 s old, where whether it runs depends on the millisecond
+      assert.equal(starts(root), f.name.startsWith('run-heartbeat-stops') ? 3 : 2)
     })
   }
 })
@@ -99,13 +100,13 @@ function saved(home) {
   return new Map(fs.readdirSync(`${dir}/${tag}`).map((n) => [Number(n), fs.readFileSync(`${dir}/${tag}/${n}`, 'utf8')]))
 }
 /** Each saved frame against a fresh draw at its own second, each in a copy of the home as the draw ahead left it. */
-function compareFresh(s, input, frames, only = () => true) {
+function compareFresh(s, input, frames, only = () => true, ms = 0) {
   let compared = 0
   for (const [second, rows] of frames) {
     if (!only(second)) continue
     const copy = `${tmp('copy')}/lcw`
     fs.cpSync(s.home, copy, { recursive: true })
-    assert.equal(launch(s, input, second * 1000, { home: copy }), rows, `second ${second}`)
+    assert.equal(launch(s, input, second * 1000 + ms, { home: copy }), rows, `second ${second}`)
     compared++
   }
   return compared
@@ -143,16 +144,16 @@ describe('each frame is what a fresh draw prints at its own second, across a val
     assert.equal(compareFresh(s, input, frames), frames.size)
   })
 
-  test('the heartbeat goes stale part-way: every frame is drawn as for a running mod', () => {
+  test('the heartbeat goes stale part-way: each frame judges it at its own moment, by the millisecond', () => {
     const s = scratch()
     assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }).code, 0)
     const dir = JSON.parse(fs.readFileSync(`${s.home}/sessions/s1.json`, 'utf8')).runDir
-    fs.writeFileSync(`${dir}/mod-alive`, String(NOW - 10_000))
-    launch(s, baseInput(s), NOW, { at: S })
+    // 15 s old at NOW + 5500: running in the frame drawn at S + 5, 437 ms into its second, stale in the next
+    fs.writeFileSync(`${dir}/mod-alive`, String(NOW - 9500))
+    launch(s, baseInput(s), NOW + 437, { at: S })
     const frames = saved(s.home)
-    assert.ok(!/LCW Build/.test(frames.get(S + 15)), 'no card while the mod draws it')
-    // the player shows a frame only while the heartbeat is at most 15 seconds old at the start of its second
-    assert.equal(compareFresh(s, baseInput(s), frames, (x) => x - (NOW - 10_000) / 1000 <= 15), 6)
+    assert.ok(!/LCW Build/.test(frames.get(S + 5)) && /LCW Build/.test(frames.get(S + 6)))
+    assert.equal(compareFresh(s, baseInput(s), frames, () => true, 437), frames.size)
   })
 
   test('the clocks go forward part-way: the frames stop at the change, as they are for one offset only', () => {

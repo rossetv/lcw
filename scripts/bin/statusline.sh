@@ -67,13 +67,19 @@ lcw_play() {
     done
     [ -n "$lcw_st" ] && [ "$lcw_in" = "$lcw_pre" ] || return 1
   } < "$lcw_key"
-  # The heartbeat is judged by its number against the clock, so a fresh one changes nothing and a flip draws again.
+  # The heartbeat is judged by its number against the clock, so a fresh one changes nothing. A frame is played only
+  # in a second where the mod runs at every moment of it (the heartbeat at most 14 whole seconds old) or at none (16
+  # or more), both by the heartbeat there is now and by the one the frame was drawn with; in the second between,
+  # whether the mod runs depends on the millisecond, and Node draws.
   if [ -n "$lcw_beat" ]; then
     lcw_ms=
     [ -r "${lcw_beat% *}" ] && IFS= read -r lcw_ms < "${lcw_beat% *}"
     case $lcw_ms in '') lcw_ms=0 ;; *[!0-9]*|0?*|????????????????*) return 1 ;; esac
-    if [ $((lcw_s - lcw_ms / 1000)) -le 15 ]; then lcw_l=1; else lcw_l=0; fi
-    [ "$lcw_l" = "${lcw_beat##* }" ] || return 1
+    lcw_w=${lcw_beat##* }
+    case $lcw_w in ''|*[!0-9]*|????????????????*) return 1 ;; esac
+    lcw_l=$((lcw_s - lcw_ms / 1000)) lcw_w=$((lcw_s - lcw_w))
+    if [ "$lcw_l" -le 14 ]; then [ "$lcw_w" -le 14 ] || return 1
+    else [ "$lcw_l" -ge 16 ] && [ "$lcw_w" -ge 16 ] || return 1; fi
   fi
   lcw_f=$lcw_d/$lcw_tag/$lcw_s
   [ -r "$lcw_f" ] || return 1
