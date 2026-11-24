@@ -3,6 +3,7 @@
 // or one line that says where to look. With the second the player read (date's %s%z), it also saves the frames
 // the player prints in the seconds that follow.
 import fs from 'node:fs'
+import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 
@@ -12,7 +13,7 @@ const LOG_BYTES = 64 * 1024
 const BROKEN = 'LCW · status line could not load · see ~/.lcw/statusline.log\n'
 
 const read = (file) => { try { return fs.readFileSync(file, 'utf8') } catch { return null } }
-const holds = (dir) => !!dir && dir.startsWith('/') && fs.existsSync(`${dir}/scripts/statusline.mjs`)
+const holds = (dir) => !!dir && path.isAbsolute(dir) && fs.existsSync(path.join(dir, 'scripts', 'statusline.mjs'))
 
 // A fault already among the last lines is not written again, so faults of a few sessions that take turns add nothing.
 const RECENT = 8

@@ -166,6 +166,15 @@ test('the log names the pointer the launcher read, beside itself, when the sessi
   assert.ok(line.includes(`named in ${s.home}/plugin-root is gone`), line)
 })
 
+test('a pointer that names no absolute folder is passed over', () => {
+  const s = scratch()
+  plugin(`${s.t}/a`)
+  fs.writeFileSync(`${s.home}/plugin-root`, 'a\n')
+  fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
+  const r = spawnSync(process.execPath, [`${s.home}/bin/statusline.mjs`, `${S}+0000`], { cwd: s.t, input: INPUT, encoding: 'utf8', env: env(s), timeout: 15_000 })
+  assert.equal(r.stdout, 'drawn by setup\n')
+})
+
 test('a record that names an older copy of the plugin is never followed', () => {
   const s = scratch(`${tmp('gone')}/lcw`)
   const moved = `${tmp('moved')}/lcw`
