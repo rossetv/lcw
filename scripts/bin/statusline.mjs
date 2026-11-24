@@ -4,7 +4,7 @@
 // the player prints in the seconds that follow.
 import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { pathToFileURL } from 'node:url'
+import { pathToFileURL, fileURLToPath } from 'node:url'
 
 const home = process.env.LCW_HOME || `${process.env.HOME}/.lcw`
 const LOG = `${home}/statusline.log`
@@ -42,14 +42,16 @@ function lastRows(text) {
  * installed plugin's, which are looked up only when `more` is asked for. `gone` says what is wrong with the pointer.
  */
 function folders() {
-  const pointer = read(new URL('../plugin-root', import.meta.url))?.trim()
+  // the pointer beside this file, which may be another home's than the session's
+  const file = fileURLToPath(new URL('../plugin-root', import.meta.url))
+  const pointer = read(file)?.trim()
   const more = async () => {
     const setup = read(new URL('./setup-root', import.meta.url))?.trim()
     let installed = null
     try { installed = (await import('./installed.mjs')).installedFolder() } catch {}
     return [...new Set([setup, installed].filter(holds))].filter((dir) => dir !== pointer)
   }
-  const gone = holds(pointer) ? null : pointer ? `the plugin folder ${pointer} named in ${home}/plugin-root is gone` : `${home}/plugin-root names no plugin folder`
+  const gone = holds(pointer) ? null : pointer ? `the plugin folder ${pointer} named in ${file} is gone` : `${file} names no plugin folder`
   return { first: gone ? null : pointer, gone, more }
 }
 
