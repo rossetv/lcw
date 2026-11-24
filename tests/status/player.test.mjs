@@ -305,6 +305,16 @@ describe('what is played', { concurrency: true }, () => {
     assert.notEqual(tick(s, inputOf(s, { session_id: '../planted' }), S + 1), 'PLANTED\n')
   })
 
+  test('an input far larger than any real one saves no frames, and reaches Node whole', () => {
+    const s = scratch()
+    // a long field first, over many lines, and what the rows show after it
+    const pad = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`k${i}`, 'v'.repeat(30)]))
+    const input = JSON.stringify({ session_id: 's1', pad, ...inputOf(s), model: { display_name: 'Big 5' } }, null, 1).replace(/": /g, '":')
+    for (const x of [S, S + 1]) assert.match(plain(tick(s, input, x)), /Big 5/)
+    assert.equal(starts(s), 2)
+    assert.ok(!fs.existsSync(`${s.home}/frames/s1/key`))
+  })
+
   test('an input that writes its session id otherwise gets a fresh draw at every tick', () => {
     const s = scratch()
     const input = JSON.stringify(inputOf(s)).replace('"session_id":"s1"', '"session_id": "s1"')

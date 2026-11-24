@@ -15,15 +15,22 @@ lcw_h=${LCW_HOME:-$HOME/.lcw}
 # The launcher is in the folder the status line command names in lcw_bin, else in the LCW home; frames, records and
 # the log are always in the LCW home.
 lcw_launcher=${lcw_bin:-$lcw_h/bin}/statusline.mjs
-lcw_in= lcw_l=
+# The input, up to 32 KB (a real one is about 2): Node saves no frames for a larger one, which is read no further
+# here, as its cost would grow with the square of its size, and goes to Node with the rest of it unread.
+lcw_in= lcw_l= lcw_big=
 IFS= read -r lcw_in
-while IFS= read -r lcw_l || [ -n "$lcw_l" ]; do lcw_in=$lcw_in$lcw_nl$lcw_l; lcw_l=; done
+lcw_n=${#lcw_in}
+while [ "$lcw_n" -le 32768 ] && { IFS= read -r lcw_l || [ -n "$lcw_l" ]; }; do lcw_in=$lcw_in$lcw_nl$lcw_l; lcw_n=$((lcw_n + ${#lcw_l} + 1)); lcw_l=; done
+[ "$lcw_n" -le 32768 ] || lcw_big=1
 lcw_now=$(exec date +%s%z 2>/dev/null)
 lcw_s=${lcw_now%[+-][0-9][0-9][0-9][0-9]}; lcw_z=${lcw_now#"$lcw_s"}
 case $lcw_s in ''|*[!0-9]*|0*) lcw_s= lcw_now= ;; esac
-lcw_sid=${lcw_in#*\"session_id\":\"}
-if [ "$lcw_sid" = "$lcw_in" ]; then lcw_sid=; else lcw_sid=${lcw_sid%%\"*}; fi
-case $lcw_sid in *[!A-Za-z0-9_-]*) lcw_sid= ;; esac
+lcw_sid=
+if [ -z "$lcw_big" ]; then
+  lcw_sid=${lcw_in#*\"session_id\":\"}
+  if [ "$lcw_sid" = "$lcw_in" ]; then lcw_sid=; else lcw_sid=${lcw_sid%%\"*}; fi
+  case $lcw_sid in *[!A-Za-z0-9_-]*) lcw_sid= ;; esac
+fi
 
 # Prints the frame for this second when every check holds; returns 1 at the first that does not.
 lcw_play() {
@@ -93,7 +100,7 @@ lcw_play && exit 0
 # Node draws, under the locale the shell had, for the second read above.
 if [ -r "$lcw_launcher" ]; then
   lcw_out=$(if [ -n "$lcw_lcset" ]; then LC_ALL=$lcw_lc; else unset LC_ALL; fi
-    printf '%s' "$lcw_in" | node "$lcw_launcher" ${lcw_now:+"$lcw_now"} 2>/dev/null; printf ' %s' "$?")
+    { printf '%s' "$lcw_in"; [ -z "$lcw_big" ] || { printf '\n'; exec cat; }; } | node "$lcw_launcher" ${lcw_now:+"$lcw_now"} 2>/dev/null; printf ' %s' "$?")
   lcw_r=${lcw_out##* }; lcw_out=${lcw_out% *}
   if [ "$lcw_r" = 0 ] && [ -n "$lcw_out" ]; then printf '%s' "$lcw_out"; exit 0; fi
   case $lcw_r in

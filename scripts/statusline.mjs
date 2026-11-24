@@ -322,6 +322,9 @@ export async function main({ margin = 5, input } = {}) {
 //     the input cut at the values that may change, each piece followed by D
 const FRAMES = 16
 const SESSION = /^[A-Za-z0-9_-]{1,128}$/
+// A real input is about 2 KB; the player stops reading one past this, and the time its check takes grows with the
+// square of the input's size.
+const INPUT_BYTES = 32 * 1024
 // The fields of the input that change while the rows stay the same: how long the session has run, its token
 // and prompt-cache counts, the lines it changed (the rows count them with git), the five-hour limit, and on a
 // subscription its cost. Everything else is compared. The first ones always hold a plain number, and an input where
@@ -420,7 +423,7 @@ export function keyText(text, { head, watched, strict = [], lenient = [] }) {
 /** The key for this draw, or null when no frame can be saved safely for this input. */
 function keyOf(text, f, inp, { zone, tag, paid }) {
   const { COLUMNS = '', LCW_THEME = '' } = process.env
-  if (/\s/.test(COLUMNS + LCW_THEME)) return null
+  if (/\s/.test(COLUMNS + LCW_THEME) || Buffer.byteLength(text) > INPUT_BYTES) return null
   const watched = watchedOf(f, inp, paid)
   const beat = f.run ? `${f.run.paths.modAlive} ${Math.floor(f.alive / 1000)}` : ''
   if (!watched || (beat && !beat.startsWith('/'))) return null
