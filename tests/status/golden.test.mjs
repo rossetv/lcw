@@ -18,7 +18,7 @@ describe('the status line prints the same bytes, second by second', { concurrenc
 
 test('no two fixtures pin the same bytes', () => {
   const seen = new Map()
-  for (const f of fixtures) {
+  for (const f of fixtures.filter((x) => !x.sameAs)) {
     const key = fs.readFileSync(expectedFile(f), 'utf8')
     assert.ok(!seen.has(key), `${f.name} pins the same bytes as ${seen.get(key)}`)
     seen.set(key, f.name)

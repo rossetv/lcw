@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url'
 export const EXPECTED = path.join(path.dirname(fileURLToPath(import.meta.url)), 'expected')
 export const SECONDS = 16
 export const NOW0 = Date.UTC(2026, 2, 10, 12, 0, 0)
-export const expectedFile = (f) => path.join(EXPECTED, f.name + '.json')
+// A fixture with sameAs has no file of its own: it must print what the named fixture prints.
+export const expectedFile = (f) => path.join(EXPECTED, (f.sameAs ?? f.name) + '.json')
 export const times = (f) => Array.from({ length: SECONDS }, (_, i) => f.now + i * 1000)
 
 const sec = (ms) => Math.floor(ms / 1000)
@@ -38,6 +39,9 @@ const defs = [
   { name: 'activity-done', setup: activity('done') },
   { name: 'activity-failed', setup: activity('failed') },
   { name: 'activity-needs', setup: activity('needs') },
+  { name: 'run-open-question', sameAs: 'activity-needs', beat: true, setup: withRun((c) => { c.cli(['ask', 'Which database?']); heartbeat(0)(c) }) },
+  { name: 'activity-needs-answered', sameAs: 'activity-working', transcript: true, setup: (c) => {
+    activity('needs')(c); const t = (c.now + 60000) / 1000; fs.utimesSync(c.transcript, t, t) } },
   { name: 'activity-asleep', setup: (c) => activity('rest')({ ...c, now: c.now - 10 * 60000 }) },
   { name: 'activity-yawning', setup: (c) => activity('rest')({ ...c, now: c.now - 5 * 60000 + 7000 }) },
   { name: 'three-failed-calls', setup: (c) => activity('working', { fails: 3, failAt: c.now - 10000 })(c) },
