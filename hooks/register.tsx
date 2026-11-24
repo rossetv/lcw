@@ -1295,19 +1295,20 @@ export const register: Register = (on) => {
   // After each of the session's own tool calls: the stop at the mark, said here with no process. A subagent's call
   // says nothing: its orchestrator is the one to stop. agent_id is present, with no value, on the session's own calls.
   // Worked out before the hooks beneath run, so an older list of hooks that still has the limit hook finds the note recorded.
+  // Whatever fails, the hooks beneath among them, the call goes on: with what they said, else with nothing added.
   on('classic.PostToolUse', async ($, e, next) => {
     let texts: string[] = []
     try { if (!e.agent_id) texts = await afterTool($, e.tool_input && (e.tool_input as any).command) } catch {}
     const result = await next(e)
     return texts.length ? { ...result, additionalContext: [...(result?.additionalContext ?? []), texts.join('\n')] } : result
-  })
+  }).catch(($, e, next) => next(e).catch(() => ({})))
 
   // A failed call of the session's own moves the mascot. Counted before the hooks beneath run, so the activity hook of
   // an older list of hooks finds it counted.
   on('classic.PostToolUseFailure', async ($, e, next) => {
     try { if (!e.agent_id) await countFailure($, e) } catch {}
     return next(e)
-  })
+  }).catch(($, e, next) => next(e).catch(() => ({})))
 
   on('session.stop', async ($, e, next) => {
     const result = await next(e)
