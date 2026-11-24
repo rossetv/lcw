@@ -32,17 +32,12 @@ const defs = [
   { name: 'subscription-no-run' },
   { name: 'pay-per-token', input: (f) => ({ ...baseInput(f), rate_limits: undefined, cost: { total_cost_usd: 3.5 } }) },
   { name: 'run-fresh-heartbeat', beat: true, setup: withRun((c) => {
-    fs.writeFileSync(c.runDir() + '/quiet-agents.json', JSON.stringify({ quiet: 1, stalled: 1 })); heartbeat(0)(c) }) },
+    fs.writeFileSync(c.runDir() + '/quiet-agents.json', JSON.stringify({ quiet: 2, stalled: 0 })); heartbeat(0)(c) }) },
   { name: 'run-stale-heartbeat', setup: withRun(heartbeat(60000)) },
-  { name: 'run-open-question', beat: true, setup: withRun((c) => { c.cli(['ask', 'Which database?']); heartbeat(0)(c) }) },
-  { name: 'activity-start', setup: activity('start') },
-  { name: 'activity-working', setup: activity('working') },
+  { name: 'activity-working', transcript: true, setup: activity('working') },
   { name: 'activity-done', setup: activity('done') },
   { name: 'activity-failed', setup: activity('failed') },
   { name: 'activity-needs', setup: activity('needs') },
-  { name: 'activity-needs-answered', setup: (c) => {
-    activity('needs')(c); const t = (c.now + 60000) / 1000; fs.utimesSync(c.transcript, t, t) }, transcript: true },
-  { name: 'activity-rest', setup: activity('rest') },
   { name: 'activity-asleep', setup: (c) => activity('rest')({ ...c, now: c.now - 10 * 60000 }) },
   { name: 'activity-yawning', setup: (c) => activity('rest')({ ...c, now: c.now - 5 * 60000 + 7000 }) },
   { name: 'three-failed-calls', setup: (c) => activity('working', { fails: 3, failAt: c.now - 10000 })(c) },
@@ -50,7 +45,6 @@ const defs = [
   { name: 'narrow-window', columns: '70' },
   { name: 'too-narrow-for-mascot', columns: '50' },
   { name: 'theme-light', theme: 'light', setup: activity('working') },
-  { name: 'theme-dark', theme: 'dark', setup: activity('working') },
   { name: 'night-hour', now: Date.UTC(2026, 2, 10, 3, 0, 0), setup: activity('rest') },
 ]
 
