@@ -1313,7 +1313,7 @@ export const register: Register = (on) => {
     let texts: string[] = []
     try { if (!e.agent_id) texts = await afterTool($, e.tool_input && (e.tool_input as any).command) } catch {}
     // Another plugin's hook that fails beneath must not take the stop at the mark with it.
-    const result = await next(e).catch(() => ({}))
+    const result = await next(e).catch(() => ({} as Awaited<ReturnType<typeof next>>))
     return texts.length ? { ...result, additionalContext: [...(result?.additionalContext ?? []), texts.join('\n')] } : result
   }).catch(($, e, next) => next(e).catch(() => ({})))
 
