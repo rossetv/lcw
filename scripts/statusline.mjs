@@ -1,19 +1,22 @@
 // The status line command: reads Claude Code's JSON on stdin, prints the rows. Always prints, always exits 0.
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
-import { usageFile, activityFile, sessionFile, spendFile, runPaths, contextFile } from '../lib/key.mjs'
-import { home, readJson, readText, writeJson, holdReads } from './lib/store.mjs'
+import { usageFile, activityFile, sessionFile, spendFile, spendDir, runPaths, contextFile } from '../lib/key.mjs'
+import { home, readJson, readText, writeJson, holdReads, heldFiles } from './lib/store.mjs'
 import { findRun } from './lib/runs.mjs'
-import { settleGate, sessionIds, sessionMark, DEFAULT_MARK, driverMark } from './lib/gate.mjs'
-import { maybeRefresh } from './lib/spend-command.mjs'
+import { settleGate, gateStands, sessionIds, sessionMark, DEFAULT_MARK, driverMark } from './lib/gate.mjs'
+import { maybeRefresh, readSetting, WINDOW_MS } from './lib/spend-command.mjs'
 import { readMoney, recordSpend, dropSpend, setBilling } from './lib/money.mjs'
 import { settle, replied } from '../lib/billing.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
-import { diffOf, gitOf } from './lib/diff.mjs'
+import { gitOf } from './lib/diff.mjs'
 import { workOf } from '../lib/banner.mjs'
-import { noteQuotaSession, readSessionQuota, quotaUsage, sessionIdentity } from './lib/quota-session.mjs'
+import { noteQuotaSession, readSessionQuota, sessionQuota, quotaUsage, sessionIdentity } from './lib/quota-session.mjs'
+import { readQuotaState } from './lib/quota-command.mjs'
+import { activeQuota, REFRESH_MS } from '../lib/quota.mjs'
 
 const WEEK_MS = 168 * 3600 * 1000
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -62,6 +65,12 @@ export function mapInput(inp, now = Date.now(), markPercent = DEFAULT_MARK, also
   }
 }
 
+/**
+ * Whether the run's mod is drawing it: its heartbeat is at most 15 seconds old. Frames drawn ahead judge it at the
+ * start of the second they are drawn for, as the player does, so a frame never takes the heartbeat for older than it is.
+ */
+const modRunning = (f, now) => f.running ?? now - f.alive <= 15000
+
 /** What a run adds to the mascot's mood: its questions, its pause, how its requirements, tasks and agents stand. */
 function runFacts(f, now, share) {
   const { run } = f
@@ -69,7 +78,7 @@ function runFacts(f, now, share) {
   const count = (list, status) => (list ?? []).filter((x) => x.status === status).length
   const { tasks, requirements } = workOf(run.state)
   // The mod's count of quiet and stalled agents stands only while the mod is alive to keep it.
-  const agents = now - f.alive <= 15000 ? f.quiet : null
+  const agents = modRunning(f, now) ? f.quiet : null
   return {
     asks: run.state.asks?.length ?? 0,
     // Paused by the person: it sleeps. Paused at the usage mark it cries instead, as any session at its mark does.
@@ -110,6 +119,7 @@ function settleBilling(inp, ids, now) {
     if (billing === 'subscription') dropSpend(alias)
   }
   if (billing !== 'subscription' && cost !== null) recordSpend(id, cost, now)
+  return billing
 }
 
 function plainRow(input) {
@@ -128,14 +138,16 @@ function saveContext(file, tokens, window, now) {
 
 /**
  * Reads what the rows show, each file once, and records what this tick has new: the billing, the spend, the
- * context size, the newest weekly figure and the run's gate. What it returns is all a draw needs.
+ * context size, the newest weekly figure and the run's gate. What it returns is all a draw needs. With `second`,
+ * the frames to draw are for that second and those after it.
  */
-function readRecords(inp, now) {
+function readRecords(inp, now, { second } = {}) {
   const h = home()
   let run = null
   const ids = sessionIds(inp)
   try { noteQuotaSession(ids) } catch {}
-  try { settleBilling(inp, ids, now) } catch {}
+  let billing = 'unclear'
+  try { billing = settleBilling(inp, ids, now) ?? billing } catch {}
   for (const id of ids.length ? ids : [undefined]) {
     try { run = findRun({ sessionId: id, cwd: inp?.cwd || inp?.workspace?.current_dir }) } catch {}
     if (run) break
@@ -144,16 +156,17 @@ function readRecords(inp, now) {
   let mark = DEFAULT_MARK
   try { mark = sessionMark(ids) } catch {}
   const quota = readSessionQuota(ids, now, mark)
-  const driverQuota = run ? readSessionQuota(run.state.driver, now, driverMark(run.state)) : null
+  if (run) readSessionQuota(run.state.driver, now, driverMark(run.state))
   // While the session's run has its worktree, that is where the work is: the bar names the run's branch and
   // counts the run's changes. Without one, it counts the checkout the session is in.
   // A sweep has no worktree of its own: its latest work is the newest wave's worktree that still exists.
-  const latest = run && Array.isArray(run.state.sweep?.waves) ? [...run.state.sweep.waves].reverse().find((x) => x?.worktree && fs.existsSync(x.worktree)) : null
-  const runTree = latest ? latest.worktree : run?.state.worktree && fs.existsSync(run.state.worktree) ? run.state.worktree : null
+  const exists = []
+  const there = (p) => { const yes = fs.existsSync(p); exists.push([p, yes]); return yes }
+  const latest = run && Array.isArray(run.state.sweep?.waves) ? [...run.state.sweep.waves].reverse().find((x) => x?.worktree && there(x.worktree)) : null
+  const runTree = latest ? latest.worktree : run?.state.worktree && there(run.state.worktree) ? run.state.worktree : null
   const runBranch = latest ? latest.branch ?? run.state.branch : run?.state.branch
   const mapped = mapInput(inp, now, mark, runTree ? [] : ['diff'])
   const input = mapped.input
-  if (quota) input.quota = quota
   // The context's size for lcw checkpoint, which cannot see it: the share Claude Code reports of the window it reports.
   const pct = num(inp.context_window?.used_percentage), win = num(inp.context_window?.context_window_size)
   if (pct !== null && win) for (const id of ids) try { saveContext(contextFile(h, id), Math.round(pct / 100 * win), win, now) } catch {}
@@ -170,10 +183,8 @@ function readRecords(inp, now) {
   }
   // On pay-per-token billing the 7-day spend is what the mark is held against, and that needs no weekly figure.
   // The run is gated by its driving session's view, which is this session's own when it is the driver.
-  if (quota) usage = quotaUsage(quota, now)
   let money = null
   try { money = readMoney({ sessionId: ids, now, state: run?.state }) } catch {}
-  if (money) input.money = money
   if (run) {
     try {
       const driver = run.state.driver
@@ -182,11 +193,17 @@ function readRecords(inp, now) {
     } catch {}
   }
   if (runTree && runBranch) input.branch = runBranch
-  try { input.diff = runTree ? diffOf(runTree, h, now) : mapped.git.diff } catch {}
+  // The git figures are kept for 15 seconds, and frames drawn ahead show them no longer than that.
+  const gits = [mapped.git]
+  try {
+    if (runTree) gits.push(gitOf(runTree, h, now, ['diff']))
+    input.diff = gits.at(-1).diff
+  } catch {}
   let transcriptAt = 0
   try { transcriptAt = fs.statSync(inp.transcript_path).mtimeMs } catch {}
   const f = {
-    ids, run, mark, money, usage, driverQuota, input, transcriptAt,
+    ids, run, mark, billing, merged: usage, input, transcriptAt, exists,
+    gitAt: Math.min(...gits.map((g) => (num(g?.at) ?? Infinity))),
     stored: readJson(usageFile(h)),
     // The hooks write under the transcript's name and the mod under the session's id, which differ in a
     // resumed session: the latest record is the one that counts.
@@ -194,11 +211,9 @@ function readRecords(inp, now) {
   }
   if (run) {
     f.alive = Number(readText(run.paths.modAlive)?.trim()) || 0
+    if (second != null) f.running = second - Math.floor(f.alive / 1000) <= 15
     f.quiet = readJson(run.paths.quiet)
     f.gate = readJson(run.paths.gate)
-    // Only a card that is drawn needs its money, and a failure in it costs the card's money alone.
-    f.cardMoney = null
-    if (now - f.alive > 15000) try { f.cardMoney = readMoney({ sessionId: run.state.driver ?? ids, now, state: run.state }) } catch {}
     f.driverMark = driverMark(run.state)
   } else {
     // A finished run is no longer the session's run, but the session still points at it.
@@ -208,6 +223,29 @@ function readRecords(inp, now) {
       if (state?.status === 'finished' && state.finishedAt) { f.finishedAt = state.finishedAt; break }
     }
   }
+  return timed(f, now, { quota, money })
+}
+
+/**
+ * Sets on f what follows from the clock at t: the outside quota's view, the money views and the usage figure
+ * the mascot is drawn from. Reads only what readRecords read, and starts nothing. `known` holds views already
+ * worked out at t.
+ */
+function timed(f, t, known = {}) {
+  const { run, ids, input } = f
+  const quota = 'quota' in known ? known.quota : sessionQuota(ids, t, f.mark)
+  if (quota) input.quota = quota
+  else delete input.quota
+  f.driverQuota = run ? sessionQuota(run.state.driver, t, f.driverMark) : null
+  f.usage = quota ? quotaUsage(quota, t) : f.merged
+  let money = known.money ?? null
+  if (!('money' in known)) try { money = readMoney({ sessionId: ids, now: t, state: run?.state }) } catch {}
+  f.money = money
+  if (money) input.money = money
+  else delete input.money
+  // Only a card that is drawn needs its money, and a failure in it costs the card's money alone.
+  f.cardMoney = null
+  if (run && !modRunning(f, t)) try { f.cardMoney = readMoney({ sessionId: run.state.driver ?? ids, now: t, state: run.state }) } catch {}
   return f
 }
 
@@ -237,7 +275,7 @@ async function draw(f, now, { width, theme }) {
   let rows = renderStatusRows(input, { width: width - (pet?.cells ?? 0), theme, now })
   if (pet) rows = rows.map((row, i) => [...(pet.rows[i] ?? []), pet.gap, ...row])
   const besidePet = pet ? rows.length : 0
-  if (run && now - f.alive > 15000) {
+  if (run && !modRunning(f, now)) {
     const { buildView, renderCard } = await import('../lib/card.mjs')
     const view = buildView({ state: { ...run.state, markPercent: f.driverMark }, agents: run.state.agents ?? [], usage: f.driverQuota ? quotaUsage(f.driverQuota, now) : f.stored, gate: f.gate, money: f.cardMoney, quota: f.driverQuota, now, ui: { expanded: {}, moreOpen: false } })
     rows = rows.concat(renderCard(view, { width, theme }))
@@ -249,24 +287,234 @@ async function draw(f, now, { width, theme }) {
   return text
 }
 
-export async function main({ margin = 5 } = {}) {
+/** The width the rows are drawn to and the theme, from what Claude Code sets in the command's environment. */
+function surroundings(margin) {
+  // COLUMNS is the full terminal width. Claude Code shows the first COLUMNS - 5 cells of each line, or
+  // COLUMNS - 4 under the padding setup writes, which its shim passes as the margin.
+  const cols = Number(process.env.COLUMNS)
+  return { width: cols > 5 ? cols - margin : 121, theme: process.env.LCW_THEME === 'light' ? 'light' : 'dark' }
+}
+
+/** Prints one fresh draw for Claude Code's input: `input` when given, else what is on stdin. */
+export async function main({ margin = 5, input } = {}) {
   let inp = {}
-  try { inp = JSON.parse(fs.readFileSync(0, 'utf8')) } catch {}
+  try { inp = JSON.parse(input ?? fs.readFileSync(0, 'utf8')) } catch {}
   let f = null
   holdReads()
   try {
     const now = clock()
     f = readRecords(inp, now)
-    // COLUMNS is the full terminal width. Claude Code shows the first COLUMNS - 5 cells of each line, or
-    // COLUMNS - 4 under the padding setup writes, which its shim passes as the margin.
-    const cols = Number(process.env.COLUMNS)
-    const width = cols > 5 ? cols - margin : 121
-    const theme = process.env.LCW_THEME === 'light' ? 'light' : 'dark'
-    process.stdout.write(await draw(f, now, { width, theme }) + '\n')
+    process.stdout.write(await draw(f, now, surroundings(margin)) + '\n')
     // After the bar is out: on pay-per-token billing, at most one runner per window across every session.
     if (f.money) maybeRefresh(home(), now)
   } catch {
     process.stdout.write(plainRow(f?.input ?? {}) + '\n')
+  } finally {
+    holdReads(false)
+  }
+}
+
+// Frames ahead: one draw saves the rows for this second and the 15 after it, which scripts/bin/statusline.sh
+// prints with no Node while nothing the rows show has changed. What it saves, in <LCW home>/frames/<session id>/:
+//   <strip>/<second>  the rows for that second, one file each, in a folder of this draw's own
+//   last              the rows this draw printed, for when a later draw fails
+//   key               what the player compares, written last and removed first, so it only ever names a whole strip:
+//     <COLUMNS> <LCW_THEME> <zone>      as the player sees them, ${COLUMNS:-0} ${LCW_THEME:-dark} and date's %z
+//     <heartbeat file> <1|0>             whether the mod was running at the first second; empty with no run
+//     <strip>
+//     D                                  a line that is none of the others
+//     what must not change, then D:  /path (there, and not newer than key)  !/path (not there)  %/path (there)  +pid (running)
+//     the input cut at the values that may change, each piece followed by D
+const FRAMES = 16
+const SESSION = /^[A-Za-z0-9_-]{1,128}$/
+// The fields of the input that change while the rows stay the same: how long the session has run, its token
+// and prompt-cache counts, and on a subscription its cost. Everything else is compared. The first ones always hold
+// a plain number, and an input where one does not gets no frames; the others are passed over only when they do.
+const IGNORED = ['total_duration_ms', 'total_api_duration_ms', 'total_input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens']
+const ALSO_IGNORED = ['total_output_tokens', 'input_tokens', 'output_tokens', 'expires_at', 'requests', 'misses', 'expected_rebuilds',
+  'hit_ratio', 'cache_write_tokens', 'miss_recache_tokens', 'last_miss_at', 'recache_tokens_if_cold']
+const VALUE = /^[0-9A-Za-z.+-]+/
+
+/** The session id as the player finds it, the text after the first "session_id":", when it is safe for a folder's name. */
+function sessionKey(text, inp) {
+  const at = text.indexOf('"session_id":"')
+  if (at < 0) return null
+  const id = text.slice(at + 14, text.indexOf('"', at + 14))
+  return SESSION.test(id) && id === inp?.session_id ? id : null
+}
+
+/** date's %z for the time t on this machine's clock: +0100, -0330. */
+function zoneOf(t) {
+  const m = -new Date(t).getTimezoneOffset(), a = Math.abs(m)
+  return `${m < 0 ? '-' : '+'}${String(Math.floor(a / 60)).padStart(2, '0')}${String(a % 60).padStart(2, '0')}`
+}
+
+/** The text split around the values of the ignored fields, or null when the player's fold would not give it back. */
+function piecesOf(text, strict, lenient) {
+  const spans = []
+  for (const name of [...strict, ...lenient]) {
+    const key = `"${name}":`
+    const at = text.indexOf(key)
+    if (at < 0) continue
+    const value = VALUE.exec(text.slice(at + key.length, at + key.length + 64))?.[0]
+    if (!value && strict.includes(name)) return null
+    if (value) spans.push([at + key.length, at + key.length + value.length])
+  }
+  spans.sort((x, y) => x[0] - y[0])
+  const pieces = []
+  let from = 0
+  for (const [a, b] of spans) {
+    if (a < from) return null
+    pieces.push(text.slice(from, a))
+    from = b
+  }
+  pieces.push(text.slice(from))
+  // The player's fold: each later piece is found at its first place, and what lies before it must be all so far plus one value.
+  let pre = pieces[0]
+  for (const p of pieces.slice(1)) {
+    const at = text.indexOf(p)
+    const head = text.slice(0, Math.max(at, 0))
+    if (at < 0 || !head.startsWith(pre) || !new RegExp(`^${VALUE.source}$`).test(head.slice(pre.length))) return null
+    pre = head + p
+  }
+  return pre === text ? pieces : null
+}
+
+/** What must not change for the frames to stand, as the key's lines; null when one cannot be told to the player. */
+function watchedOf(f, inp, paid) {
+  const h = home()
+  const lines = new Set()
+  for (const [file, there] of heldFiles()) {
+    // the git figures may be 15 seconds old, a draw's own context record is not shown, and the heartbeat is judged by its number
+    if (file.startsWith(`${h}/cache/`) || file.startsWith(`${h}/frames/`) || file === f.run?.paths.modAlive) continue
+    lines.add(there ? file : `!${file}`)
+    // a session's live process decides which ids and which run are the session's
+    const pid = there && file.startsWith(`${h}/sessions/`) ? readJson(file)?.claudePid : null
+    if (Number.isInteger(pid) && pid > 1) {
+      try { process.kill(pid, 0); lines.add(`+${pid}`) } catch (e) { if (e.code === 'EPERM') return null }
+    }
+  }
+  for (const [dir, there] of f.exists) lines.add(there ? `%${dir}` : `!${dir}`)
+  // a new spend record of any session moves the week's spend
+  if (paid) lines.add(fs.existsSync(spendDir(h)) ? spendDir(h) : `!${spendDir(h)}`)
+  // a question is over once the conversation is written again
+  const act = f.activity
+  if (act?.state === 'needs' && !(f.transcriptAt > act.at + 3000) && typeof inp.transcript_path === 'string') lines.add(f.transcriptAt ? inp.transcript_path : `!${inp.transcript_path}`)
+  return [...lines]
+}
+
+const WATCHED = /^([!%]?\/[^\n]*|\+[1-9]\d*)$/
+
+/**
+ * The key's text from its first lines (`head`), the watched lines and the input; null when the input holds a NUL
+ * or a CR, a watched line is not one the player reads, or the player's fold would not give the input back.
+ */
+export function keyText(text, { head, watched, strict = [], lenient = [] }) {
+  if (/[\0\r]/.test(text) || head.some((l) => l.includes('\n')) || !watched.every((l) => WATCHED.test(l))) return null
+  const pieces = piecesOf(text, strict, lenient)
+  if (!pieces) return null
+  const body = pieces.flatMap((p) => p.split('\n'))
+  let d = '@@'
+  while (head.includes(d) || watched.includes(d) || body.includes(d)) d += '@'
+  return [...head, d, ...watched, d, ...pieces.flatMap((p) => [...p.split('\n'), d])].join('\n') + '\n'
+}
+
+/** The key for this draw, or null when no frame can be saved safely for this input. */
+function keyOf(text, f, inp, { zone, tag, paid }) {
+  const { COLUMNS = '', LCW_THEME = '' } = process.env
+  if (/\s/.test(COLUMNS + LCW_THEME)) return null
+  const watched = watchedOf(f, inp, paid)
+  const beat = f.run ? `${f.run.paths.modAlive} ${f.running ? 1 : 0}` : ''
+  if (!watched || (beat && !beat.startsWith('/'))) return null
+  const strict = f.billing === 'subscription' ? [...IGNORED, 'total_cost_usd'] : IGNORED
+  return keyText(text, { head: [`${COLUMNS || '0'} ${LCW_THEME || 'dark'} ${zone}`, beat, tag], watched, strict, lenient: ALSO_IGNORED })
+}
+
+/**
+ * The moment each second's frame is drawn at: the draw's own time stepped by whole seconds, and a second the
+ * draw has already passed at its last moment.
+ */
+const frameTime = (second, now) => (second < Math.floor(now / 1000) ? second * 1000 + 999 : second * 1000 + (now % 1000))
+
+/** The first moment from which what the records give could differ from what was read: the strip ends before it. */
+function deadline(f, now) {
+  let until = f.gitAt + 15001
+  try {
+    const q = readQuotaState(home())
+    if ((f.input.quota || f.driverQuota) && activeQuota(q) && Number.isFinite(q.lastAttemptAt)) until = Math.min(until, q.lastAttemptAt + REFRESH_MS)
+  } catch {}
+  if (f.money && readSetting(home())) until = Math.min(until, (Math.floor(now / WINDOW_MS) + 1) * WINDOW_MS)
+  return until
+}
+
+/** Whether the run's gate would stand as it is at t, or the run has none. */
+function gateHoldsAt(f, t) {
+  if (!f.run) return true
+  try {
+    const driver = f.run.state.driver
+    const money = !driver || f.ids.includes(driver) ? f.money : readMoney({ sessionId: driver, now: t, state: f.run.state })
+    return gateStands(f.run.paths, f.run.state, readJson(usageFile(home())), t, money)
+  } catch { return false }
+}
+
+/** Writes the strip, then `last`, then the key, each in place by a rename; clears strips older than any that can still be played. */
+function save(dir, { tag, frames, out, key, keyTime }) {
+  const strip = `${dir}/${tag}`
+  fs.mkdirSync(strip, { recursive: true })
+  if (key) for (const [second, rows] of frames) fs.writeFileSync(`${strip}/${second}`, rows + '\n')
+  fs.writeFileSync(`${strip}/last`, out)
+  fs.renameSync(`${strip}/last`, `${dir}/last`)
+  if (key) {
+    fs.writeFileSync(`${strip}/key`, key)
+    fs.utimesSync(`${strip}/key`, keyTime, keyTime)
+    fs.renameSync(`${strip}/key`, `${dir}/key`)
+  }
+  for (const name of fs.readdirSync(dir)) {
+    if (name === tag || name === 'key' || name === 'last') continue
+    try { if (Date.now() - fs.statSync(`${dir}/${name}`).mtimeMs > 20000) fs.rmSync(`${dir}/${name}`, { recursive: true, force: true }) } catch {}
+  }
+}
+
+/**
+ * Draws the rows for the second `at` names (date's %s%z, as the player read it) and for the 15 after it, saves
+ * them for the player, and returns the rows for that second. Throws when the rows cannot be drawn.
+ */
+export async function ahead(text, { at, margin = 4 } = {}) {
+  // A record written from the second before this read on reads as newer than the key, whatever the shell compares.
+  const keyTime = Math.floor(Date.now() / 1000) - 1
+  text = String(text ?? '')
+  let inp = {}
+  try { inp = JSON.parse(text) } catch {}
+  const id = sessionKey(text, inp)
+  const dir = id && `${home()}/frames/${id}`
+  if (dir) try { fs.rmSync(`${dir}/key`, { force: true }) } catch {}
+  holdReads()
+  try {
+    const now = clock()
+    const told = /^(\d+)([+-]\d{4})$/.exec(String(at ?? ''))
+    const first = told ? Number(told[1]) : Math.floor(now / 1000)
+    const f = readRecords(inp, now, { second: first })
+    const look = surroundings(margin)
+    const zone = zoneOf(frameTime(first, now))
+    const until = deadline(f, now)
+    const frames = []
+    let paid = false
+    for (let second = first; second < first + FRAMES; second++) {
+      const t = frameTime(second, now)
+      if (second > first && (t >= until || zoneOf(t) !== zone || !gateHoldsAt(f, t))) break
+      const g = timed({ ...f, input: { ...f.input } }, t)
+      paid ||= !!(g.money || g.cardMoney)
+      frames.push([second, await draw(g, t, look)])
+    }
+    const out = frames[0][1] + '\n'
+    if (f.money) maybeRefresh(home(), now)
+    if (dir) {
+      try {
+        const tag = `${process.pid}-${randomBytes(4).toString('hex')}`
+        save(dir, { tag, frames, out, key: keyOf(text, f, inp, { zone, tag, paid }), keyTime })
+      } catch {}
+    }
+    return out
   } finally {
     holdReads(false)
   }

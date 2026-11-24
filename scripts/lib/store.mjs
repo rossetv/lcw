@@ -7,9 +7,14 @@ export const home = () => process.env.LCW_HOME || `${process.env.HOME}/.lcw`
 // While a process holds its reads, each file is read from disk once: later reads get the same text, or what this
 // process wrote or removed since. The text is kept, not the parsed value, so no caller can change another's copy.
 let held = null
+// Every file read, written or removed while reads are held, and whether it was there after: what the reads depended on.
+let seen = null
 
 /** Holds reads (see above) until called with false. Only a short process that reads its records once may hold them. */
-export function holdReads(on = true) { held = on ? new Map() : null }
+export function holdReads(on = true) { held = on ? new Map() : null; seen = on ? new Map() : null }
+
+/** The files touched since reads were held, as [path, whether it is there]. */
+export const heldFiles = () => [...(seen ?? [])]
 
 /** Forgets what was held, so the next reads come from disk: for work under a lock, where what was read before it may be old. */
 export function forgetReads() { if (held) held = new Map() }
@@ -20,6 +25,7 @@ export function readText(file) {
   let text = null
   try { text = fs.readFileSync(file, 'utf8') } catch {}
   held?.set(file, text)
+  seen?.set(file, text !== null)
   return text
 }
 
@@ -34,12 +40,14 @@ export function writeAtomic(file, text) {
   fs.writeFileSync(tmp, text)
   fs.renameSync(tmp, file)
   held?.set(file, String(text))
+  seen?.set(file, true)
 }
 
 /** Removes a file if it is there. */
 export function removeFile(file) {
   if (fs.existsSync(file)) fs.rmSync(file, { force: true })
   held?.set(file, null)
+  seen?.set(file, false)
 }
 
 export const writeJson = (file, value) => writeAtomic(file, JSON.stringify(value, null, 2) + '\n')
@@ -61,6 +69,12 @@ export function sweepTemp(lcwHome, now = Date.now()) {
       if (age === null) continue
       try { if (now - fs.statSync(`${dir}/${name}`).mtimeMs >= age) fs.rmSync(`${dir}/${name}`, { force: true }) } catch {}
     }
+  }
+  // A session's saved frames: every draw renames into its folder, so one not written for a day belongs to a session that ended.
+  let sessions = []
+  try { sessions = fs.readdirSync(`${lcwHome}/frames`) } catch {}
+  for (const name of sessions) {
+    try { if (now - fs.statSync(`${lcwHome}/frames/${name}`).mtimeMs >= 86400_000) fs.rmSync(`${lcwHome}/frames/${name}`, { recursive: true, force: true }) } catch {}
   }
 }
 

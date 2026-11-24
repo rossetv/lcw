@@ -7,7 +7,7 @@ import { thresholds } from '../../lib/theme.mjs'
 import { next0800 } from '../../lib/spend.mjs'
 import { home, readJson, writeJson, removeFile, forgetReads } from './store.mjs'
 import { readMoney } from './money.mjs'
-import { readSessionQuota, sessionIdentity } from './quota-session.mjs'
+import { readSessionQuota, sessionQuota, sessionIdentity } from './quota-session.mjs'
 import { alive } from './awake.mjs'
 import { isDeepStrictEqual } from 'node:util'
 import { atMark, lcwOnly } from '../../lib/mark.mjs'
@@ -129,7 +129,7 @@ const quotaEvidence = (quota) => ({ sourceId: quota.sourceId, revision: quota.re
 const live = { write: writeJson, remove: removeFile }
 
 function updateGate(paths, state, usage, now, money, intent, io = live) {
-  const quota = readSessionQuota(state.driver, now, driverMark(state))
+  const quota = (io.quota ?? readSessionQuota)(state.driver, now, driverMark(state))
   const currentMoney = state.driver ? readMoney({ sessionId: state.driver, now, state }) : money
   if (!intent && (['finished', 'stopped'].includes(state.status) || (state.status === 'paused' && state.pausedReason === 'human'))) return quota?.hold ?? atMark(driverMark(state), readUsage() ?? usage, now, currentMoney)
   if (!quota) return updateDefaultGate(paths, state, readUsage() ?? usage, now, currentMoney, intent, io)
@@ -162,6 +162,12 @@ const judging = { write: () => { throw CHANGES }, remove: (file) => { if (fs.exi
 export function settleGate(paths, state, usage, now, money) {
   try { updateGate(paths, readJson(paths.state) ?? state, usage, now, money, null, judging); return } catch (e) { if (e !== CHANGES) throw e }
   applyGate(paths, state, usage, now, money)
+}
+
+/** Whether settleGate at now would leave the gate as it is. It writes nothing and starts nothing. */
+export function gateStands(paths, state, usage, now, money) {
+  try { updateGate(paths, readJson(paths.state) ?? state, usage, now, money, null, { ...judging, quota: sessionQuota }); return true } catch (e) { if (e !== CHANGES) throw e }
+  return false
 }
 
 export function reconcileGate(paths, expected, action, now, expectedQuota) {

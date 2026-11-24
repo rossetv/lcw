@@ -67,10 +67,16 @@ export function noteQuotaSession(ids, { startup = false, endpoint = process.env.
   }
 }
 
-export function readSessionQuota(ids, now, mark) {
+/** The session's outside quota as it stands at now, or null; reads only, and starts nothing. */
+export function sessionQuota(ids, now, mark) {
   const resolved = [...new Set([].concat(ids ?? []).flatMap((id) => [sessionIdentity(id), id]))]
   const selection = records(resolved).find(({ session }) => Object.hasOwn(session, 'quotaSelection'))?.session.quotaSelection
-  const view = evaluateQuota(selection, readQuotaState(home()), now, mark)
+  return evaluateQuota(selection, readQuotaState(home()), now, mark)
+}
+
+/** sessionQuota, and a refresh of the figure in the background when it is due. */
+export function readSessionQuota(ids, now, mark) {
+  const view = sessionQuota(ids, now, mark)
   if (view) maybeRefreshQuota(home(), now)
   return view
 }
