@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { tmp, lcw, makeRepo } from '../core/helpers.mjs'
 
@@ -282,12 +283,22 @@ describe('what is played', { concurrency: true }, () => {
   })
 
   test('a session id that is not a plain name is never used in a path', () => {
-    for (const id of ['../escape', 'a/b', '$(touch pwned)', '..', '*']) {
+    const run = (id) => {
       const s = scratch()
-      const out = tick(s, inputOf(s, { session_id: id }), S)
-      assert.match(plain(out), /Opus 5/)
-      assert.deepEqual(fs.existsSync(`${s.home}/frames`) ? fs.readdirSync(`${s.home}/frames`) : [], [], id)
-      assert.ok(!fs.existsSync(`${s.home}/escape`) && !fs.existsSync(`${s.t}/h/pwned`), id)
+      assert.match(plain(tick(s, inputOf(s, { session_id: id }), S)), /Opus 5/)
+      assert.ok(!fs.existsSync(`${s.t}/h/pwned`) && !fs.existsSync(`${s.t}/pwned`), id)
+      return s
+    }
+    const top = (s) => fs.readdirSync(s.home).sort()
+    const plainTop = top(run('plainid'))
+    for (const id of ['../escape', 'a/b', '$(touch pwned)', '..', '*', 'x\\y']) {
+      const s = run(id)
+      // the files the id would name, were it put in a path: the session's records, its context, its frames
+      for (const file of [`sessions/${id}.json`, `activity/${id}.json`, `spend/${id}.json`, `cache/context-${id}.json`, `frames/${id}/key`, `frames/${id}/last`]) {
+        assert.ok(!fs.existsSync(path.resolve(s.home, file)), `${id}: ${file}`)
+      }
+      assert.ok(top(s).every((name) => plainTop.includes(name)), `${id}: ${top(s)}`)
+      assert.ok(!fs.existsSync(`${s.home}/frames`), id)
     }
   })
 
