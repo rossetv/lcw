@@ -64,7 +64,7 @@ export function sweepTemp(lcwHome, now = Date.now()) {
     try { names = fs.readdirSync(dir) } catch { continue }
     for (const name of names) {
       // a folder's git record is asked again at its next tick; diff records are no longer read at all; the record of a
-      // once-only note is kept a week past its session's last word
+      // once-only note goes a week after it was written, so a session open longer than that may hear the note once more
       const cache = dir === `${lcwHome}/cache`
       const age = /\.\d+\.tmp$/.test(name) ? 3600_000 : cache && /^git-.*\.json$/.test(name) ? 86400_000 : cache && /^diff-.*\.json$/.test(name) ? 0
         : dir === `${lcwHome}/told` && name.endsWith('.json') ? 7 * 86400_000 : null
