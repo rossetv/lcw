@@ -666,11 +666,14 @@ const lcwCli = ($: EngineInterface) => `${$.plugin.root}/scripts/lcw.mjs`
 // the run is refresh's, and the repository's runs and the sleep check are slowFacts', at their own pace.
 async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
   const home = await lcwHome($)
+  // The run is the one the card shows, so the box and the card tell the same story. With one, the facts of the mark
+  // are the run's, which the refresh has read: of this session's own only its row is needed.
+  const run = S.run
   const [advisorModel, statusLine, own, cap, command, reading, notices, update, cleanup] = await Promise.all([
     $.settings.read({ key: 'advisorModel' }).catch(() => 'unread'),
     // The user settings file alone: the one Put LCW's back writes.
     $.settings.read({ key: 'statusLine', source: 'user' }).catch(() => undefined),
-    markFacts($),
+    run ? $.session.id().then((id) => readSession($, id)).then((session) => ({ session, quota: null, usage: null, money: null })) : markFacts($),
     readJson($, capFile(home)),
     readJson($, spendCommandFile(home)),
     readJson($, spendReadingFile(home)),
@@ -678,8 +681,6 @@ async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
     readJson($, updateFile(home)),
     S.repoKey ? readJson($, cleanupFile(home, S.repoKey)) : null,
   ])
-  // The run is the one the card shows, so the box and the card tell the same story.
-  const run = S.run
   const session = own.session
   const money = run ? run.money : own.money
   const runF = runFact(run?.state, S.sleep?.kept)

@@ -26,11 +26,12 @@ function engine(on: any, initial: Record<string, string>) {
   const times: Record<string, number> = {}
   let changes = 0
   const files = new Proxy(initial, { set: (all, path: string, text) => { all[path] = text; times[path] = clock.now() + ++changes / 1000; return true } })
-  const w = { clock, files, reads: [] as string[], looks: 0, runs: [] as string[][], prompts: [] as string[] }
+  // infos: the session's info asked for, as each money view asks it for the name the session's spend is kept under.
+  const w = { clock, files, reads: [] as string[], looks: 0, runs: [] as string[][], prompts: [] as string[], infos: 0 }
   const kids = (dir: string) => Object.keys(files).filter((p) => p.startsWith(dir + '/'))
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
-  on('session.info', () => ({ value: { transcriptPath: '', platform: 'linux' } }))
+  on('session.info', () => { w.infos++; return { value: { transcriptPath: '', platform: 'linux' } } })
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
   on('settings.read', () => ({ value: {} }))
   on('fs.read', (_: any, e: any) => {
@@ -89,6 +90,19 @@ test('with a run and nothing changing, no file is read again and the files are l
   const cost = await quietStretch($, engine(on, bound()))
   expect(cost.reads).toBe(0)
   expect(cost.looks).toBeLessThanOrEqual(4 * 20)
+})
+
+test('with a run billed per token, the spend is added up once a second, for the card, and not again for the boxes', async ($, on) => {
+  const quarter = Math.floor(NOW / 900000)
+  const spent = JSON.stringify({ v: 1, base: 0, max: 10, q: { [quarter]: 10 } })
+  const e = engine(on, { ...bound(), '/lcw/sessions/s1.json': JSON.stringify({ runDir: RUN, billing: 'payg' }), '/lcw/spend/s1.json': spent, '/lcw/spend/s2.json': spent })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await e.clock.advance(3000)
+  e.w.infos = 0
+  await e.clock.advance(20000)
+  expect(e.w.infos).toBeLessThanOrEqual(20)
+  await band.unmount()
 })
 
 test('with no run and nothing changing, no file is read again and the files are looked at every five seconds', async ($, on) => {
