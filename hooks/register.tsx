@@ -801,7 +801,7 @@ async function scanRuns($: EngineInterface, now: number) {
   }
   for (const c of unfinishedCandidates(seen, now, S.run?.runDir, S.banner.dismissed)) {
     if (await driverOpen($, c.state.driver)) continue
-    S.unfinished = unfinishedFact(c, String((await $.fs.read(runPaths(c.dir).ledger).catch(() => '')) ?? ''))
+    S.unfinished = unfinishedFact(c, (await readText($, runPaths(c.dir).ledger)) ?? '')
     return
   }
   S.unfinished = null

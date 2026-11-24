@@ -600,6 +600,17 @@ test('whether the computer can be kept awake is not asked again once Not now hid
   await band.unmount()
 })
 
+// A ledger that changes is a run some session is at work on, which is no longer left halfway: the scan does not read it.
+test('the ledger of a run left halfway is read once, not at every look over the runs', async ($, on) => {
+  const w = engine(on, leftHalfway())
+  await start($)
+  await w.clock.advance(100000)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /stopped halfway: old-run\./ })).toBeDefined()
+  expect(w.reads.filter((p) => p === OLD + '/ledger.md').length).toBe(1)
+  await band.unmount()
+})
+
 test('a finished run of the repository is read once a session, not at every look over the runs', async ($, on) => {
   const done = '/lcw/repos/repo-1/runs/r4/state.json'
   const w = engine(on, { ...leftHalfway(), [done]: JSON.stringify({ id: 'r4', name: 'shipped', status: 'finished', stage: 'Ship' }) })
