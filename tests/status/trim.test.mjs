@@ -17,10 +17,12 @@ import cp from 'node:child_process'
 import { syncBuiltinESMExports } from 'node:module'
 const reads = {}, gits = []
 const read = fs.readFileSync, write = fs.writeFileSync, exec = cp.execFileSync
+let depth = 0
 const count = (p) => { if (typeof p === 'string') reads[p] = (reads[p] ?? 0) + 1 }
 // every way a file is read: whole, as a handle, as a stream; the promise forms too
 for (const [o, names] of [[fs, ['readFileSync', 'readFile', 'openSync', 'open', 'createReadStream']], [fs.promises, ['readFile', 'open']]]) {
-  for (const n of names) { const f = o[n]; o[n] = function (p, ...a) { count(p); return f.call(this, p, ...a) } }
+  // Node opens the file inside a read of it: only the outermost call is a read of the program's own.
+  for (const n of names) { const f = o[n]; o[n] = function (p, ...a) { if (!depth++) count(p); try { return f.call(this, p, ...a) } finally { depth-- } } }
 }
 cp.execFileSync = function (c, a, ...r) { if (c === 'git') gits.push(a.join(' ')); return exec.call(this, c, a, ...r) }
 syncBuiltinESMExports()
@@ -70,6 +72,7 @@ function withRun() {
   const repo = makeRepo(), home = tmp('home')
   git(repo, 'checkout', '-q', '-b', 'feat')
   fs.writeFileSync(repo + '/a.txt', 'one\ntwo\n')
+  fs.writeFileSync(repo + '/untracked.txt', 'three\n')
   assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home, cwd: repo, session: 's1' }).code, 0)
   return { repo, home, dir: readJson(home + '/sessions/s1.json').runDir }
 }
