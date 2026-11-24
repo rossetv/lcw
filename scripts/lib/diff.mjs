@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fnv1a32hex } from '../../lib/key.mjs'
-import { readJson, writeJson, mainCheckout } from './store.mjs'
+import { readJson, writeJson } from './store.mjs'
 
 // The status line runs every second; git runs at most once in this long for a folder, whatever the sessions.
 const FRESH_MS = 15000
@@ -20,11 +20,11 @@ const answer = (cwd, ...args) => { try { return run(cwd, ...args).trim() } catch
 const verify = (cwd, ref) => tryRun(cwd, 'rev-parse', '--verify', '-q', ref + '^{commit}') !== null
 
 /** Where the count starts: where the branch left the default branch; on the default branch itself, its last commit. */
-function baseOf(top) {
+function baseOf(top, branch) {
   if (!verify(top, 'HEAD')) return EMPTY_TREE
   const remote = tryRun(top, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD')
   const name = remote ? remote.replace(/^origin\//, '') : ['main', 'master'].find((b) => verify(top, 'refs/heads/' + b))
-  if (!name || tryRun(top, 'rev-parse', '--abbrev-ref', 'HEAD') === name) return 'HEAD'
+  if (!name || branch() === name) return 'HEAD'
   // The newer of the local and the remote default branch that the branch grew from.
   const refs = [name, 'origin/' + name].filter((r) => verify(top, r))
   return (refs.length && tryRun(top, 'merge-base', 'HEAD', ...refs)) || 'HEAD'
@@ -45,9 +45,9 @@ function linesIn(file) {
   }
 }
 
-function count(top) {
+function count(top, branch) {
   let added = 0, removed = 0
-  for (const line of run(top, 'diff', '--numstat', baseOf(top)).split('\n')) {
+  for (const line of run(top, 'diff', '--numstat', baseOf(top, branch)).split('\n')) {
     const [a, d] = line.split('\t')
     if (/^\d+$/.test(a) && /^\d+$/.test(d)) { added += Number(a); removed += Number(d) }
   }
@@ -56,18 +56,33 @@ function count(top) {
   return { added, removed }
 }
 
+// Each question is asked of git once in a refresh, whoever needs the answer.
 const ask = {
-  diff: (cwd) => {
-    const top = answer(cwd, 'rev-parse', '--show-toplevel')
+  diff: (cwd, said) => {
+    const top = said.toplevel()
     if (!top || top === OUTSIDE) return top
-    try { return count(top) } catch { return null }
+    try { return count(top, said.branch) } catch { return null }
   },
-  main: (cwd) => {
-    const common = answer(cwd, 'rev-parse', '--git-common-dir')
-    return common === OUTSIDE ? OUTSIDE : common === null ? cwd : mainCheckout(cwd)
+  main: (cwd, said) => {
+    const common = said.common()
+    if (common === OUTSIDE) return OUTSIDE
+    if (common === null) return cwd
+    try {
+      // Not --path-format=absolute, which git before 2.31 prints back as output: git's answer can be relative to the real cwd.
+      const real = fs.realpathSync(path.resolve(fs.realpathSync(cwd), common))
+      if (path.basename(real) === '.git') return path.dirname(real)
+      const top = said.toplevel()
+      return typeof top === 'string' && top ? top : cwd
+    } catch {
+      return cwd
+    }
   },
   // a repository with no commit yet has no branch to name
-  branch: (cwd) => answer(cwd, 'rev-parse', '--abbrev-ref', 'HEAD') || null,
+  branch: (cwd, said) => said.branch() || null,
+}
+const asking = (cwd) => {
+  const once = (...args) => { let v, done = false; return () => (done ? v : (done = true, v = answer(cwd, ...args))) }
+  return { toplevel: once('rev-parse', '--show-toplevel'), common: once('rev-parse', '--git-common-dir'), branch: once('rev-parse', '--abbrev-ref', 'HEAD') }
 }
 /**
  * The git figures of a folder that `want` names, each asked of git at most once in FRESH_MS and kept in a record of
@@ -83,8 +98,9 @@ export function gitOf(cwd, home, now, want) {
   // A failure is kept too, so a slow repository costs one try in each stretch and not one every second. A folder
   // outside git gets no record: one for every folder a session ever stood in would pile up.
   let outside = false
+  const said = asking(cwd)
   for (const k of missing) {
-    const v = outside ? OUTSIDE : ask[k](cwd)
+    const v = outside ? OUTSIDE : ask[k](cwd, said)
     outside ||= v === OUTSIDE
     facts[k] = v !== OUTSIDE ? v : k === 'main' ? cwd : null
   }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync, execFileSync } from 'node:child_process'
+import { gitOf } from '../../scripts/lib/diff.mjs'
 import { tmp, lcw, readJson, makeRepo, git } from '../core/helpers.mjs'
 
 const LINE = new URL('../../scripts/statusline.mjs', import.meta.url).pathname
@@ -132,5 +133,24 @@ describe('one status line run', { concurrency: true }, () => {
     const before = snapshot(home)
     line(home, over, { now: NOW + 2000 })
     assert.deepEqual(snapshot(home), before, 'a gate that stands is not written again, nor its lock taken')
+  })
+})
+
+describe('one refresh of a folder\'s git record', () => {
+  test('asks git no question twice', () => {
+    const repo = makeRepo(), home = tmp('home'), bin = tmp('bin'), log = `${bin}/log`
+    git(repo, 'checkout', '-q', '-b', 'feat')
+    fs.writeFileSync(repo + '/b.txt', 'one\ntwo\n')
+    const real = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
+    fs.writeFileSync(`${bin}/git`, `#!/bin/sh\nprintf '%s\\n' "$*" >> '${log}'\nexec '${real}' "$@"\n`, { mode: 0o755 })
+    const path = process.env.PATH
+    process.env.PATH = `${bin}:${path}`
+    let facts
+    try { facts = gitOf(repo, home, NOW, ['diff', 'main', 'branch']) } finally { process.env.PATH = path }
+    assert.deepEqual(facts.diff, { added: 2, removed: 0 })
+    assert.equal(facts.branch, 'feat')
+    const asked = fs.readFileSync(log, 'utf8').trim().split('\n').map((q) => q.replace('--no-optional-locks -c diff.autoRefreshIndex=false ', ''))
+    assert.ok(asked.length > 5)
+    assert.deepEqual(asked.filter((q, i) => asked.indexOf(q) !== i), [])
   })
 })
