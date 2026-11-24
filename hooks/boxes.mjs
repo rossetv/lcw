@@ -16,6 +16,9 @@ export function proxyQuotaEndpoint(value, configuration, ...sessions) {
   return endpoint
 }
 
+/** The host a proxy is known by: the box's answer holds for it whatever the port or path. */
+export const proxyQuotaHost = (endpoint) => new URL(endpoint).hostname
+
 const PROXY_QUOTA_TEXT = 'Help me work out whether my current custom AI connection is subscription-backed and whether a weekly percentage quota check is appropriate for LCW. A custom endpoint does not establish subscription billing. Discuss the generic quota-command adapter contract with me first. Do not read credentials, install an adapter, configure quota, change billing, raise marks or resume a run without my separate explicit authorization. Keep endpoint URLs and account details out of prompts and shared output.'
 
 /** A run no session has shown for this long is no longer open anywhere (lcw take and abandon use the same). */
@@ -281,7 +284,7 @@ export function discussPrompt(root, cleanup, cleanupPath) {
  * - notices: written into notices.json (the machine's "never again" choices);
  * - fill: the ask number Answer now (an ask's Other) puts in the prompt;
  * - fillText: the reply put in an empty prompt, never sent (the person presses Enter);
- * - proxyQuotaChoice: saved in its connection's notice file, only after a requested fill succeeds;
+ * - proxyQuotaChoice: saved in its host's notice file, only after a requested fill succeeds;
  * - dismiss: the box's occurrence is hidden for this session;
  * - toast: said at the end; 'output' says the last command's output.
  * null when the box does not offer option. facts are those the box was chosen from; ctx: { root, sessionId, repoKey, cleanupPath }.
@@ -297,7 +300,7 @@ export function pressPlan(banner, option, facts, ctx) {
   switch (banner.kind) {
     case 'proxyquota':
       if (option === 'setup' && !facts?.proxyQuota?.canSetup) return { toast: 'Wait until this session is idle, below its mark and no run is active, then press setup again.' }
-      return { ...(option === 'setup' ? { fillText: PROXY_QUOTA_TEXT } : {}), proxyQuotaChoice: { endpoint: facts.proxyQuota.endpoint, choice: option }, dismiss: true }
+      return { ...(option === 'setup' ? { fillText: PROXY_QUOTA_TEXT } : {}), proxyQuotaChoice: { host: facts.proxyQuota.host, choice: option }, dismiss: true }
     case 'approve':
       return { fillText: approveText(banner, option), dismiss: true }
     case 'answer': {

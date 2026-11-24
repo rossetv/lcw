@@ -46,7 +46,7 @@ export interface BannerRun {
 export interface BannerFacts {
   now?: number
   billing?: 'subscription' | 'payg' | string
-  proxyQuota?: { endpoint: string; key: string; canSetup: boolean } | null
+  proxyQuota?: { host: string; key: string; canSetup: boolean } | null
   advisorModel?: unknown; advisorFlag?: boolean; capSet?: boolean; spendCommandSet?: boolean
   notices?: Record<string, string | boolean> | null
   /** 'kind:key' of each box dismissed this session; 'kind' alone for the advisor, cap and spend boxes. */

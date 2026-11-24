@@ -29,21 +29,23 @@ test('proxy setup excludes native, unsafe, selected and explicitly disabled conn
   }
 })
 
-test('proxy choices use distinct fixed-length files even for long normalized endpoints', async () => {
-  const file = await keys.proxyQuotaNoticeFile('/lcw', 'https://proxy.example/' + 'x'.repeat(10000))
-  assert.match(file, /^\/lcw\/notices\/proxy-quota\/[a-f0-9]{64}\.json$/)
-  assert.notEqual(await keys.proxyQuotaNoticeFile('/lcw', 'https://proxy.example/a'), await keys.proxyQuotaNoticeFile('/lcw', 'https://proxy.example/b'))
+test('a proxy is known by its host name, whatever its port or path, and each host has one fixed-length choice file', async () => {
+  for (const endpoint of ['https://proxy.example/private/team', 'https://proxy.example:8443', 'http://proxy.example:3456/other']) assert.equal(boxes.proxyQuotaHost(endpoint), 'proxy.example')
+  assert.equal(boxes.proxyQuotaHost('http://127.0.0.1:49152'), '127.0.0.1')
+  assert.equal(boxes.proxyQuotaHost('https://other.example/private/team'), 'other.example')
+  assert.match(await keys.proxyQuotaNoticeFile('/lcw', 'x'.repeat(253)), /^\/lcw\/notices\/proxy-quota\/[a-f0-9]{64}\.json$/)
+  assert.notEqual(await keys.proxyQuotaNoticeFile('/lcw', 'proxy.example'), await keys.proxyQuotaNoticeFile('/lcw', 'other.example'))
 })
 
 test('proxy choices only acknowledge, and setup fills a generic conversation with no configuration command', () => {
-  const facts = { advisorModel: 'fable', proxyQuota: { endpoint: 'https://proxy.example/private/team', key: 'connection', canSetup: true } }
+  const facts = { advisorModel: 'fable', proxyQuota: { host: 'proxy.example', key: 'connection', canSetup: true } }
   for (const choice of ['setup', 'keep', 'dismiss']) {
     const plan = press(facts, choice)
     assert.ok(plan)
     assert.deepEqual(argvs(plan), [])
     assert.equal(plan.prompt, undefined)
     assert.equal(plan.notices, undefined)
-    assert.deepEqual(plan.proxyQuotaChoice, { endpoint: facts.proxyQuota.endpoint, choice })
+    assert.deepEqual(plan.proxyQuotaChoice, { host: facts.proxyQuota.host, choice })
     assert.equal(plan.dismiss, true)
     if (choice === 'setup') {
       assert.match(plan.fillText, /subscription/)

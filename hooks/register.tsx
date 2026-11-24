@@ -20,7 +20,7 @@ import {
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
-  AWAKE_EVERY_MS, RUNS_EVERY_MS, awakeApplies, awakeCheckWanted, claudeCommand, dismissKeys, markSpell, pressPlan, proxyQuotaEndpoint, runFact, said, sameBox, spendFailingFact,
+  AWAKE_EVERY_MS, RUNS_EVERY_MS, awakeApplies, awakeCheckWanted, claudeCommand, dismissKeys, markSpell, pressPlan, proxyQuotaEndpoint, proxyQuotaHost, runFact, said, sameBox, spendFailingFact,
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue, weeklyIdle,
 } from './boxes.mjs'
 import type { Plan, RunSeen } from './boxes.mjs'
@@ -73,7 +73,7 @@ const S = {
   quotaWaking: false,
   quotaRetry: { key: '', at: 0 },
   quotaRefresh: { revision: '', at: -Infinity, busy: false },
-  proxyNotice: { endpoint: '', file: '' },
+  proxyNotice: { host: '', file: '' },
   gateCheck: { key: '', at: -Infinity, busy: false },
   aliasBlockedUntil: new Map<string, number>(),
   startedAt: 0,
@@ -580,14 +580,15 @@ async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
   const quota = run ? run.quota : await readQuota($, session, session?.markPercent ?? TH.usageMarkPercent, now)
   const week = usageFact({ state: run?.state, session: run?.session ?? session, usage: run ? run.usage : usage, money, quota, now })
   const endpoint = proxyQuotaEndpoint(await $.env.get('ANTHROPIC_BASE_URL'), await readJson($, quotaFile(home)), session, run?.session)
-  if (endpoint && S.proxyNotice.endpoint !== endpoint) {
-    const file = await proxyQuotaNoticeFile(home, endpoint).catch(() => '')
-    S.proxyNotice = { endpoint: file ? endpoint : '', file }
+  const host = endpoint ? proxyQuotaHost(endpoint) : ''
+  if (host && S.proxyNotice.host !== host) {
+    const file = await proxyQuotaNoticeFile(home, host).catch(() => '')
+    S.proxyNotice = { host: file ? host : '', file }
   }
-  const file = endpoint && S.proxyNotice.endpoint === endpoint ? S.proxyNotice.file : ''
+  const file = host && S.proxyNotice.host === host ? S.proxyNotice.file : ''
   const choice = file ? await readJson($, file) : null
-  const proxyQuota = endpoint && file && !(choice?.endpoint === endpoint && ['setup', 'keep', 'dismiss'].includes(choice?.choice)) ? {
-    endpoint, key: file.slice(file.lastIndexOf('/') + 1, -5),
+  const proxyQuota = file && !(choice?.host === host && ['setup', 'keep', 'dismiss'].includes(choice?.choice)) ? {
+    host, key: file.slice(file.lastIndexOf('/') + 1, -5),
     canSetup: !S.turnRunning && !S.compacting && !S.carry && !S.owed && !week.atMark && (!run || ['finished', 'stopped'].includes(run.state.status)),
   } : null
   // When the week reached the mark, until it has been below it for a minute: a climb back is another occurrence of the mark box.
@@ -889,9 +890,9 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
   if (plan.fillText !== undefined && !(await fillReply($, plan.fillText, plan.proxyQuotaChoice?.choice === 'setup' ? banner : undefined))) return
   if (plan.proxyQuotaChoice) {
     try {
-      const { endpoint, choice } = plan.proxyQuotaChoice
-      const file = S.proxyNotice.endpoint === endpoint ? S.proxyNotice.file : await proxyQuotaNoticeFile(await lcwHome($), endpoint)
-      await $.fs.write(file, JSON.stringify({ endpoint, choice }))
+      const { host, choice } = plan.proxyQuotaChoice
+      const file = S.proxyNotice.host === host ? S.proxyNotice.file : await proxyQuotaNoticeFile(await lcwHome($), host)
+      await $.fs.write(file, JSON.stringify({ host, choice }))
     } catch {
       return $.ui.toast('LCW could not remember this choice. The setup offer stays available; try again.', { timeoutMs: 10000 })
     }

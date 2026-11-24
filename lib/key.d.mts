@@ -8,7 +8,7 @@ export function spendDir(lcwHome: string): string
 export function capFile(lcwHome: string): string
 export function spendCommandFile(lcwHome: string): string
 export function noticesFile(lcwHome: string): string
-export function proxyQuotaNoticeFile(lcwHome: string, endpoint: string): Promise<string>
+export function proxyQuotaNoticeFile(lcwHome: string, host: string): Promise<string>
 export function spendReadingFile(lcwHome: string): string
 export function spendTryFile(lcwHome: string, window: number): string
 export function quotaFile(lcwHome: string): string

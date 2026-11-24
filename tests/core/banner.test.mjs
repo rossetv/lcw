@@ -7,7 +7,7 @@ import * as S from './banner-samples.mjs'
 import { runFact } from '../../hooks/boxes.mjs'
 
 test('proxy setup asks rather than assuming billing, before dollar setup and without exposing the endpoint', () => {
-  const facts = { advisorModel: 'fable', billing: 'payg', proxyQuota: { endpoint: 'https://proxy.example/private/team', key: 'connection', canSetup: true } }
+  const facts = { advisorModel: 'fable', billing: 'payg', proxyQuota: { host: 'proxy.example', key: 'connection', canSetup: true } }
   const b = bannerFor(facts)
   assert.equal(b?.kind, 'proxyquota')
   assert.equal(b.title, 'Using a subscription-backed proxy?')

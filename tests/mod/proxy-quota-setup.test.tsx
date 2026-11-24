@@ -4,6 +4,8 @@ import { proxyQuotaNoticeFile } from '../../lib/key.mjs'
 
 const NOW = Date.parse('2026-11-20T12:00:00Z')
 const ENDPOINT = 'https://proxy.example/private/team'
+const HOST = 'proxy.example'
+const OTHER = 'https://other.example/private/team'
 const RUN = '/lcw/repos/repo-1/runs/r1'
 const TITLE = /Using a subscription-backed proxy\?/
 const BAND = {
@@ -76,7 +78,7 @@ function engine(on: any, files: Record<string, string> = initial()) {
 }
 
 for (const choice of ['setup', 'keep', 'dismiss']) {
-  test(`${choice} remembers only this endpoint and never changes accounting or launches work`, async ($, on) => {
+  test(`${choice} is remembered for this host, whatever its port or path, and never changes accounting or launches work`, async ($, on) => {
     const w = engine(on)
     const before = JSON.stringify(w.files)
     await start($)
@@ -92,7 +94,7 @@ for (const choice of ['setup', 'keep', 'dismiss']) {
       expect(w.fills[0]).toMatch(/authorization/i)
       expect(w.fills[0]).not.toMatch(/proxy\.example|private|team/)
     }
-    const file = await proxyQuotaNoticeFile('/lcw', ENDPOINT)
+    const file = await proxyQuotaNoticeFile('/lcw', HOST)
     const saved = w.files[file]
     if (saved === undefined) throw new Error('The quota setup choice was not saved')
     expect(JSON.parse(saved).choice).toBe(choice)
@@ -109,38 +111,43 @@ for (const choice of ['setup', 'keep', 'dismiss']) {
     await start($)
     await w.clock.advance(2000)
     expect(await band.find({ type: 'Text', text: TITLE })).toBeUndefined()
-    w.control.endpoint = ENDPOINT + '/other'
+    for (const sameHost of [ENDPOINT + '/other', 'https://proxy.example:8443/private/team', 'http://proxy.example:3456']) {
+      w.control.endpoint = sameHost
+      await w.clock.advance(2000)
+      expect(await band.find({ type: 'Text', text: TITLE })).toBeUndefined()
+    }
+    w.control.endpoint = OTHER
     await w.clock.advance(2000)
     expect(await band.find({ type: 'Text', text: TITLE })).toBeDefined()
     await band.unmount()
   })
 
-  test(`a fresh module honors the persisted ${choice} choice with a normalized endpoint`, async ($, on) => {
+  test(`a fresh module honors the persisted ${choice} choice however the address is written`, async ($, on) => {
     const files: Record<string, string> = initial()
-    files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)] = JSON.stringify({ endpoint: ENDPOINT, choice })
+    files[await proxyQuotaNoticeFile('/lcw', HOST)] = JSON.stringify({ host: HOST, choice })
     const w = engine(on, files)
     w.control.endpoint = 'https://PROXY.example:443/private/team///'
     await start($)
     const band = await $.ui.mount(BAND)
     expect(await band.find({ type: 'Text', text: TITLE })).toBeUndefined()
-    w.control.endpoint = ENDPOINT + '/other'
+    w.control.endpoint = OTHER
     await w.clock.advance(2000)
     expect(await band.find({ type: 'Text', text: TITLE })).toBeDefined()
     await band.unmount()
   })
 }
 
-for (const record of ['wrong-endpoint', 'invalid-choice', 'corrupt']) {
-  test(`a ${record} notice cannot suppress setup for this connection`, async ($, on) => {
+for (const record of ['wrong-host', 'invalid-choice', 'corrupt']) {
+  test(`a ${record} notice cannot suppress setup for this host`, async ($, on) => {
     const w = engine(on)
-    w.files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)] = record === 'corrupt' ? '{' : JSON.stringify({ endpoint: record === 'wrong-endpoint' ? ENDPOINT + '/other' : ENDPOINT, choice: record === 'invalid-choice' ? 'unknown' : 'keep' })
+    w.files[await proxyQuotaNoticeFile('/lcw', HOST)] = record === 'corrupt' ? '{' : JSON.stringify({ host: record === 'wrong-host' ? 'other.example' : HOST, choice: record === 'invalid-choice' ? 'unknown' : 'keep' })
     await start($)
     const band = await $.ui.mount(BAND)
     expect(await band.find({ type: 'Text', text: TITLE })).toBeDefined()
     await band.press({ key: 'banner:proxyquota:dismiss' })
-    const saved = w.files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)]
+    const saved = w.files[await proxyQuotaNoticeFile('/lcw', HOST)]
     if (saved === undefined) throw new Error('The quota setup dismissal was not saved')
-    expect(JSON.parse(saved)).toEqual({ endpoint: ENDPOINT, choice: 'dismiss' })
+    expect(JSON.parse(saved)).toEqual({ host: HOST, choice: 'dismiss' })
     await band.unmount()
   })
 }
@@ -159,7 +166,7 @@ test('a long endpoint persists under one bounded filename without appearing in t
   expect(file).toMatch(/^\/lcw\/notices\/proxy-quota\/[a-f0-9]{64}\.json$/)
   const saved = w.files[file]
   if (saved === undefined) throw new Error('The quota setup notice is missing')
-  expect(JSON.parse(saved).endpoint).toBe(w.control.endpoint)
+  expect(JSON.parse(saved)).toEqual({ host: HOST, choice: 'setup' })
   expect(w.fills[0]).not.toMatch(/proxy\.example|private|team|xxx/)
   await band.unmount()
 })
@@ -173,26 +180,26 @@ for (const failure of ['draft', 'whitespace', 'unreadable', 'refuse', 'throw', '
     w.control.fill = failure === 'refuse' || failure === 'throw' ? failure : 'ok'
     w.control.writeFails = failure === 'write'
     await band.press({ key: 'banner:proxyquota:setup' })
-    expect(w.files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)]).toBeUndefined()
+    expect(w.files[await proxyQuotaNoticeFile('/lcw', HOST)]).toBeUndefined()
     expect(w.prompts).toEqual([])
     if (['draft', 'whitespace', 'unreadable'].includes(failure)) expect(w.fills).toEqual([])
     expect(await band.find({ type: 'Text', text: TITLE })).toBeDefined()
     expect(w.toasts.length > 0).toBe(true)
     w.control.draft = ''; w.control.fill = 'ok'; w.control.writeFails = false
     await band.press({ key: 'banner:proxyquota:setup' })
-    const saved = w.files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)]
+    const saved = w.files[await proxyQuotaNoticeFile('/lcw', HOST)]
     if (saved === undefined) throw new Error('The quota setup choice was not saved after retry')
     expect(JSON.parse(saved).choice).toBe('setup')
     await band.unmount()
   })
 }
 
-test('an endpoint changed after drawing cannot accept a stale setup click', async ($, on) => {
+test('a host changed after drawing cannot accept a stale setup click', async ($, on) => {
   const w = engine(on)
   await start($)
   const band = await $.ui.mount(BAND)
   expect(await band.find({ type: 'Text', text: TITLE })).toBeDefined()
-  w.control.endpoint = ENDPOINT + '/other'
+  w.control.endpoint = OTHER
   await band.press({ key: 'banner:proxyquota:setup' })
   expect(w.fills).toEqual([])
   expect(Object.keys(w.files).filter((p) => p.includes('/notices/'))).toEqual([])
@@ -200,31 +207,31 @@ test('an endpoint changed after drawing cannot accept a stale setup click', asyn
   await band.unmount()
 })
 
-for (const race of ['turn', 'endpoint']) {
+for (const race of ['turn', 'host']) {
   test(`a ${race} change while reading the draft invalidates setup before it fills`, async ($, on) => {
     const w = engine(on)
     await start($)
     const band = await $.ui.mount(BAND)
     w.control.beforeDraft = async () => {
       if (race === 'turn') await $.turn.start({ text: '', turnId: 't1' } as any)
-      else w.control.endpoint = ENDPOINT + '/other'
+      else w.control.endpoint = OTHER
     }
     await band.press({ key: 'banner:proxyquota:setup' })
     expect(w.fills).toEqual([])
     expect(w.prompts).toEqual([])
-    expect(w.files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)]).toBeUndefined()
+    expect(w.files[await proxyQuotaNoticeFile('/lcw', HOST)]).toBeUndefined()
     await band.unmount()
   })
 }
 
-for (const race of ['endpoint', 'mark', 'human-pause']) {
+for (const race of ['host', 'mark', 'human-pause']) {
   test(`a ${race} change during the final draft read invalidates setup before it fills`, async ($, on) => {
     const w = engine(on)
     await start($)
     const band = await $.ui.mount(BAND)
     w.control.beforeDraft = async () => {
       w.control.beforeDraft = async () => {
-        if (race === 'endpoint') w.control.endpoint = ENDPOINT + '/other'
+        if (race === 'host') w.control.endpoint = OTHER
         if (race === 'mark') w.files['/lcw/spend/s1.json'] = JSON.stringify({ v: 1, base: 0, max: 90, q: { [Math.floor((NOW - 86400000) / 900000)]: 90 } })
         if (race === 'human-pause') {
           w.files['/lcw/sessions/s1.json'] = JSON.stringify({ billing: 'payg', runDir: RUN })
@@ -235,7 +242,7 @@ for (const race of ['endpoint', 'mark', 'human-pause']) {
     await band.press({ key: 'banner:proxyquota:setup' })
     expect(w.fills).toEqual([])
     expect(w.prompts).toEqual([])
-    expect(w.files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)]).toBeUndefined()
+    expect(w.files[await proxyQuotaNoticeFile('/lcw', HOST)]).toBeUndefined()
     await band.unmount()
   })
 }
@@ -257,7 +264,7 @@ for (const clear of [false, true]) {
     expect(w.fills).toEqual(clear ? ['my unfinished question', ''] : ['my unfinished question'])
     expect(w.control.draft).toBe(clear ? '' : 'my unfinished question')
     expect(w.prompts).toEqual([])
-    expect(w.files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)]).toBeUndefined()
+    expect(w.files[await proxyQuotaNoticeFile('/lcw', HOST)]).toBeUndefined()
     await band.unmount()
   })
 }
@@ -285,20 +292,20 @@ for (const source of ['typing', 'history']) for (const clear of [false, true]) {
     expect(w.fills).toEqual([])
     expect(w.control.draft).toBe(clear ? '' : 'my unfinished question')
     expect(w.prompts).toEqual([])
-    expect(w.files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)]).toBeUndefined()
+    expect(w.files[await proxyQuotaNoticeFile('/lcw', HOST)]).toBeUndefined()
     await band.unmount()
   })
 }
 
-test('another endpoint choice arriving during a press cannot be overwritten', async ($, on) => {
+test("another host's choice arriving during a press cannot be overwritten", async ($, on) => {
   const w = engine(on)
-  const other = await proxyQuotaNoticeFile('/lcw', ENDPOINT + '/other')
+  const other = await proxyQuotaNoticeFile('/lcw', 'other.example')
   await start($)
   const band = await $.ui.mount(BAND)
   w.files[other] = '{"choice":"keep"}'
   await band.press({ key: 'banner:proxyquota:dismiss' })
   expect(w.files[other]).toBe('{"choice":"keep"}')
-  const saved = w.files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)]
+  const saved = w.files[await proxyQuotaNoticeFile('/lcw', HOST)]
   if (saved === undefined) throw new Error('The quota setup dismissal was not saved')
   expect(JSON.parse(saved).choice).toBe('dismiss')
   await band.unmount()
@@ -354,7 +361,7 @@ for (const condition of ['working', 'human-pause', 'other-driver', 'mark']) {
     await band.press({ key: 'banner:proxyquota:setup' })
     expect(w.fills).toEqual([])
     expect(w.prompts).toEqual([])
-    expect(w.files[await proxyQuotaNoticeFile('/lcw', ENDPOINT)]).toBeUndefined()
+    expect(w.files[await proxyQuotaNoticeFile('/lcw', HOST)]).toBeUndefined()
     await band.unmount()
   })
 }
