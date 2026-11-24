@@ -1153,7 +1153,8 @@ async function start($: EngineInterface) {
     let looked = S.startedAt
     return quietly(async () => {
       const now = await $.clock.now()
-      if (now - looked < (S.run ? every : IDLE_MS)) return
+      // 100 ms of slack: a tick that read the clock a little late must not make the next one, on time, seem too soon.
+      if (now - looked < (S.run ? every : IDLE_MS) - 100) return
       looked = now
       await fn()
     })
