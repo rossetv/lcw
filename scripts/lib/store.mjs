@@ -55,8 +55,11 @@ export function sweepTemp(lcwHome, now = Date.now()) {
     let names = []
     try { names = fs.readdirSync(dir) } catch { continue }
     for (const name of names) {
-      if (!/\.\d+\.tmp$/.test(name)) continue
-      try { if (now - fs.statSync(`${dir}/${name}`).mtimeMs >= 3600_000) fs.rmSync(`${dir}/${name}`, { force: true }) } catch {}
+      // a folder's git record is asked again at its next tick; diff records are no longer read at all
+      const cache = dir === `${lcwHome}/cache`
+      const age = /\.\d+\.tmp$/.test(name) ? 3600_000 : cache && /^git-.*\.json$/.test(name) ? 86400_000 : cache && /^diff-.*\.json$/.test(name) ? 0 : null
+      if (age === null) continue
+      try { if (now - fs.statSync(`${dir}/${name}`).mtimeMs >= age) fs.rmSync(`${dir}/${name}`, { force: true }) } catch {}
     }
   }
 }
