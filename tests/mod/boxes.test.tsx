@@ -605,8 +605,10 @@ test('a finished run of the repository is read once a session, not at every look
   const w = engine(on, { ...leftHalfway(), [done]: JSON.stringify({ id: 'r4', name: 'shipped', status: 'finished', stage: 'Ship' }) })
   await start($)
   await w.clock.advance(31000)
-  // The open run moves on, as an open run's state does; the finished one stays as it was.
+  // The open run moves on, as an open run's state does. The finished one is written too: a run found finished is not
+  // looked at again, whatever its file does.
   w.files[OLD + '/state.json'] = JSON.stringify({ ...JSON.parse(w.files[OLD + '/state.json']!), stage: 'Review' })
+  w.files[done] = JSON.stringify({ ...JSON.parse(w.files[done]!), finishedAt: NOW })
   await w.clock.advance(34000)
   expect(w.reads.filter((p) => p === done).length).toBe(1)
   expect(w.reads.filter((p) => p === OLD + '/state.json').length).toBeGreaterThan(1)
