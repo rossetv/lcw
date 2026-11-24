@@ -1126,24 +1126,28 @@ async function afterTool($: EngineInterface, command: unknown) {
   const run = f.run && !['finished', 'stopped'].includes(f.run.state.status) ? f.run : null
   const driverMark: number | null = run ? run.state.markPercent ?? TH.usageMarkPercent : null
   const driverMoney = run && !run.quota ? run.money : null
-  let cli: string | null = null
-  if (f.money) {
-    const home = await lcwHome($)
-    const ids = [...new Set([await $.session.id(), await spendName($)])]
-    const told = await Promise.all(ids.flatMap((id) => [
-      readJson($, sessionFile(home, id)).then((s) => !!s?.toldPayg), readJson($, toldFile(home, id)).then((t) => !!t?.payg),
-    ]))
-    if (!told.includes(true)) {
-      // Recorded before it is said: a note not recorded would be said again after every call.
-      await write($, toldFile(home, ids[0]!), JSON.stringify({ payg: true }))
-      cli = lcwCommand($.plugin.root)
-    }
-  }
+  // Checked and recorded one call at a time, so calls that end together give the note once.
+  const cli = f.money ? await (telling = telling.catch(() => null).then(() => tellPayg($))) : null
   return stopTexts({
     event: 'PostToolUse', lcwCall: lcwOnly(command), hasRun: !!run, cli, money: f.money, quota: f.quota,
     heldQuota: f.quota?.hold ? f.quota : run?.quota?.hold ? run.quota : null, mark: f.mark, usage: f.usage, now: f.now,
     driverHeld: !!run && !run.quota && atMark(driverMark, f.usage, f.now, driverMoney), driverMoney, driverMark,
   })
+}
+
+let telling: Promise<string | null> = Promise.resolve(null)
+
+// The lcw command line for the once-only note on pay-per-token billing, when it is due; null once it was given.
+async function tellPayg($: EngineInterface) {
+  const home = await lcwHome($)
+  const ids = [...new Set([await $.session.id(), await spendName($)])]
+  const told = await Promise.all(ids.flatMap((id) => [
+    readJson($, sessionFile(home, id)).then((s) => !!s?.toldPayg), readJson($, toldFile(home, id)).then((t) => !!t?.payg),
+  ]))
+  if (told.includes(true)) return null
+  // Recorded before it is said: a note not recorded would be said again after every call.
+  await write($, toldFile(home, ids[0]!), JSON.stringify({ payg: true }))
+  return lcwCommand($.plugin.root)
 }
 
 // One failed call counted at a time, so two that fail together are both counted.

@@ -238,3 +238,10 @@ test('a reading that came while a gate check was still running is tried once tha
   await w.clock.advance(20000)
   expect(syncs(w.runs).length).toBe(2)
 })
+
+test('three tool calls that end together give the pay-per-token note once, and each is told to stop at the mark', async ($, on) => {
+  engine(on, filesFor(cases.find((c) => c.name.startsWith('the note comes before the stop'))!))
+  const told = (await Promise.all([1, 2, 3].map((n) => $.classic.PostToolUse({ ...CALLS.tool, tool_response: {}, tool_use_id: `toolu_${n}` } as any)))).map(said)
+  expect(told.filter((t) => /^LCW: this session turned out to be billed per token\./.test(t ?? '')).length).toBe(1)
+  expect(told.every((t) => /STOP! LCW: this session is at its usage mark/.test(t ?? ''))).toBe(true)
+})
