@@ -1112,11 +1112,19 @@ async function checkpoint($: EngineInterface) {
   })().catch(() => {}).finally(() => { S.compacting = false }))
 }
 
+// The writes of the mascot's record, one at a time, so that two at once (two failed calls, or one and Stop) both count.
+let counting: Promise<unknown> = Promise.resolve()
+
 // The person pressed Stop on a running turn. No Stop hook fires for that, so the turn the mascot shows as
-// working is closed here; without it the creature would go on looking busy until the next turn ended.
-async function noteStopped($: EngineInterface) {
-  const file = activityFile(await lcwHome($), await $.session.id())
-  await write($, file, JSON.stringify({ ...(await readJson($, file)), state: 'rest', at: await $.clock.now() }))
+// working is closed here; without it the creature would go on looking busy until the next turn ended. Written in
+// turn with the count of failed calls, which keeps the same record.
+function noteStopped($: EngineInterface) {
+  counting = counting.catch(() => {}).then(async () => {
+    const file = activityFile(await lcwHome($), await $.session.id())
+    forget(file)
+    await write($, file, JSON.stringify({ ...(await readJson($, file)), state: 'rest', at: await $.clock.now() }))
+  })
+  return counting
 }
 
 // What Claude is told after one of the session's own tool calls: the stop at the mark and the once-only note on
@@ -1150,8 +1158,6 @@ async function tellPayg($: EngineInterface) {
   return lcwCommand($.plugin.root)
 }
 
-// One failed call counted at a time, so two that fail together are both counted.
-let counting: Promise<unknown> = Promise.resolve()
 
 // A failed tool call of the session's own, counted in the record the activity hook keeps, under the name it uses.
 function countFailure($: EngineInterface, e: Parameters<typeof nextActivity>[0] & { session_id?: string; transcript_path?: string }) {

@@ -77,6 +77,7 @@ function engine(on: any, initial: Record<string, string>, opts: { beneath?: (e: 
   })
   on('process.run', async (_: any, e: any) => { w.runs.push([...e.argv]); await opts.process?.(e.argv); return { value: { exitCode: 1, stdout: '', stderr: '' } } })
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('session.stop', (_: any, e: any) => ({ isTurnRunning: e.isTurnRunning }))
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
   on('classic.PostToolUse', (_: any, e: any) => opts.beneath?.(e) ?? {})
@@ -244,4 +245,10 @@ test('three tool calls that end together give the pay-per-token note once, and e
   const told = (await Promise.all([1, 2, 3].map((n) => $.classic.PostToolUse({ ...CALLS.tool, tool_response: {}, tool_use_id: `toolu_${n}` } as any)))).map(said)
   expect(told.filter((t) => /^LCW: this session turned out to be billed per token\./.test(t ?? '')).length).toBe(1)
   expect(told.every((t) => /STOP! LCW: this session is at its usage mark/.test(t ?? ''))).toBe(true)
+})
+
+test('a failed call and Stop pressed at the same moment both reach the mascot\'s record', async ($, on) => {
+  const w = engine(on, { [RECORD]: JSON.stringify({ state: 'working', at: 5, fails: 0 }) })
+  await Promise.all([fail($, 'toolu_1'), $.session.stop({ isTurnRunning: true })])
+  expect(JSON.parse(w.files[RECORD]!)).toMatchObject({ state: 'rest', fails: 1 })
 })
