@@ -220,6 +220,8 @@ async function restore($: EngineInterface) {
 // remembered as missing ('' its stamp). A look at a folder answers for every file in it, and any look answers again
 // for LOOK_MS, so the timers that fire together and the reads within one pass share it.
 const LOOK_MS = 100
+// The files kept, at most HELD of them: the one read least lately goes first.
+const HELD = 1000
 const held = new Map<string, { stamp: string; text: string | null }>()
 const looks = new Map<string, { at: number; answer: Promise<any> }>()
 const gone = (err: any) => /ENOENT|ENOTDIR/.test(String(err?.code ?? '') + ' ' + String(err?.message ?? err))
@@ -231,6 +233,8 @@ async function look<T>($: EngineInterface, key: string, take: () => Promise<T>):
   const kept = looks.get(key)
   if (kept && now >= kept.at && now - kept.at < LOOK_MS) return kept.answer
   const answer = take().catch((err) => (gone(err) ? null : undefined))
+  // A look answers for LOOK_MS only, so the ones older than that are dropped, now and then.
+  if (looks.size >= 100) for (const [k, l] of looks) if (!(now >= l.at && now - l.at < LOOK_MS)) looks.delete(k)
   looks.set(key, { at: now, answer })
   return answer
 }
@@ -269,9 +273,11 @@ async function stampOf($: EngineInterface, path: string) {
 async function readText($: EngineInterface, path: string) {
   const stamp = await stampOf($, path)
   const kept = held.get(path)
-  if (stamp !== undefined && kept?.stamp === stamp) return kept.text
+  held.delete(path)
+  if (stamp !== undefined && kept?.stamp === stamp) { held.set(path, kept); return kept.text }
   const text = stamp === '' ? null : await $.fs.read(path).then(String, () => null)
   if (stamp !== undefined) held.set(path, { stamp, text })
+  if (held.size > HELD) held.delete(held.keys().next().value!)
   return text
 }
 

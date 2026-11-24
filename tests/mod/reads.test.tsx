@@ -111,6 +111,15 @@ test('with no run and nothing changing, no file is read again and the files are 
   expect(cost.looks).toBeLessThanOrEqual(2 * 4)
 })
 
+test('the mod keeps a thousand files at most: past that, the one read least lately is read again', async ($, on) => {
+  const quarter = Math.floor(NOW / 900000)
+  const spent = JSON.stringify({ v: 1, base: 0, max: 10, q: { [quarter]: 10 } })
+  const files: Record<string, string> = { ...unbound(), '/lcw/sessions/s1.json': JSON.stringify({ billing: 'payg' }) }
+  for (let i = 0; i < 1001; i++) files[`/lcw/spend/s${i}.json`] = spent
+  const cost = await quietStretch($, engine(on, files))
+  expect(cost.reads).toBeGreaterThan(0)
+})
+
 test('with a run, a changed file is read once and shown within a second', async ($, on) => {
   const e = engine(on, bound())
   await start($)
