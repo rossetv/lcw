@@ -222,7 +222,7 @@ test("the status line is LCW's only when it is a command setup wrote, the player
   assert.equal(statusLineFact(undefined, '/lcw'), null)
   assert.deepEqual(statusLineFact({ type: 'command', command: 'node /lcw/bin/statusline.mjs' }, '/lcw'), { command: 'node /lcw/bin/statusline.mjs', mine: true })
   assert.deepEqual(statusLineFact({ command: 'starship statusline' }, '/lcw'), { command: 'starship statusline', mine: false })
-  const player = (h) => `[ -r '${h}/bin/statusline.sh' ] && . '${h}/bin/statusline.sh'; node '${h}/bin/statusline.mjs' || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'`
+  const player = (h) => `lcw_bin='${h}/bin'; [ -r "$lcw_bin/statusline.sh" ] && . "$lcw_bin/statusline.sh"; node "$lcw_bin/statusline.mjs" || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'`
   assert.equal(statusLineFact({ command: player('/lcw') }, '/lcw').mine, true)
   assert.equal(statusLineFact({ command: player('/other') }, '/lcw').mine, false)
 })

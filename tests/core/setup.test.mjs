@@ -54,7 +54,7 @@ test('the status line runs from a home with a space or a quote in its path', () 
   const quote = tmp("it's") + '/.lcw', other = tmp('s') + '/settings.json'
   setup(quote, other, 'install')
   const q = `'${quote.replace(/'/g, `'\\''`)}`
-  assert.equal(read(other).statusLine.command, `[ -r ${q}/bin/statusline.sh' ] && . ${q}/bin/statusline.sh'; node ${q}/bin/statusline.mjs' || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'`)
+  assert.equal(read(other).statusLine.command, `lcw_bin=${q}/bin'; [ -r "$lcw_bin/statusline.sh" ] && . "$lcw_bin/statusline.sh"; node "$lcw_bin/statusline.mjs" || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'`)
   const s = spawnSync('sh', ['-c', read(other).statusLine.command], { input, encoding: 'utf8', env: { ...process.env, LCW_HOME: quote, COLUMNS: '100' } })
   assert.match(s.stdout, /Opus 5/, s.stderr)
 })

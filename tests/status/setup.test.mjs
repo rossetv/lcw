@@ -15,7 +15,7 @@ const setup = (home, settings, cmd, ...more) => {
 const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'))
 const BIN = fs.readdirSync(`${ROOT}/scripts/bin`)
 const BROKEN = 'LCW · status line could not load · see ~/.lcw/statusline.log\n'
-const playerCommand = (home) => `[ -r '${home}/bin/statusline.sh' ] && . '${home}/bin/statusline.sh'; node '${home}/bin/statusline.mjs' || printf '%s\\n' '${BROKEN.trim()}'`
+const playerCommand = (home) => `lcw_bin='${home}/bin'; [ -r "$lcw_bin/statusline.sh" ] && . "$lcw_bin/statusline.sh"; node "$lcw_bin/statusline.mjs" || printf '%s\\n' '${BROKEN.trim()}'`
 const lcwLine = (home) => ({ type: 'command', command: playerCommand(home), refreshInterval: 1, padding: 0 })
 const oldLine = (home) => ({ type: 'command', command: `node ${home}/bin/statusline.mjs`, refreshInterval: 1, padding: 0 })
 const notices = (home) => read(home + '/notices.json')
@@ -407,6 +407,19 @@ test('with LCW\'s code broken and no rows saved, the status line prints exactly 
   const noNode = spawnSync('/bin/sh', ['-c', read(settings).statusLine.command], { input: INPUT, encoding: 'utf8', env: { LCW_HOME: home, HOME: tmp('h'), PATH: tmp('empty') } })
   assert.equal(noNode.status, 0, 'without the player and without Node')
   assert.equal(noNode.stdout, BROKEN)
+})
+
+test('the command setup wrote under one LCW home draws, and saves its frames, under the LCW home the session has', () => {
+  const a = tmp('a') + '/.lcw', b = tmp('b') + '/.lcw', settings = tmp('s') + '/settings.json'
+  fs.mkdirSync(b)
+  assert.equal(setup(a, settings, 'install').code, 0)
+  const r = spawnSync('/bin/sh', ['-c', read(settings).statusLine.command], { input: INPUT, encoding: 'utf8', env: { ...process.env, LCW_HOME: b, COLUMNS: '100' } })
+  assert.equal(r.status, 0, r.stderr)
+  const rows = plain(r.stdout).split('\n').filter(Boolean)
+  assert.equal(rows.length, 2, r.stdout)
+  assert.match(rows.join('\n'), /Opus 5/)
+  assert.ok(fs.existsSync(b + '/frames/s1'), 'the frames are under the session\'s LCW home')
+  assert.ok(!fs.existsSync(a + '/frames'))
 })
 
 test('on Windows setup writes the node command, and no notice', () => {

@@ -628,7 +628,7 @@ test("a status line the person had before LCW shows the status-line box, and not
 })
 
 test("LCW's player command is LCW's own: no box", async ($, on) => {
-  const command = "[ -r '/lcw/bin/statusline.sh' ] && . '/lcw/bin/statusline.sh'; node '/lcw/bin/statusline.mjs' || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'"
+  const command = `lcw_bin='/lcw/bin'; [ -r "$lcw_bin/statusline.sh" ] && . "$lcw_bin/statusline.sh"; node "$lcw_bin/statusline.mjs" || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'`
   engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }) }, { settings: { statusLine: { type: 'command', command } } })
   await start($)
   const band = await $.ui.mount(BAND)
