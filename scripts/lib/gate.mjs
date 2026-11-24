@@ -10,6 +10,9 @@ import { readMoney } from './money.mjs'
 import { readSessionQuota, sessionIdentity } from './quota-session.mjs'
 import { alive } from './awake.mjs'
 import { isDeepStrictEqual } from 'node:util'
+import { atMark, lcwOnly } from '../../lib/mark.mjs'
+
+export { atMark, lcwOnly }
 
 export const DEFAULT_MARK = thresholds.usageMarkPercent
 export const readUsage = () => readJson(usageFile(home()))
@@ -48,32 +51,6 @@ export function setSessionMark(sessionId, mark) {
     const { markPercent, markUsd, ...rest } = readJson(file) || {}
     writeJson(file, typeof mark === 'number' ? { ...rest, markPercent: mark } : { ...rest, markUsd: mark.usd })
   }
-}
-
-/**
- * True when a shell line runs lcw and nothing else: one call, or several joined by &&, ; or |. Such a line is
- * winding the run down or lifting the mark, so the stop note leaves it alone. In doubt it answers false.
- */
-export function lcwOnly(command) {
-  const line = String(command ?? '').replace(/'\\''/g, '_') // an apostrophe inside a single-quoted text, written '\''
-  if (/\$\(|`/.test(line.replace(/'[^']*'/g, ''))) return false // a command run inside the line, as in "$(npm test)"
-  const parts = line
-    .replace(/"[^"]*"|'[^']*'/g, (quoted) => quoted.replace(/[;&|\n]/g, ' ')) // inside quotes these are text
-    .replace(/\d*>&\d+/g, '') // 2>&1 starts no second command
-    .split(/[;&|\n]+/).map((part) => part.trim()).filter(Boolean)
-  return parts.length > 0 && parts.every((part) => /^node\s+("[^"]*lcw\.mjs"|'[^']*lcw\.mjs'|\S*lcw\.mjs)(\s|$)/.test(part))
-}
-
-/**
- * True when the week's figure has reached the mark and its reset time has not passed. On pay-per-token billing,
- * given the money view: when the machine's 7-day spend has reached the session's mark in dollars.
- */
-export function atMark(mark, usage, now = Date.now(), money = null) {
-  if (money) return money.spentUsd >= money.markUsd
-  const w = usage?.sevenDay
-  if (!w || typeof w.percentUsed !== 'number') return false
-  if (w.resetsAt && Date.parse(w.resetsAt) <= now) return false
-  return w.percentUsed >= mark
 }
 
 /**

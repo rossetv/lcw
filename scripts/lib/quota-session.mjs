@@ -5,6 +5,8 @@ import { home, readJson, writeJson } from './store.mjs'
 import { readQuotaState, maybeRefreshQuota } from './quota-command.mjs'
 import { alive } from './awake.mjs'
 
+export { quotaLine } from '../../lib/mark.mjs'
+
 export function sessionIdentity(id) {
   if (!id) return id
   const own = readJson(sessionFile(home(), id))
@@ -76,10 +78,4 @@ export function readSessionQuota(ids, now, mark) {
 
 export function quotaUsage(view, now) {
   return view ? { at: view.observedAt ?? now, source: view.sourceId, sevenDay: view.status === 'ok' ? { percentUsed: view.percentUsed, resetsAt: view.resetsAt } : null } : null
-}
-
-export function quotaLine(view) {
-  return view.status === 'ok'
-    ? `external week: ${view.percentUsed}% used${view.blocked ? '; provider refused new work' : ''}`
-    : `external quota: ${view.status}${view.code ? ` (${view.code})` : ''}; new work held`
 }
