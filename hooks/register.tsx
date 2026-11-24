@@ -452,10 +452,11 @@ function unsay($: EngineInterface, stall: { due: { id: string }[]; nudged: Nudge
   keepNotices($)
 }
 
+// Whether the gate was put right; null when nothing was run: another check is under way, or this one ran under 5 s ago.
 async function reconcileGate($: EngineInterface, run: Run, action: 'sync' | 'retry' | 'ack') {
   const now = await $.clock.now()
   const key = run.runDir + ':' + action + ':' + gateIdentity(run.gate)
-  if (S.gateCheck.busy || S.gateCheck.key === key && now - S.gateCheck.at < 5000) return false
+  if (S.gateCheck.busy || S.gateCheck.key === key && now - S.gateCheck.at < 5000) return null
   const check = { key, at: now, busy: true }
   S.gateCheck = check
   try {
@@ -577,14 +578,14 @@ async function refresh($: EngineInterface) {
     return
   }
   // An outside quota that comes to hold the run is written as its gate at once, as a week's figure is at a measure:
-  // tried once for each reading, a gate already holding for it left alone, and none for a run the person paused.
+  // tried once for each reading (a check that could not start yet is tried at the next look), a gate already holding
+  // for it left alone, and none for a run the person paused.
   const q = run.quota
   const s = run.state
   const reading = q && JSON.stringify([run.runDir, q.revision, q.requestId, q.status, q.code])
   if (q?.hold && reading !== S.quotaSynced && (run.gate?.unit !== 'quota' || run.gate.recoveredBy)
     && !['finished', 'stopped'].includes(s.status) && !(s.status === 'paused' && s.pausedReason === 'human')) {
-    S.quotaSynced = reading
-    await reconcileGate($, run, 'sync')
+    if ((await reconcileGate($, run, 'sync')) !== null) S.quotaSynced = reading
     return
   }
   await recoverQuota($, run, now)

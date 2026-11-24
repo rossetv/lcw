@@ -46,7 +46,7 @@ function filesFor(row: any) {
 // A file system in memory whose times move with every change, as a real one's do.
 // beneath stands for the hooks of the session's list, under the mod.
 // process answers a command the mod runs, as the script would.
-function engine(on: any, initial: Record<string, string>, opts: { beneath?: (e: any) => object; process?: (argv: string[]) => void } = {}) {
+function engine(on: any, initial: Record<string, string>, opts: { beneath?: (e: any) => object; process?: (argv: string[]) => void | Promise<void> } = {}) {
   const now = (instant += STEP)
   const clock = mock.clock(on, { now })
   const times: Record<string, number> = {}
@@ -75,7 +75,7 @@ function engine(on: any, initial: Record<string, string>, opts: { beneath?: (e: 
     if (e.path in files) return { value: { kind: 'file', size: files[e.path]!.length, mtimeMs: times[e.path], isLink: false } }
     throw new Error('ENOENT')
   })
-  on('process.run', (_: any, e: any) => { w.runs.push([...e.argv]); opts.process?.(e.argv); return { value: { exitCode: 1, stdout: '', stderr: '' } } })
+  on('process.run', async (_: any, e: any) => { w.runs.push([...e.argv]); await opts.process?.(e.argv); return { value: { exitCode: 1, stdout: '', stderr: '' } } })
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
@@ -222,4 +222,19 @@ test('a gate that could not be written for an outside quota is not tried again f
   over(w.files)
   await w.clock.advance(20000)
   expect(syncs(w.runs).length).toBe(1)
+})
+
+test('a reading that came while a gate check was still running is tried once that check is over', async ($, on) => {
+  let first = true
+  // The first check answers three seconds late, and none writes the gate.
+  const w = engine(on, filesFor(held), { process: async (argv) => { if (argv[1]?.endsWith('/scripts/gate-reconcile.mjs') && first) { first = false; await w.clock.sleep(3000) } } })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: false })
+  await w.clock.advance(3000)
+  over(w.files)
+  await w.clock.advance(1000)
+  over(w.files, 'q3')
+  await w.clock.advance(8000)
+  expect(syncs(w.runs).length).toBe(2)
+  await w.clock.advance(20000)
+  expect(syncs(w.runs).length).toBe(2)
 })
