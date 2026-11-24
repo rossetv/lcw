@@ -76,14 +76,20 @@ async function run() {
     // A folder whose code is older than frames ahead, as a session open from before an update can leave the
     // pointer at, is passed over for one that can draw ahead; with none, the older code draws afresh each tick.
     let older = null
-    for (const root of first ? [first, ...(at === undefined ? [] : await more())] : await more()) {
+    const list = first ? [first] : await more()
+    for (let i = 0; i < list.length; i++) {
+      const root = list[i]
       let lcw
       try { lcw = await import(pathToFileURL(`${root}/scripts/statusline.mjs`).href) } catch (e) {
         log(`LCW's code in ${root} could not be loaded (${String(e?.message ?? e).split('\n')[0]}). Update or reinstall LCW.`)
         if (older) break
         return lastRows(text) ?? BROKEN
       }
-      if (typeof lcw.ahead !== 'function') { older ??= root; continue }
+      if (typeof lcw.ahead !== 'function') {
+        if (!older && first && at !== undefined) list.push(...await more())
+        older ??= root
+        continue
+      }
       if (at === undefined) { await lcw.main({ margin: 4, input: text }); return '' }
       if (older) log(`LCW's code in ${older} is older than this status line; drawing from ${root}. Run LCW setup again.`)
       try { return await lcw.ahead(text, { at, margin: 4 }) } catch (e) {

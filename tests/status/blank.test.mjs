@@ -56,6 +56,11 @@ function plugin(dir, code = `export async function ahead() { return 'drawn by ${
   fs.writeFileSync(`${dir}/scripts/statusline.mjs`, code)
   return dir
 }
+/** A stand-in for a plugin folder holding code from before frames ahead: one fresh draw from the input on stdin. */
+const older = (dir) => plugin(dir, `import fs from 'node:fs'
+export async function main() { process.stdout.write('fresh from ' + JSON.parse(fs.readFileSync(0, 'utf8')).session_id + ' by ${dir.split('/').pop()}\\n') }
+`)
+
 const env = (s, more = {}) => ({ PATH: process.env.PATH, HOME: `${s.t}/h`, LCW_HOME: s.home, CLAUDE_CONFIG_DIR: s.config, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW), ...more })
 /** One run of the launcher, as the player starts it; it must end well and print something. */
 function launch(s, input = INPUT, args = [`${S}+0000`]) {
@@ -80,6 +85,14 @@ test('the launcher draws from the folder the pointer names', () => {
   assert.deepEqual(logLines(s), [])
 })
 
+test('a draw from a good pointer looks for no other copy of LCW', () => {
+  const s = scratch()
+  fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`))
+  fs.writeFileSync(`${s.home}/bin/installed.mjs`, `import fs from 'node:fs'\nfs.writeFileSync(process.env.LCW_HOME + '/looked', '')\nexport const installedFolder = () => null\n`)
+  assert.equal(launch(s), 'drawn by a\n')
+  assert.ok(!fs.existsSync(`${s.home}/looked`))
+})
+
 test('when the pointer\'s folder is gone, the launcher draws from the folder LCW was set up from, then from the installed plugin', () => {
   const s = scratch(`${tmp('gone')}/lcw`)
   fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
@@ -94,11 +107,6 @@ test('when the pointer\'s folder is gone, the launcher draws from the folder LCW
   fs.rmSync(`${s.t}/setup`, { recursive: true })
   assert.equal(launch(s), 'drawn by installed\n')
 })
-
-/** A stand-in for a plugin folder holding code from before frames ahead: one fresh draw from the input on stdin. */
-const older = (dir) => plugin(dir, `import fs from 'node:fs'
-export async function main() { process.stdout.write('fresh from ' + JSON.parse(fs.readFileSync(0, 'utf8')).session_id + ' by ${dir.split('/').pop()}\\n') }
-`)
 
 test('a pointer at a folder whose code cannot draw ahead is passed over for the folder LCW was set up from', () => {
   const s = scratch(older(`${tmp('old')}/lcw`))
