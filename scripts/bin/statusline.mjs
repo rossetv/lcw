@@ -13,6 +13,8 @@ const LOG_BYTES = 64 * 1024
 const BROKEN = 'LCW · status line could not load · see ~/.lcw/statusline.log\n'
 
 const read = (file) => { try { return fs.readFileSync(file, 'utf8') } catch { return null } }
+/** Which file is at a path, and how it stands: its inode, size and time; null when there is none. */
+const stampOf = (file) => { try { const st = fs.statSync(file, { bigint: true }); return `${st.ino}:${st.size}:${st.mtimeNs}` } catch { return null } }
 const holds = (dir) => !!dir && path.isAbsolute(dir) && fs.existsSync(path.join(dir, 'scripts', 'statusline.mjs'))
 
 // A fault already among the last lines is not written again, so faults of a few sessions that take turns add nothing.
@@ -70,14 +72,14 @@ function lastRows(text) {
  * as newer than the key and still hold the text the frames were drawn from: a record written in the second of a draw,
  * before the draw read it, cannot be told from a later write by a shell that compares whole seconds. The key's time
  * is then moved on to `keyTime`, so the player plays the next frames itself. Null when a check fails; the records
- * read go into `records`, as [path, text].
+ * read go into `records`, as [path, text, its stamp from just before the read].
  */
 function kept(text, at, keyTime, records) {
   const told = /^([1-9]\d*)([+-]\d{4})$/.exec(at)
   const id = sessionOf(text)
   if (!told || !id || Buffer.byteLength(text) > 32768) return null
   const dir = `${home}/frames/${id}`
-  const record = (file) => { const t = read(file); records.push([file, t]); return t }
+  const record = (file) => { const stamp = stampOf(file), t = read(file); records.push([file, t, stamp]); return t }
   let fd = null
   try {
     fd = fs.openSync(`${dir}/key`, 'r')

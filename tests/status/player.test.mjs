@@ -2,7 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { tmp, lcw, makeRepo } from '../core/helpers.mjs'
 
 const ROOT = new URL('../..', import.meta.url).pathname.replace(/\/$/, '')
@@ -71,6 +71,18 @@ function settle(s, input, second = S - 1, home = s.home) {
   back(home)
   fs.rmSync(`${s.t}/node.log`, { force: true })
 }
+/** The strip the session's key names, or null with no key: a new one after a tick says that tick drew. */
+const stripOf = (s) => { try { return fs.readFileSync(`${s.home}/frames/s1/key`, 'utf8').split('\n')[2] } catch { return null } }
+/** One tick that must start Node and draw: a new strip, and the rows printed are its frame for that second. */
+function drawn(s, input, second, opts) {
+  const was = stripOf(s), n = starts(s)
+  const out = tick(s, input, second, opts)
+  assert.equal(starts(s), n + 1, 'Node started')
+  const now = stripOf(s)
+  assert.ok(now && now !== was, 'a new strip was drawn')
+  assert.equal(out, fs.readFileSync(`${s.home}/frames/s1/${now}/${second}`, 'utf8'))
+  return out
+}
 const runDir = (s) => JSON.parse(fs.readFileSync(`${s.home}/sessions/s1.json`, 'utf8')).runDir
 const plain = (t) => t.replace(/\x1b\[[0-9;]*m/g, '')
 
@@ -78,8 +90,10 @@ describe('when Node starts', { concurrency: true }, () => {
   test('an idle minute starts Node four times', () => {
     const s = scratch()
     settle(s, inputOf(s))
-    for (let x = S; x < S + 60; x++) tick(s, inputOf(s), x)
+    const strips = new Set()
+    for (let x = S; x < S + 60; x++) { tick(s, inputOf(s), x); strips.add(stripOf(s)) }
     assert.equal(starts(s), 4)
+    assert.equal(strips.size, 4, 'each start drew, as the frames ran out')
   })
 
   test('the heartbeat, the session\'s age and a subscription\'s cost and cache figures start no Node', () => {
@@ -100,8 +114,7 @@ describe('when Node starts', { concurrency: true }, () => {
     settle(s, payg(2))
     tick(s, payg(2), S); tick(s, payg(2), S + 1)
     assert.equal(starts(s), 1)
-    assert.notEqual(plain(tick(s, payg(9), S + 2)), '')
-    assert.equal(starts(s), 2)
+    drawn(s, payg(9), S + 2)
   })
 
   test('the clock jumping forward or back draws afresh', () => {
@@ -109,9 +122,8 @@ describe('when Node starts', { concurrency: true }, () => {
     settle(s, inputOf(s))
     tick(s, inputOf(s), S); tick(s, inputOf(s), S + 1)
     assert.equal(starts(s), 1)
-    tick(s, inputOf(s), S + 3600)
-    tick(s, inputOf(s), S + 3600 - 30)
-    assert.equal(starts(s), 3)
+    drawn(s, inputOf(s), S + 3600)
+    drawn(s, inputOf(s), S + 3600 - 30)
   })
 
   // Each change is made after one draw and one playback; the next tick must start Node.
@@ -119,6 +131,7 @@ describe('when Node starts', { concurrency: true }, () => {
     'a prompt is sent': (s) => { fs.mkdirSync(`${s.home}/activity`, { recursive: true }); fs.writeFileSync(`${s.home}/activity/s1.json`, JSON.stringify({ state: 'working', at: NOW })) },
     'the session\'s mark is set': (s) => lcw(['mark', '50'], { home: s.home, cwd: s.repo, session: 's1' }),
     'another session reports a newer weekly figure': (s) => fs.writeFileSync(`${s.home}/usage.json`, JSON.stringify({ at: NOW, sevenDay: { percentUsed: 40, resetsAt: new Date((S + 3 * 86400) * 1000).toISOString() }, source: 'statusline' })),
+    'another session\'s weekly figure is removed': (s) => fs.rmSync(`${s.home}/usage.json`),
     'an outside quota is set up': (s) => fs.writeFileSync(`${s.home}/quota-command.json`, JSON.stringify({ v: 1, enabled: true })),
     'the session starts a run': (s) => lcw(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }),
     'the model changes': () => ({ model: { display_name: 'Sonnet 5' } }),
@@ -140,9 +153,11 @@ describe('when Node starts', { concurrency: true }, () => {
       settle(s, inputOf(s))
       tick(s, inputOf(s), S); tick(s, inputOf(s), S + 1)
       assert.equal(starts(s), 1)
+      const was = stripOf(s)
       const { env, zone, after = '', ...input } = change(s) ?? {}
       tick(s, JSON.stringify(inputOf(s, input.model || input.context_window || input.rate_limits || input.effort ? input : {})) + after, S + 2, { env, zone })
       assert.equal(starts(s), 2)
+      assert.ok(stripOf(s) && stripOf(s) !== was, 'a new strip was drawn')
     })
   }
 
@@ -160,10 +175,37 @@ describe('when Node starts', { concurrency: true }, () => {
       tick(s, inputOf(s), S); tick(s, inputOf(s), S + 1)
       assert.equal(starts(s), 1)
       change(s)
-      tick(s, inputOf(s), S + 2)
-      assert.equal(starts(s), 2)
+      drawn(s, inputOf(s), S + 2)
     })
   }
+
+  test('the session\'s Claude Code ending shows at the next tick', async () => {
+    const s = scratch()
+    const claude = spawn('sleep', ['60'], { stdio: 'ignore' })
+    try {
+      fs.mkdirSync(`${s.home}/sessions`, { recursive: true })
+      fs.writeFileSync(`${s.home}/sessions/s1.json`, JSON.stringify({ claudePid: claude.pid }))
+      settle(s, inputOf(s))
+      tick(s, inputOf(s), S); tick(s, inputOf(s), S + 1)
+      assert.equal(starts(s), 1)
+    } finally {
+      claude.kill()
+      await new Promise((done) => (claude.exitCode !== null || claude.signalCode !== null ? done() : claude.on('exit', done)))
+    }
+    drawn(s, inputOf(s), S + 2)
+  })
+
+  test('the run\'s worktree going shows at the next tick', () => {
+    const s = scratch()
+    assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }).code, 0)
+    const tree = tmp('tree'), state = `${runDir(s)}/state.json`
+    fs.writeFileSync(state, JSON.stringify({ ...JSON.parse(fs.readFileSync(state, 'utf8')), worktree: tree, branch: 'lcw/demo' }))
+    settle(s, inputOf(s))
+    tick(s, inputOf(s), S); tick(s, inputOf(s), S + 1)
+    assert.equal(starts(s), 1)
+    fs.rmSync(tree, { recursive: true })
+    drawn(s, inputOf(s), S + 2)
+  })
 
   test('a heartbeat where there was none takes the card away at the next tick', () => {
     const s = scratch()
@@ -171,8 +213,7 @@ describe('when Node starts', { concurrency: true }, () => {
     settle(s, inputOf(s))
     assert.match(plain(tick(s, inputOf(s), S)), /LCW Build/)
     fs.writeFileSync(`${runDir(s)}/mod-alive`, String(S * 1000 + 1437))
-    assert.doesNotMatch(plain(tick(s, inputOf(s), S + 1)), /LCW Build/)
-    assert.equal(starts(s), 2)
+    assert.doesNotMatch(plain(drawn(s, inputOf(s), S + 1)), /LCW Build/)
   })
 
   test('the card comes back at the first tick past 15 seconds after the last heartbeat, by the millisecond', () => {
@@ -183,10 +224,8 @@ describe('when Node starts', { concurrency: true }, () => {
     settle(s, inputOf(s))
     for (let x = S; x <= S + 3; x++) assert.doesNotMatch(plain(tick(s, inputOf(s), x)), /LCW Build/)
     assert.equal(starts(s), 1)
-    assert.doesNotMatch(plain(tick(s, inputOf(s), S + 4, { env: { LCW_NOW: String((S + 4) * 1000 + 500) } })), /LCW Build/)
-    assert.equal(starts(s), 2)
-    assert.match(plain(tick(s, inputOf(s), S + 4, { env: { LCW_NOW: String((S + 4) * 1000 + 600) } })), /LCW Build/)
-    assert.equal(starts(s), 3)
+    assert.doesNotMatch(plain(drawn(s, inputOf(s), S + 4, { env: { LCW_NOW: String((S + 4) * 1000 + 500) } })), /LCW Build/)
+    assert.match(plain(drawn(s, inputOf(s), S + 4, { env: { LCW_NOW: String((S + 4) * 1000 + 600) } })), /LCW Build/)
     assert.match(plain(tick(s, inputOf(s), S + 5)), /LCW Build/)
     assert.equal(starts(s), 3, 'past the second where it turned, the frame is played')
   })
@@ -201,8 +240,7 @@ describe('when Node starts', { concurrency: true }, () => {
     tick(s, inputOf(s), S); tick(s, inputOf(s), S + 1)
     assert.equal(starts(s), 1)
     fs.appendFileSync(`${s.t}/s1.jsonl`, '{}\n')
-    tick(s, inputOf(s), S + 2)
-    assert.equal(starts(s), 2)
+    drawn(s, inputOf(s), S + 2)
   })
 
   test('a new spend record of another session starts Node on pay-per-token billing', () => {
@@ -213,16 +251,19 @@ describe('when Node starts', { concurrency: true }, () => {
     assert.equal(starts(s), 1)
     fs.writeFileSync(`${s.home}/sessions/other.json`, JSON.stringify({ billing: 'payg' }))
     fs.writeFileSync(`${s.home}/spend/other.json`, JSON.stringify({ v: 1, base: 0, max: 50, q: { [Math.floor(NOW / 900_000)]: 50 } }))
-    tick(s, payg, S + 2)
-    assert.equal(starts(s), 2)
+    drawn(s, payg, S + 2)
   })
 })
 
 describe('a record that reads as newer than the frames but holds the text they were drawn from', { concurrency: true }, () => {
-  /** A session with a run, drawn at S, and the run's state written again with the same text since the key's time. */
-  function rewritten() {
+  /**
+   * A session with a run, drawn at S, and the run's state written again with the same text since the key's time;
+   * `more` adds that many bytes of text to the state.
+   */
+  function rewritten(more = 0) {
     const s = scratch()
     assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }).code, 0)
+    if (more) fs.writeFileSync(`${runDir(s)}/state.json`, JSON.stringify({ ...JSON.parse(fs.readFileSync(`${runDir(s)}/state.json`, 'utf8')), notes: 'n'.repeat(more) }))
     settle(s, inputOf(s))
     tick(s, inputOf(s), S)
     const dir = `${s.home}/frames/s1`, tag = fs.readFileSync(`${dir}/key`, 'utf8').split('\n')[2]
@@ -245,6 +286,31 @@ describe('a record that reads as newer than the frames but holds the text they w
     tick(s, inputOf(s), S + 2)
     assert.equal(starts(s), 2, 'the next tick plays')
   })
+
+  test('a state larger than 16 KB is kept out of what the frames were drawn from, and draws', () => {
+    const r = rewritten(20_000), { s, dir, tag } = r
+    assert.ok(fs.statSync(`${dir}/${tag}/seen`).size < 4096)
+    tick(s, inputOf(s), S + 1)
+    assert.notEqual(fs.readFileSync(`${dir}/key`, 'utf8').split('\n')[2], tag)
+  })
+
+  const damaged = {
+    missing: null, empty: '', 'cut short': (t) => t.slice(0, Math.floor(t.length / 2)), 'not JSON': 'not json',
+    'of a wrong shape': (t, state) => JSON.stringify({ [state]: { text: JSON.parse(t)[state] } }), null: 'null',
+  }
+  for (const [how, damage] of Object.entries(damaged)) {
+    test(`with what the frames were drawn from ${how}, it draws`, () => {
+      const r = rewritten(), { s, dir, tag, state } = r
+      const file = `${dir}/${tag}/seen`
+      if (damage === null) fs.rmSync(file)
+      else fs.writeFileSync(file, typeof damage === 'function' ? damage(fs.readFileSync(file, 'utf8'), state) : damage)
+      const printed = tick(s, inputOf(s), S + 1)
+      const now = fs.readFileSync(`${dir}/key`, 'utf8').split('\n')[2]
+      assert.notEqual(now, tag)
+      assert.equal(printed, fs.readFileSync(`${dir}/${now}/${S + 1}`, 'utf8'))
+      assert.equal(printed, fs.readFileSync(`${dir}/${tag}/${S + 1}`, 'utf8'), 'the same rows, as nothing they show has changed')
+    })
+  }
 
   test('a change written right after that start shows at the next tick', () => {
     const { s, state } = rewritten()

@@ -315,7 +315,8 @@ export async function main({ margin = 5, input } = {}) {
 // Frames ahead: one draw saves the rows for this second and the 15 after it, which scripts/bin/statusline.sh
 // prints with no Node while nothing the rows show has changed. What it saves, in <LCW home>/frames/<session id>/:
 //   <strip>/<second>  the rows for that second, one file each, in a folder of this draw's own
-//   <strip>/seen      the text of each watched file as the draw read it, for the launcher's check (scripts/bin/statusline.mjs)
+//   <strip>/seen      the text of each watched file of up to 16 KB as the draw read it, for the launcher's check
+//                     (scripts/bin/statusline.mjs); a larger one left out is drawn again whenever it reads as newer
 //   last              the rows this draw printed, for when a later draw fails
 //   key               what the player compares, written last and removed first, so it only ever names a whole strip;
 //                     its time is the second before the draw read anything, and the launcher's check moves it on:
@@ -332,6 +333,7 @@ const SESSION = /^[A-Za-z0-9_-]{1,128}$/
 // A real input is about 2 KB; the player stops reading one past this, and the time its check takes grows with the
 // square of the input's size.
 const INPUT_BYTES = 32 * 1024
+const SEEN_BYTES = 16 * 1024
 // The fields of the input that change while the rows stay the same: how long the session has run, its token
 // and prompt-cache counts, the lines it changed (the rows count them with git), the five-hour limit, and on a
 // subscription its cost. Everything else is compared. The first ones always hold a plain number, and an input where
@@ -428,8 +430,8 @@ export function keyText(text, { head, watched, strict = [], lenient = [] }) {
 }
 
 /**
- * The key for this draw and the text of each watched file that every read and write of this draw gave alike, or null
- * when no frame can be saved safely for this input.
+ * The key for this draw and the text of each watched file of up to SEEN_BYTES that every read and write of this draw
+ * gave alike, or null when no frame can be saved safely for this input.
  */
 function keyOf(text, f, inp, { zone, tag, paid }) {
   const { COLUMNS = '', LCW_THEME = '' } = process.env
@@ -439,7 +441,8 @@ function keyOf(text, f, inp, { zone, tag, paid }) {
   if (!watched || (beat && !beat.startsWith('/'))) return null
   const strict = f.billing === 'subscription' ? [...IGNORED, 'total_cost_usd'] : IGNORED
   const key = keyText(text, { head: [`${COLUMNS || '0'} ${LCW_THEME || 'dark'} ${zone}`, beat, tag], watched, strict, lenient: ALSO_IGNORED })
-  return key && { key, seen: Object.fromEntries(heldFiles().filter(([file, there, t]) => there && typeof t === 'string' && watched.includes(file)).map(([file, , t]) => [file, t])) }
+  const kept = heldFiles().filter(([file, there, t]) => there && typeof t === 'string' && Buffer.byteLength(t) <= SEEN_BYTES && watched.includes(file))
+  return key && { key, seen: Object.fromEntries(kept.map(([file, , t]) => [file, t])) }
 }
 
 /**
@@ -490,10 +493,15 @@ function save(dir, { tag, frames, out, key, seen, keyTime }) {
   }
 }
 
+/** Which file is at a path, and how it stands: its inode, size and time; null when there is none. */
+const stampOf = (file) => { try { const st = fs.statSync(file, { bigint: true }); return `${st.ino}:${st.size}:${st.mtimeNs}` } catch { return null } }
+
 /**
  * Draws the rows for the second `at` names (date's %s%z, as the player read it) and for the 15 after it, saves
  * them for the player, and returns the rows for that second. Throws when the rows cannot be drawn. A caller that has
- * read some records already gives their [path, text] pairs as `read`, and as `keyTime` the key's time it took before.
+ * read some records already gives them as `read`, [path, text, stamp] with the stamp (stampOf) from just before the
+ * read, and as `keyTime` the key's time it took before. A record written since is read again, so that a record this
+ * draw writes is never worked out from a text older than the time this code took to load.
  */
 export async function ahead(text, { at, margin = 4, read = [], keyTime = null } = {}) {
   // A record written from the second before this read on reads as newer than the key, whatever the shell compares.
@@ -505,7 +513,7 @@ export async function ahead(text, { at, margin = 4, read = [], keyTime = null } 
   const id = sessionKey(text, inp)
   const dir = id && `${home()}/frames/${id}`
   if (dir) try { fs.rmSync(`${dir}/key`, { force: true }) } catch {}
-  holdReads(true, read)
+  holdReads(true, (Array.isArray(read) ? read : []).filter((r) => Array.isArray(r) && typeof r[0] === 'string' && r[2] !== undefined && stampOf(r[0]) === r[2]).map(([file, text]) => [file, text]))
   try {
     const now = clock()
     const told = /^(\d+)([+-]\d{4})$/.exec(String(at ?? ''))

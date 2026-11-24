@@ -131,6 +131,16 @@ describe('one status line run', { concurrency: true }, () => {
     assert.deepEqual(Object.entries(reads).filter(([p, n]) => (p.startsWith(home) || p.startsWith(repo)) && n > 1), [])
   })
 
+  test('a record the launcher handed on is read again when it has changed since the launcher read it', () => {
+    const { repo, home, dir } = withRun()
+    const state = `${dir}/state.json`
+    const code = `const { ahead } = await import(${JSON.stringify(LINE)}); process.stdout.write(await ahead(process.env.INPUT, { at: '${NOW / 1000}+0000', read: JSON.parse(process.env.READ) }))`
+    const READ = JSON.stringify([[state, JSON.stringify({ ...readJson(state), name: 'stale' }), 'a stamp of another file']])
+    const r = spawnSync('node', ['--input-type=module', '-e', code], { encoding: 'utf8', env: { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW), INPUT: JSON.stringify(inputFor(repo)), READ } })
+    assert.equal(r.status, 0, r.stderr)
+    assert.match(r.stdout.replace(/\x1b\[[0-9;]*m/g, ''), /LCW Build · demo/)
+  })
+
   test('with nothing new it leaves the home as it was, byte for byte and time for time', () => {
     const { repo, home } = withRun()
     line(home, inputFor(repo))
