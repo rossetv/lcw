@@ -403,7 +403,8 @@ test('with LCW\'s code broken and no rows saved, the status line prints exactly 
   assert.equal(r.stdout, BROKEN)
 
   fs.rmSync(home + '/bin/statusline.sh')
-  const noNode = tick(home, read(settings).statusLine.command, { PATH: '/usr/bin:/bin' })
+  // a PATH of one empty folder: no Node on it, and the rest of the command is the shell's own
+  const noNode = spawnSync('/bin/sh', ['-c', read(settings).statusLine.command], { input: INPUT, encoding: 'utf8', env: { LCW_HOME: home, HOME: tmp('h'), PATH: tmp('empty') } })
   assert.equal(noNode.status, 0, 'without the player and without Node')
   assert.equal(noNode.stdout, BROKEN)
 })
