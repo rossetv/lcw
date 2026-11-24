@@ -1,6 +1,6 @@
 // While a session is at its usage mark, tells Claude to stop: once on each prompt, and again after every tool call
 // for as long as it keeps going. It only adds a line for Claude to read. It never blocks a prompt or a tool, and
-// whatever goes wrong it exits 0.
+// whatever goes wrong it exits 0. On a prompt it also records that the session is working, for the mascot.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,10 +17,16 @@ try {
     const { noteQuotaSession, readSessionQuota } = await import('./lib/quota-session.mjs')
     const { readMoney } = await import('./lib/money.mjs')
     const { home, readJson, writeJson } = await import('./lib/store.mjs')
-    const { sessionFile } = await import('../lib/key.mjs')
+    const { sessionFile, activityFile } = await import('../lib/key.mjs')
     const now = Number(process.env.LCW_NOW) || Date.now()
     const lcwCall = event === 'PostToolUse' && lcwOnly(input.tool_input?.command) // winding down, or lifting the mark
     const ids = sessionIds(input)
+    if (event === 'UserPromptSubmit' && ids[0]) { // the activity hook's record for a prompt, so a prompt starts one process
+      try {
+        const { next } = await import('../lib/activity.mjs')
+        writeJson(activityFile(home(), ids[0]), next(input, null, Date.now())) // a prompt's record does not depend on the last one
+      } catch {}
+    }
     noteQuotaSession(ids)
     let run = null
     for (const id of ids.length ? ids : [undefined]) {
