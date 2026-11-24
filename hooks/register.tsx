@@ -81,6 +81,8 @@ const S = {
   quotaRefresh: { revision: '', at: -Infinity, busy: false },
   proxyNotice: { host: '', file: '' },
   gateCheck: { key: '', at: -Infinity, busy: false },
+  // The outside quota's reading for which the mod last asked for the run's gate to be written.
+  quotaSynced: '' as string | null,
   // Whether the Claude Code owning a canonical session row was running, by row and owner, and until when that holds.
   owners: new Map<string, { until: number; open: boolean }>(),
   startedAt: 0,
@@ -572,6 +574,17 @@ async function refresh($: EngineInterface) {
   }
   if (run.gate?.unit === 'usd' && !run.quota && wakeable(run.state) && run.money?.atMark && wakeDue(run.gate, now, null, quotaBilling(run.session, null))) {
     await reconcileGate($, run, 'retry')
+    return
+  }
+  // An outside quota that comes to hold the run is written as its gate at once, as a week's figure is at a measure:
+  // tried once for each reading, a gate already holding for it left alone, and none for a run the person paused.
+  const q = run.quota
+  const s = run.state
+  const reading = q && JSON.stringify([run.runDir, q.revision, q.requestId, q.status, q.code])
+  if (q?.hold && reading !== S.quotaSynced && (run.gate?.unit !== 'quota' || run.gate.recoveredBy)
+    && !['finished', 'stopped'].includes(s.status) && !(s.status === 'paused' && s.pausedReason === 'human')) {
+    S.quotaSynced = reading
+    await reconcileGate($, run, 'sync')
     return
   }
   await recoverQuota($, run, now)

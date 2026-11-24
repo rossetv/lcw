@@ -45,7 +45,8 @@ function filesFor(row: any) {
 
 // A file system in memory whose times move with every change, as a real one's do.
 // beneath stands for the hooks of the session's list, under the mod.
-function engine(on: any, initial: Record<string, string>, opts: { beneath?: (e: any) => object } = {}) {
+// process answers a command the mod runs, as the script would.
+function engine(on: any, initial: Record<string, string>, opts: { beneath?: (e: any) => object; process?: (argv: string[]) => void } = {}) {
   const now = (instant += STEP)
   const clock = mock.clock(on, { now })
   const times: Record<string, number> = {}
@@ -74,7 +75,10 @@ function engine(on: any, initial: Record<string, string>, opts: { beneath?: (e: 
     if (e.path in files) return { value: { kind: 'file', size: files[e.path]!.length, mtimeMs: times[e.path], isLink: false } }
     throw new Error('ENOENT')
   })
-  on('process.run', (_: any, e: any) => { w.runs.push([...e.argv]); return { value: { exitCode: 1, stdout: '', stderr: '' } } })
+  on('process.run', (_: any, e: any) => { w.runs.push([...e.argv]); opts.process?.(e.argv); return { value: { exitCode: 1, stdout: '', stderr: '' } } })
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('agent.list', () => ({ value: [] }))
+  on('config.list', () => ({ value: [] }))
   on('classic.PostToolUse', (_: any, e: any) => opts.beneath?.(e) ?? {})
   on('classic.PostToolUseFailure', (_: any, e: any) => opts.beneath?.(e) ?? {})
   return w
@@ -173,4 +177,49 @@ test('a hook beneath that fails after a tool call, a good one or a failed one, l
   engine(on, filesFor(atMark), { beneath: () => { throw new Error('beneath') } })
   expect(await call($, 'tool')).toEqual({})
   expect(await fail($, 'toolu_1')).toEqual({})
+})
+
+// The note that the run is held at its mark, its gate, is no longer written at the tool call: the mod writes it itself
+// when an outside quota's reading comes to hold the run.
+const held = { name: 'an outside quota under the mark, then over it', sessions: { p1: { billing: 'subscription' } }, quota: { p1: 'under' }, run: 'p1' }
+const syncs = (runs: string[][]) => runs.filter((a) => a[1]?.endsWith('/scripts/gate-reconcile.mjs') && JSON.parse(a[2] ?? '{}').action === 'sync')
+const over = (files: Record<string, string>, requestId = 'q2') => {
+  const quota = JSON.parse(files['/lcw/quota-command.json']!)
+  quota.cache = { ...quota.cache, requestId, result: { ...quota.cache.result, weekly: { ...quota.cache.result.weekly, percentUsed: 80 } } }
+  files['/lcw/quota-command.json'] = JSON.stringify(quota)
+}
+
+test('an outside quota that comes to hold the run has its gate written within a second, once', async ($, on) => {
+  const w = engine(on, filesFor(held), { process: (argv) => { if (argv[1]?.endsWith('/scripts/gate-reconcile.mjs')) w.files[RUN + '/gate'] = JSON.stringify({ reason: 'mark', unit: 'quota', requestId: 'q2' }) } })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: false })
+  await w.clock.advance(3000)
+  expect(syncs(w.runs)).toEqual([])
+  over(w.files)
+  await w.clock.advance(1000)
+  expect(syncs(w.runs).length).toBe(1)
+  // A later reading that still holds finds the gate there.
+  await w.clock.advance(5000)
+  over(w.files, 'q3')
+  await w.clock.advance(5000)
+  expect(syncs(w.runs).length).toBe(1)
+})
+
+test('an outside quota that comes to hold a run the person paused writes no gate', async ($, on) => {
+  const files = filesFor(held)
+  files[RUN + '/state.json'] = JSON.stringify({ ...JSON.parse(files[RUN + '/state.json']!), status: 'paused', pausedReason: 'human' })
+  const w = engine(on, files)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: false })
+  await w.clock.advance(3000)
+  over(w.files)
+  await w.clock.advance(10000)
+  expect(syncs(w.runs)).toEqual([])
+})
+
+test('a gate that could not be written for an outside quota is not tried again for the same reading', async ($, on) => {
+  const w = engine(on, filesFor(held))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: false })
+  await w.clock.advance(3000)
+  over(w.files)
+  await w.clock.advance(20000)
+  expect(syncs(w.runs).length).toBe(1)
 })
