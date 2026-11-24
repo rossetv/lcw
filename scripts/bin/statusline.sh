@@ -12,6 +12,9 @@ LC_ALL=C
 lcw_nl='
 '
 lcw_h=${LCW_HOME:-$HOME/.lcw}
+# The launcher is in the folder the status line command names in lcw_bin, else in the LCW home; frames, records and
+# the log are always in the LCW home.
+lcw_launcher=${lcw_bin:-$lcw_h/bin}/statusline.mjs
 lcw_in= lcw_l=
 IFS= read -r lcw_in
 while IFS= read -r lcw_l || [ -n "$lcw_l" ]; do lcw_in=$lcw_in$lcw_nl$lcw_l; lcw_l=; done
@@ -82,9 +85,9 @@ lcw_play() {
 lcw_play && exit 0
 
 # Node draws, under the locale the shell had, for the second read above.
-if [ -r "$lcw_h/bin/statusline.mjs" ]; then
+if [ -r "$lcw_launcher" ]; then
   lcw_out=$(if [ -n "$lcw_lcset" ]; then LC_ALL=$lcw_lc; else unset LC_ALL; fi
-    printf '%s' "$lcw_in" | node "$lcw_h/bin/statusline.mjs" ${lcw_now:+"$lcw_now"} 2>/dev/null; printf ' %s' "$?")
+    printf '%s' "$lcw_in" | node "$lcw_launcher" ${lcw_now:+"$lcw_now"} 2>/dev/null; printf ' %s' "$?")
   lcw_r=${lcw_out##* }; lcw_out=${lcw_out% *}
   if [ "$lcw_r" = 0 ] && [ -n "$lcw_out" ]; then printf '%s' "$lcw_out"; exit 0; fi
   case $lcw_r in
@@ -92,7 +95,7 @@ if [ -r "$lcw_h/bin/statusline.mjs" ]; then
     *) lcw_m="the status line's Node run ended with status $lcw_r and printed nothing" ;;
   esac
 else
-  lcw_m="$lcw_h/bin/statusline.mjs is missing: run LCW setup again"
+  lcw_m="$lcw_launcher is missing: run LCW setup again"
 fi
 
 # Nothing drawn: one line in the log, unless the last line says the same, then the session's last rows.

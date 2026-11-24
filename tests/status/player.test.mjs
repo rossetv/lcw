@@ -14,9 +14,9 @@ const SHELLS = ['sh', 'bash', 'zsh', 'dash'].filter((s) => spawnSync(s, ['-c', '
  * A scratch home with the launcher and the player installed, a session in a repository, and on the PATH a fake
  * `date` (prints LCW_FAKE_DATE) and a `node` that notes each start, with the locale it was given, in node.log.
  */
-function scratch() {
+function scratch(name = 'lcw') {
   const t = tmp('player')
-  const home = `${t}/lcw`
+  const home = `${t}/${name}`
   fs.mkdirSync(`${home}/bin`, { recursive: true }); fs.mkdirSync(`${t}/h`); fs.mkdirSync(`${t}/fake`)
   for (const f of ['statusline.mjs', 'installed.mjs', 'statusline.sh']) fs.copyFileSync(`${ROOT}/scripts/bin/${f}`, `${home}/bin/${f}`)
   fs.writeFileSync(`${home}/plugin-root`, ROOT + '\n')
@@ -35,9 +35,15 @@ const inputOf = (s, extra = {}) => ({
   rate_limits: { seven_day: { used_percentage: 31, resets_at: S + 3 * 86400 } }, ...extra,
 })
 
-/** One tick of the status line command at the second given, in the session's shell; returns what it printed. */
-function tick(s, input, second, { env = {}, zone = '+0000', shell = s.shell } = {}) {
-  const r = spawnSync(shell, ['-c', `. '${s.home}/bin/statusline.sh'`], {
+const quoted = (p) => `'${p.replaceAll("'", "'\\''")}'`
+/**
+ * One tick of the status line command at the second given, in the session's shell; returns what it printed. With
+ * `bin`, the command names the folder of the player and the launcher, as setup writes it.
+ */
+function tick(s, input, second, { env = {}, zone = '+0000', shell = s.shell, bin } = {}) {
+  const command = bin === undefined ? `. ${quoted(`${s.home}/bin/statusline.sh`)}`
+    : bin === '' ? `lcw_bin=; . ${quoted(`${s.home}/bin/statusline.sh`)}` : `lcw_bin=${quoted(bin)}; . "$lcw_bin/statusline.sh"`
+  const r = spawnSync(shell, ['-c', command], {
     input: typeof input === 'string' ? input : JSON.stringify(input), encoding: 'utf8',
     env: { PATH: `${s.t}/fake:${process.env.PATH}`, HOME: `${s.t}/h`, LCW_HOME: s.home, COLUMNS: '120', TZ: 'UTC', LCW_FAKE_DATE: `${second}${zone}`, LCW_NOW: String(second * 1000), ...env },
   })
@@ -47,12 +53,12 @@ function tick(s, input, second, { env = {}, zone = '+0000', shell = s.shell } = 
 }
 
 /** One fresh draw, saving no frames, then every record set back, so that what that draw wrote does not read as a change. */
-function settle(s, input, second = S - 1) {
-  const r = spawnSync(process.execPath, [`${s.home}/bin/statusline.mjs`], { input: typeof input === 'string' ? input : JSON.stringify(input), env: { PATH: process.env.PATH, HOME: `${s.t}/h`, LCW_HOME: s.home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(second * 1000) } })
+function settle(s, input, second = S - 1, home = s.home) {
+  const r = spawnSync(process.execPath, [`${s.home}/bin/statusline.mjs`], { input: typeof input === 'string' ? input : JSON.stringify(input), env: { PATH: process.env.PATH, HOME: `${s.t}/h`, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(second * 1000) } })
   assert.equal(r.status, 0)
   const old = (Date.now() - 100_000) / 1000
   const back = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { if (e.isDirectory()) back(`${d}/${e.name}`); fs.utimesSync(`${d}/${e.name}`, old, old) } }
-  back(s.home)
+  back(home)
   fs.rmSync(`${s.t}/node.log`, { force: true })
 }
 const runDir = (s) => JSON.parse(fs.readFileSync(`${s.home}/sessions/s1.json`, 'utf8')).runDir
@@ -293,5 +299,50 @@ describe('what is played', { concurrency: true }, () => {
     settle(s, input)
     tick(s, input, S); tick(s, input, S + 1)
     assert.equal(starts(s), 2)
+  })
+})
+
+describe('a session whose LCW home is not the one LCW was set up in', { concurrency: true }, () => {
+  /** Home A holds the player and the launcher; the session's own LCW home, B, starts empty. */
+  function other(name) {
+    const s = scratch(name)
+    const b = `${s.t}/b`
+    fs.mkdirSync(b)
+    return { s, b, opts: { bin: `${s.home}/bin`, env: { LCW_HOME: b } } }
+  }
+
+  test('draws its rows and keeps its frames in its own home, and plays them in every shell alike', () => {
+    const outs = []
+    for (const shell of SHELLS) {
+      const { s, b, opts } = other()
+      s.shell = shell
+      // a folder of the same name in each shell's scratch, so that the rows are the same
+      fs.mkdirSync(`${s.t}/proj`)
+      const input = inputOf(s, { cwd: `${s.t}/proj` })
+      settle(s, input, S - 1, b)
+      const first = tick(s, input, S, opts)
+      assert.equal(plain(first).split('\n').filter(Boolean).length, 2, shell)
+      assert.ok(fs.existsSync(`${b}/frames/s1/key`) && !fs.existsSync(`${s.home}/frames`), shell)
+      const played = tick(s, input, S + 1, opts)
+      assert.equal(starts(s), 1, `${shell} played a frame from the session's home`)
+      outs.push(played)
+    }
+    assert.equal(new Set(outs).size, 1)
+  })
+
+  test('finds its launcher through a folder whose name holds a space and a quote', () => {
+    const { s, b, opts } = other("it's a home")
+    settle(s, inputOf(s), S - 1, b)
+    assert.match(plain(tick(s, inputOf(s), S, opts)), /Opus 5/)
+    assert.ok(fs.existsSync(`${b}/frames/s1/key`))
+  })
+
+  test('with lcw_bin empty, the launcher is the one in the LCW home', () => {
+    const s = scratch()
+    settle(s, inputOf(s))
+    assert.match(plain(tick(s, inputOf(s), S, { bin: '' })), /Opus 5/)
+    fs.rmSync(`${s.home}/bin/statusline.mjs`)
+    tick(s, inputOf(s), S + 100, { bin: '' })
+    assert.ok(fs.readFileSync(`${s.home}/statusline.log`, 'utf8').includes(`${s.home}/bin/statusline.mjs is missing`))
   })
 })
