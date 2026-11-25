@@ -87,6 +87,8 @@ const S = {
   owners: new Map<string, { until: number; open: boolean }>(),
   // This Claude Code's pid, as its command hooks get it in CLAUDE_PID: 0 when the engine gives none, null until asked.
   claudePid: null as number | null,
+  pidCall: null as Promise<void> | null,
+  pidRetryAt: 0,
   startedAt: 0,
   reopenChecked: false,
   // The id of the run a Resume press on the unfinished-run box takes over: no reopened session's, so no reopen prompt.
@@ -300,13 +302,26 @@ async function lcwHome($: EngineInterface) {
   return S.home
 }
 
+// How long a tick waits for the engine to give the environment of the command hooks.
+const PID_WAIT_MS = 500
+
 // The engine's own CLAUDE_PID is inherited from whatever launched it; the command hooks' is this Claude Code's.
+// Never throws and never waits past PID_WAIT_MS: where the engine has no such call (the call throws), or it fails or does not answer,
+// there is no pid (0). One call is pending at a time, and a failed one is asked again no sooner than a second later.
 async function claudePid($: EngineInterface) {
-  if (S.claudePid === null) {
-    const env = await $.process.hookEnv().catch(() => null)
-    const pid = Number(env?.CLAUDE_PID)
-    if (env) S.claudePid = Number.isInteger(pid) && pid > 1 ? pid : 0
+  if (S.claudePid === null && !S.pidCall && await $.clock.now() >= S.pidRetryAt) {
+    const call = (async () => {
+      const env = await $.process.hookEnv()
+      const pid = Number(env?.CLAUDE_PID)
+      if (!env) throw new Error('no environment')
+      S.claudePid = Number.isInteger(pid) && pid > 1 ? pid : 0
+    })()
+    S.pidCall = call
+    call.catch(async () => { S.pidRetryAt = (await $.clock.now()) + 1000 }).finally(() => { if (S.pidCall === call) S.pidCall = null })
   }
+  try {
+    if (S.claudePid === null && S.pidCall) await Promise.race([S.pidCall, $.clock.sleep(PID_WAIT_MS)])
+  } catch {}
   return S.claudePid ?? 0
 }
 

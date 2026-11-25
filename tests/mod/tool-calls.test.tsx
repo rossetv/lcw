@@ -43,18 +43,18 @@ function filesFor(row: any) {
 // A file system in memory whose times move with every change, as a real one's do.
 // process answers a command the mod runs, as the script would; id and transcript are the session's, which a /clear changes.
 // ps finds the processes in running. pid is the CLAUDE_PID the engine gives as the command hooks', inherited the one in its own environment.
-function engine(on: any, initial: Record<string, string>, opts: { process?: (argv: string[]) => void | Promise<void>; transcript?: string; running?: number[]; pid?: number; inherited?: number } = {}) {
+function engine(on: any, initial: Record<string, string>, opts: { process?: (argv: string[]) => void | Promise<void>; transcript?: string; running?: number[]; pid?: number; inherited?: number; hookEnv?: () => Promise<Record<string, string>> } = {}) {
   const now = (instant += STEP)
   const clock = mock.clock(on, { now })
   const times: Record<string, number> = {}
   const files = new Proxy({} as Record<string, string>, { set: (all, path: string, text) => { all[path] = text; times[path] = now - 1000 + ++writes / 1000; return true } })
   Object.assign(files, initial)
-  const w = { now, clock, files, written: [] as string[], runs: [] as string[][], id: 'p1' }
+  const w = { now, clock, files, written: [] as string[], runs: [] as string[][], id: 'p1', hookEnvCalls: 0 }
   const kids = (dir: string) => Object.keys(files).filter((p) => p.startsWith(dir + '/'))
   on('session.id', () => ({ value: w.id }))
   on('session.info', () => ({ value: { transcriptPath: opts.transcript ?? '', platform: 'linux' } }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : e.name === 'CLAUDE_PID' && opts.inherited ? String(opts.inherited) : undefined }))
-  on('process.hookEnv', () => ({ value: opts.pid ? { CLAUDE_PID: String(opts.pid) } : {} }))
+  on('process.hookEnv', async () => { w.hookEnvCalls++; return { value: opts.hookEnv ? await opts.hookEnv() : opts.pid ? { CLAUDE_PID: String(opts.pid) } : {} } })
   on('fs.read', (_: any, e: any) => {
     if (e.path in files) return { value: files[e.path] }
     throw new Error('ENOENT')
@@ -130,6 +130,41 @@ for (const { hooks, inherited, lent } of [{ hooks: 400, inherited: 300, lent: fa
     expect(JSON.parse(w.files['/lcw/sessions/a1.json']!).billing).toBe(lent ? 'subscription' : 'unclear')
   })
 }
+
+const LENT = {
+  '/lcw/sessions/p1.json': JSON.stringify({ sessionCanonicalId: 'a1', billing: 'unclear' }),
+  '/lcw/sessions/a1.json': JSON.stringify({ sessionCanonicalId: 'a1', claudePid: 300, billing: 'unclear' }),
+}
+const settle = ($: any) => $.session.measure({ context: { window: 200000 }, changed: ['rateLimits'], rateLimits: [{ kind: 'seven_day', percentUsed: 50, resetsAt: '2026-06-12T12:00:00Z' }], cost: { usd: 10 } } as any)
+
+test('a hooks environment that never answers does not hold back the marker or the end of the session, and is not asked on every tick', async ($, on) => {
+  const w = engine(on, { ...filesFor(atMark), ...LENT }, { hookEnv: () => new Promise(() => {}) })
+  await $.session.start(START)
+  await w.clock.advance(2000)
+  expect(up(w)).toBe(true)
+  const ended = $.session.end({ reason: 'clear', sessionId: 'p1' } as any)
+  await w.clock.advance(2000)
+  await ended
+  expect(w.files[MARKER]).toBe('')
+  await w.clock.advance(10000)
+  expect(w.hookEnvCalls).toBe(1)
+})
+
+test('the pid a hooks environment gives after a failure or a timeout is then used', async ($, on) => {
+  let asks = 0
+  let late: (env: Record<string, string>) => void = () => {}
+  const w = engine(on, { ...LENT }, {
+    running: [300],
+    hookEnv: () => (++asks === 1 ? Promise.reject(new Error('no')) : asks === 2 ? new Promise((r) => { late = r }) : Promise.resolve({})),
+  })
+  await $.session.start(START)
+  await w.clock.advance(5000)
+  expect(asks).toBe(2)
+  late({ CLAUDE_PID: '300' })
+  await w.clock.advance(2000)
+  await settle($)
+  expect(JSON.parse(w.files['/lcw/sessions/a1.json']!).billing).toBe('subscription')
+})
 
 test('the marker names the session, its transcript and when it was raised', async ($, on) => {
   const w = engine(on, filesFor(atMark), { transcript: '/t/t1.jsonl' })
