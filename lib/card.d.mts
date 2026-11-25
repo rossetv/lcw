@@ -46,7 +46,7 @@ export interface SweepView {
 export interface View {
   /** 'sweep' only when state.shape says so; a run with no shape is a build. */
   name: string; shape: 'build' | 'sweep'; stage: string;
-  /** How long the run has been at its stage; while a sweep has a wave open, how long the sweep has run, and once finished, how long it took. */
+  /** How long the run has run, a build or a sweep at whatever stage; once finished, how long it took. */
   titleRight: string;
   mode: 'running' | 'with-you' | 'paused' | 'finished' | 'stopped';
   /** The colour of the frame: 'needsYou' with open asks, 'caution' paused, 'ok' finished, else 'hairline'. */

@@ -169,7 +169,7 @@ test('a box shows above a short card where both fit; where they do not, the card
   await start($)
   const fits = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 16 } })
   expect(await fits.find({ type: 'Text', text: /export-csv paused at your 75% mark\./ })).toBeDefined()
-  expect(await fits.find({ type: 'Text', text: /in Build/ })).toBeDefined()
+  expect(await fits.find({ type: 'Text', text: /^LCW Build · $/ })).toBeDefined()
   await fits.unmount()
   const tight = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 13 } })
   expect(await tight.find({ type: 'Text', text: /export-csv paused at your 75% mark\./ })).toBeUndefined()

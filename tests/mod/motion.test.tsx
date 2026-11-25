@@ -99,10 +99,10 @@ test('a change on a paused card is drawn within a second', async ($, on) => {
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const band = await $.ui.mount(BAND)
   await w.advance(3050)
-  expect(await band.find({ type: 'Text', text: /in Review/ })).toBeUndefined()
+  expect(await band.find({ type: 'Text', text: /^Review$/ })).toBeUndefined()
   w.files[RUN + '/state.json'] = state({ ...PAUSED, stage: 'Review' })
   await w.advance(1000)
-  expect(await band.find({ type: 'Text', text: /in Review/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /^Review$/ })).toBeDefined()
   await band.unmount()
 })
 

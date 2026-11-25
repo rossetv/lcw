@@ -10,21 +10,21 @@ import { inputsOf, fixtures, NOW } from './boards.mjs';
 // and the bottom border, each the text inside the frame. The last but one is drawn 40 cells wide, with no frame.
 const SWEEP = {
   "01-charter-with-you": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ───────────────────────────────────────────────────────────────────────── 6m in Charter ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 6m ─╮",
     "★ with you · asking you: how should the pull requests come, and may I merge them?                  ≈ 12% of your week",
     "› Charter  ○ Hunt  ○ Plan  ○ Build  ○ Review  ○ Ship",
     "Charter · agreeing the rules of the sweep with you; the one step that needs you",
     "charter  …  ✓ anti-goals  ✓ no-go zones  ✓ changes  ✓ proof  ✓ park  ✓ stop  ✓ waves  › PRs           1 question open",
   ],
   "03-hunt-round-1-probes-at-work": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 9m in Hunt ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 9m ─╮",
     "● running · hunting, area by area                                                                  ≈ 12% of your week",
     "waves none queued yet                                                                                         round 1",
     "✓ Charter  › Hunt  ○ Plan  ○ Build  ○ Review  ○ Ship",
     "areas ▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱  14 hunted · 6 running · 16 left                                    23 findings so far",
   ],
   "04-hunt-sorted-the-queue-is-filled": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────── 31m in Hunt ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 31m ─╮",
     "● running · sorted against the charter                                                             ≈ 12% of your week",
     "waves ▱▱▱▱▱▱  6 queued                                                               round 1 · 14 parked · 21 dropped",
     "✓ Charter  › Hunt  ○ Plan  ○ Build  ○ Review  ○ Ship",
@@ -67,14 +67,14 @@ const SWEEP = {
     "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▰  ▰▰▰▰▰▰    final checks next                                                     2m",
   ],
   "11-ship-when-your-charter-lets-claude-merge": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 6m in Ship ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 6m ─╮",
     "● running · wave 2’s PR #42 merged: it met your charter’s rule                                     ≈ 12% of your week",
     "waves ▰▰▱▱▱▱  2 done · 4 queued                                           round 1 · 54 fixed · 14 parked · 22 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  › Ship",
     "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰  27 done · 1 dropped",
   ],
   "12-hunt-round-2-the-queue-ran-dry": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 5m in Hunt ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 5m ─╮",
     "● running · hunting again, round 2                                                                 ≈ 29% of your week",
     "waves ▰▰▰▰▰▰  6 done                                                     round 2 · 148 fixed · 14 parked · 22 dropped",
     "✓ Charter  › Hunt  ○ Plan  ○ Build  ○ Review  ○ Ship",
@@ -146,7 +146,7 @@ const SWEEP = {
     "3 rounds · 7 waves · 212 agents · 48.3M tokens · ≈ 31% of your week",
   ],
   "21-stopped": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ────────────────────────────────────────────────────────────────────────── 12m in Build ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 12m ─╮",
     "■ stopped",
     "waves ▰▰▰▱▱▱  3 done · 3 queued                                           round 1 · 81 fixed · 14 parked · 22 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  › Build  ○ Review  ○ Ship",
@@ -158,7 +158,7 @@ const SWEEP = {
     "wave 2  ▰▰▰ ▰▰▱ ▱▱▱ ▱▱▱  Build",
   ],
   "23-a-build-for-comparison": [
-    "╭─ ◆ LCW Build · shared-lists ─────────────────────────────────────────────────────────────────────────── 18m in Build ─╮",
+    "╭─ ◆ LCW Build · shared-lists ──────────────────────────────────────────────────────────────────────────────────── 18m ─╮",
     "● running · on track                                                                                ≈ 5% of your week",
     "✓ Brainstorm  ✓ Spec  ✓ Plan  › Build  ○ Review  ○ Ship",
     "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱  7 done · 4 running · 6 left",
@@ -273,7 +273,7 @@ const cols = s => [...s].length;
 
 test('the frame has the title in the top border and a rule between sections', () => {
   const lines = strip(toAnsi(card('RunningA', { width: 100, frame: true }), 'dark', 100)).split('\n');
-  assert.match(lines[0], /^╭─ ◆ LCW Build · export-csv ─+ 2h 14m in Build ─╮$/);
+  assert.match(lines[0], /^╭─ ◆ LCW Build · export-csv ─+ 2h 14m ─╮$/);
   assert.equal(lines.filter(l => l.startsWith('├')).length, 2);
   assert.match(lines.at(-1), /^╰─+╯$/);
   assert.ok(lines.every(l => cols(l) === 100));
@@ -305,7 +305,7 @@ test('the right group sits against the right edge at 126 and 80 columns', () => 
     assert.ok(status[1].endsWith('resets in 3d · -15% short'));
     const plain = renderCard(buildView(inputsOf('Stalled')), { width });
     const text = strip(toAnsi(plain, 'dark', width)).split('\n');
-    assert.ok(text[0].endsWith('≈ 12% of your week') || text[0].endsWith('3h 02m in Build'));
+    assert.ok(text[0].endsWith('≈ 12% of your week') || text[0].endsWith('3h 02m'));
   }
 });
 

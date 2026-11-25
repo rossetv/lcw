@@ -50,7 +50,7 @@ test('a bound session draws the card in its frame', async ($, on) => {
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const band = await $.ui.mount(BAND)
   expect(await band.find({ type: 'Text', text: /LCW/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /in Build/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /^LCW Build · $/ })).toBeDefined()
   await band.unmount()
 })
 
