@@ -214,6 +214,21 @@ test('wave add queues a wave for each number, and a repeat while they wait is re
   ])
 })
 
+test('a fix found while a wave is queued joins it: the refusal says so, and once the wave has started the rest are queued and its own fix that waits joins them', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1')
+  const refused = t.cli('wave', 'add', '2')
+  assert.equal(refused.code, 1)
+  assert.match(refused.out + refused.err, /Wave 1 is already queued.*joins wave 1 in findings\.md.*lcw wave start.*lcw wave add queues the rest/s)
+  t.start()
+  for (const id of ['F2', 'F3']) t.cli('req', 'add', id, `fix ${id}`)
+  assert.equal(t.cli('wave', 'add', '4').code, 0)
+  assert.equal(t.cli('wave', 'defer', '1', '--wave', '1').code, 0)
+  const out = t.cli('status').out
+  assert.match(out, /^ {2}1 \[running\] 2 fixes /m)
+  assert.match(out, /^ {2}2 \[queued\] 5 fixes /m)
+})
+
 test('wave add queues more waves while waves are open, as long as none is queued', () => {
   const t = hunting()
   t.cli('wave', 'add', '1')

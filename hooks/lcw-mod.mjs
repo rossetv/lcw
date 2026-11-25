@@ -423,14 +423,15 @@ export function reopenDue(state, gate, aliveAt, now) {
 }
 
 /**
- * The wave of a sweep an agent works for, read from its brief, or null. A brief names its wave's worktree
- * (<name>-wave-<n>), gives its lcw commands --wave <n>, or points at the wave's records (waves/<n>/, wave<n>/); failing
- * those, the description or the brief's opening words may say "wave <n>". name is the sweep's.
+ * The wave of a sweep an agent works for, read from its brief, or null. A brief gives its lcw commands --wave <n>, names
+ * its wave's worktree (<name>-wave-<n>), or points at the wave's records (waves/<n>/, wave<n>/); failing those, the
+ * description or the brief's opening words may say "wave <n>". The flag comes first: a brief also names another wave's
+ * worktree in passing, such as a folder of tools kept there. name is the sweep's.
  */
 export function waveOfBrief(prompt, description, name) {
   const brief = String(prompt ?? '')
   const tree = name ? new RegExp(String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-wave-(\\d+)') : null
-  const found = (tree && tree.exec(brief)) ?? /--wave[ =](\d+)/.exec(brief) ?? /\/waves\/(\d+)\//.exec(brief) ?? /\/wave-?(\d+)\//.exec(brief)
+  const found = /--wave[ =](\d+)/.exec(brief) ?? (tree && tree.exec(brief)) ?? /\/waves\/(\d+)\//.exec(brief) ?? /\/wave-?(\d+)\//.exec(brief)
     ?? /\bwave (\d+)\b/i.exec(String(description ?? '')) ?? /\bwave (\d+)\b/i.exec(brief.slice(0, 160))
   return found ? Number(found[1]) : null
 }

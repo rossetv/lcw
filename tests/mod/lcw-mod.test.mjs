@@ -666,9 +666,10 @@ test('a row with wide characters is laid out to the width in terminal cells', as
   assert.match(left[1].t, /…$/)
 })
 
-test('an agent\'s wave is read from its brief: the wave\'s worktree first, then a --wave flag, the wave\'s records, the description, the opening words', () => {
-  const tree = 'Work only in /repo/.claude/worktrees/tidy-wave-13. An earlier fix: lcw task T1 done --wave 12.'
-  assert.equal(waveOfBrief(tree, 'Build the importer', 'tidy'), 13)
+test('an agent\'s wave is read from its brief: a --wave flag first, then the wave\'s worktree, the wave\'s records, the description, the opening words', () => {
+  assert.equal(waveOfBrief('Work only in /repo/.claude/worktrees/tidy-wave-13.', 'Build the importer', 'tidy'), 13)
+  const tools = 'Tests: /repo/.claude/worktrees/tidy-wave-6/.venv/bin/python -m pytest. When done: lcw task X7 done --wave 12.'
+  assert.equal(waveOfBrief(tools, 'Fix the cards', 'tidy'), 12, 'another wave\'s folder named in passing is not the agent\'s wave')
   assert.equal(waveOfBrief('Mark it: lcw task X1 done --wave 7', 'Fix it', 'tidy'), 7)
   assert.equal(waveOfBrief('Read and follow /home/runs/r/waves/9/review-brief.md', 'Review R2', 'tidy'), 9)
   assert.equal(waveOfBrief('Read /home/runs/r/artifacts/wave12/common.md first', 'Fix it', 'tidy'), 12)

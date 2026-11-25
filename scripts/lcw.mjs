@@ -1006,7 +1006,7 @@ const commands = {
       const sizes = words.map((x) => wholeNumber(x, 'A wave'))
       if (sizes.includes(0)) fail('A wave holds at least one fix. Nothing was changed.')
       const queued = w.waves.filter((x) => x.status === 'queued')
-      if (queued.length) fail(`Waves ${queued.map((x) => x.n).join(', ')} are already queued; a new round's waves are added once none is. Nothing was changed.`)
+      if (queued.length) fail(`${queued.length > 1 ? `Waves ${queued.map((x) => x.n).join(', ')} are` : `Wave ${queued[0].n} is`} already queued, and waves are added once none is. A fix found since whose files are free joins wave ${queued[0].n} in findings.md, so that it can start (lcw wave start); once it has started, lcw wave add queues the rest. Nothing was changed.`)
       const first = w.waves.length + 1
       change(run, `waves queued: ${sizes.map((f, i) => `${first + i} (${f} fixes)`).join(', ')}`, (st) => {
         sizes.forEach((fixes, i) => st.sweep.waves.push({ n: first + i, fixes, status: 'queued', branch: null, pr: null, merged: false, dropped: 0 }))
