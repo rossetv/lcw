@@ -1,7 +1,7 @@
 import type { Row } from '../hooks/lcw-mod.mjs'
 
 export type BannerKind =
-  | 'answer' | 'approve' | 'mark' | 'spendfail' | 'unfinished' | 'awake' | 'restart' | 'update' | 'whatsnew' | 'guide' | 'cleanup' | 'statusline'
+  | 'answer' | 'approve' | 'mark' | 'spendfail' | 'unfinished' | 'awake' | 'restart' | 'update' | 'whatsnew' | 'guide' | 'cleanup' | 'statusline' | 'limits'
   | 'advisor' | 'cap' | 'spend' | 'question' | 'proxyquota'
 
 /** One box: its kind, the occurrence key (a dismissal is "kind:key"), the title, plain lines, bullets, and [id, label] options. */
@@ -70,6 +70,8 @@ export interface BannerFacts {
   } | null
   statusLine?: { command?: string; mine?: boolean } | null
   cleanup?: { at: Time; title: string; bullets?: string[]; items?: unknown } | null
+  /** The agent limits the session runs with, and the settings' own env, where a raise for later sessions shows. */
+  limits?: { concurrent?: number; depth?: number; env?: Record<string, unknown> | null } | null
   /** When the person last sent a prompt in this session: one sent after the approval asked ends that box. */
   repliedAt?: number
   /** 'failed' after Answer now could not fill the prompt. */
@@ -93,3 +95,6 @@ export function isOpenWave(state: any, wave: any): boolean
 export function openWaves(state: any): OpenWave[]
 /** The tasks and requirements a run stands on: the open waves' added up in a sweep, else the run's own. */
 export function workOf(state: any): { tasks: any[]; requirements: any[] }
+
+export const AGENT_LIMITS: { concurrent: { env: string; want: number }; depth: { env: string; want: number } }
+export function limitsShort(limits: BannerFacts['limits']): ('concurrent' | 'depth')[] | null

@@ -673,6 +673,44 @@ test("LCW's player command is LCW's own: no box", async ($, on) => {
   await band.unmount()
 })
 
+const fewAgents = (on: any, limits = { concurrent: 20, depth: 3 }) => on('agent.limits', () => ({ value: { ...limits, isBackgroundEnabled: true } }))
+
+test('a session that runs too few agents is asked to raise the limits; Raise them runs setup, says what it did, and the box goes', async ($, on) => {
+  const limits = (a: string[]) => a.at(-1) === 'limits' && a[1]?.endsWith('/scripts/setup.mjs')
+  const w = engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }) }, {
+    answer: (a) => (limits(a) ? { exitCode: 0, stdout: 'Claude Code now runs up to 80 agents at once.\n' } : undefined),
+  })
+  fewAgents(on)
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /Claude Code runs only 20 agents at once here\./ })).toBeDefined()
+  await band.press({ key: 'banner:limits:raise' })
+  expect(w.runs.filter(limits).length).toBe(1)
+  expect(w.toasts.join('|')).toMatch(/now runs up to 80 agents at once/)
+  await w.clock.advance(5200)
+  expect(await band.find({ type: 'Text', text: /agents at once here/ })).toBeUndefined()
+  await band.unmount()
+})
+
+test('limits already raised in the settings, or enough as they are, ask nothing', async ($, on) => {
+  const settings = { env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '80', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '5' } }
+  engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }) }, { settings })
+  fewAgents(on)
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /agents at once here|nest only/ })).toBeUndefined()
+  await band.unmount()
+})
+
+test('a session with room for its agents shows no box', async ($, on) => {
+  engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }) })
+  fewAgents(on, { concurrent: 80, depth: 5 })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /agents at once here|nest only/ })).toBeUndefined()
+  await band.unmount()
+})
+
 test("another status line still shows the box after the notice setup writes when it moves LCW's command, and Keep mine keeps it away", async ($, on) => {
   const settings = { statusLine: { type: 'command', command: 'starship statusline' } }
   const w = engine(on, { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription' }), '/lcw/notices.json': JSON.stringify({ statusline: 'moved' }) }, { settings })

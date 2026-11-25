@@ -21,6 +21,28 @@ test('proxy setup asks rather than assuming billing, before dollar setup and wit
 })
 
 const kindOf = (facts) => bannerFor(facts)?.kind ?? null
+
+test('the agent limits box shows while the session runs with too few agents and the settings do not already raise them', () => {
+  const low = { advisorModel: 'fable', billing: 'subscription', mac: true, limits: { concurrent: 20, depth: 3, env: null } }
+  const b = bannerFor(low)
+  assert.deepEqual([b.kind, b.key, b.title], ['limits', '20:3', 'Claude Code runs only 20 agents at once here.'])
+  assert.match(b.lines[0], /^LCW works with up to 80 at once, nested 5 deep: .* Raise the limits\? It changes your Claude Code settings on this Mac, and holds for sessions opened from now on\.$/)
+  assert.deepEqual(b.options, [['raise', 'Raise them'], ['later', 'Not now'], ['never', 'Do not ask again']])
+
+  const deepOnly = bannerFor({ ...low, mac: false, limits: { concurrent: 80, depth: 3, env: null } })
+  assert.deepEqual([deepOnly.title, deepOnly.options[0]], ['Agents can nest only 3 deep here.', ['raise', 'Raise it']])
+  assert.match(deepOnly.lines[0], /Raise the limit\? .* on this computer,/)
+
+  const raised = { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '80', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '5' }
+  assert.equal(kindOf({ ...low, limits: { ...low.limits, env: raised } }), null, 'raised in the settings already: it holds from the next session')
+  assert.equal(bannerFor({ ...low, limits: { ...low.limits, env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '80' } } }).title, 'Agents can nest only 3 deep here.')
+  assert.equal(kindOf({ ...low, limits: { concurrent: 80, depth: 5 } }), null)
+  assert.equal(kindOf({ ...low, limits: null }), null)
+  assert.equal(kindOf({ ...low, limits: {} }), null, 'limits that could not be read ask nothing')
+  assert.equal(kindOf({ ...low, notices: { limits: 'never' } }), null)
+  assert.equal(kindOf({ ...low, dismissed: new Set(['limits:20:3']) }), null)
+  assert.deepEqual(chain({ ...low, statusLine: { command: 'ccstatusline', mine: false } }), ['statusline', 'limits'])
+})
 const textOf = (b) => [b.title, ...b.bullets, ...b.lines, ...b.options.map((o) => o[1])].join('\n')
 const ids = (b) => b.options.map((o) => o[0])
 const cells = (row) => [...row.map((s) => s.t).join('')].length

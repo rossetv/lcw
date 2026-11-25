@@ -84,6 +84,51 @@ test('uninstall removes the agent depth only when install set it', () => {
   assert.ok(!/removed env\.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH/.test(u.out), u.out)
 })
 
+test('install lets 80 agents run at once, keeps a figure the person set, and uninstall removes only its own', () => {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ theme: 'dark' }))
+  const i = setup(home, settings, 'install')
+  assert.match(i.out, /set env\.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS to "80"/)
+  assert.equal(read(settings).env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS, '80')
+  assert.match(setup(home, settings, 'status').out, /env\.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: 80/)
+  setup(home, settings, 'uninstall')
+  assert.deepEqual(read(settings), { theme: 'dark' })
+
+  for (const theirs of ['40', '80']) {
+    fs.writeFileSync(settings, JSON.stringify({ env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: theirs } }))
+    setup(tmp('home'), settings, 'install')
+    assert.equal(read(settings).env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS, theirs)
+    const fresh = tmp('home')
+    setup(fresh, settings, 'install')
+    const u = setup(fresh, settings, 'uninstall')
+    assert.equal(read(settings).env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS, theirs, 'the person set it themselves')
+    assert.ok(!/removed env\.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS/.test(u.out), u.out)
+  }
+})
+
+test('limits raises every agent limit under what a run needs, a figure the person set included, and uninstall puts theirs back', () => {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  fs.writeFileSync(settings, JSON.stringify({ theme: 'dark', env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '40', KEEP: '1' } }))
+  const r = setup(home, settings, 'limits')
+  assert.equal(r.code, 0, r.err)
+  assert.match(r.out, /^Claude Code now runs up to 80 agents at once, nested 5 deep, in sessions opened from now on\. Open this one again to use it\.\n$/)
+  assert.deepEqual(read(settings).env, { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '80', KEEP: '1', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '5' })
+  assert.match(setup(home, settings, 'limits').out, /already runs up to 80/)
+  const u = setup(home, settings, 'uninstall')
+  assert.match(u.out, /put env\.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS back to "40"/)
+  assert.deepEqual(read(settings), { theme: 'dark', env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '40', KEEP: '1' } })
+})
+
+test('limits leaves a limit that is already enough, however it was set', () => {
+  const home = tmp('home'), settings = tmp('s') + '/settings.json'
+  const theirs = { env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '120', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '6' } }
+  fs.writeFileSync(settings, JSON.stringify(theirs))
+  assert.match(setup(home, settings, 'limits').out, /already runs/)
+  assert.deepEqual(read(settings), theirs)
+  setup(home, settings, 'uninstall')
+  assert.deepEqual(read(settings).env, theirs.env)
+})
+
 test('uninstall leaves an attribution the person changed after install, and keeps the keys they added', () => {
   const home = tmp('home'), settings = tmp('s') + '/settings.json'
   fs.writeFileSync(settings, JSON.stringify({ model: 'opus' }))

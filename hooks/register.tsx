@@ -5,7 +5,7 @@ import type { LcwCompletion } from '../types'
 import {
   activityFile, capFile, cleanupFile, noticesFile, proxyQuotaNoticeFile, quotaFile, runPaths, runsDir, sessionFile, spendCommandFile, spendDir, spendFile, spendReadingFile, updateFile, usageFile,
 } from '../lib/key.mjs'
-import { answerKey, bannerFor, bannerRows } from '../lib/banner.mjs'
+import { answerKey, bannerFor, bannerRows, limitsShort } from '../lib/banner.mjs'
 import type { Banner, BannerFacts } from '../lib/banner.mjs'
 import { moneyFrom, readingOf, spendFileCounts } from '../lib/spend.mjs'
 import { buildView, renderCard } from '../lib/card.mjs'
@@ -127,6 +127,8 @@ const S = {
   mark: { since: 0, below: 0 },
   autoDone: false,
   pressing: false,
+  // The agent limits this session runs with: undefined until read, null when they could not be.
+  limits: undefined as { concurrent: number; depth: number } | null | undefined,
   setupDraft: null as { changed: boolean } | null,
   // The box last drawn ('kind:key', '' for none), and until when the band is drawn without buttons since it changed.
   drawnBox: '',
@@ -363,6 +365,15 @@ async function readQuota($: EngineInterface, session: any, mark: number, now: nu
     }
   }
   return evaluateQuota(session?.quotaSelection, state, now, mark)
+}
+
+// The agent limits this session runs with, for the box that offers to raise them: read once, since they hold for the
+// session. Null when they are enough, so a session with room reads no setting for it.
+async function limitsFact($: EngineInterface): Promise<BannerFacts['limits']> {
+  if (S.limits === undefined) S.limits = await $.agent.limits().then((l) => ({ concurrent: l.concurrent, depth: l.depth })).catch(() => null)
+  if (!S.limits || !limitsShort(S.limits)) return null
+  const env = await $.settings.read({ key: 'env', source: 'user' }).catch(() => undefined)
+  return { ...S.limits, env: env && typeof env === 'object' ? env as Record<string, unknown> : null }
 }
 
 // The name a session's spend is kept under: its transcript's, which a resumed session keeps and the status line
@@ -733,6 +744,7 @@ async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
     update: S.version ? { running: S.version, available: update?.available ?? null, updated: update?.updated ?? null, devCheckout: S.devCheckout } : null,
     statusLine: statusLineFact(statusLine, home),
     cleanup: cleanup?.at && cleanup?.title ? cleanup : null,
+    limits: await limitsFact($),
     answerFill: asked && S.banner.answerFill === asked ? 'failed' : undefined,
     repliedAt: S.repliedAt,
   }

@@ -136,6 +136,15 @@ test('Clean Up gives the removal two minutes, and Keep the default cap keeps the
   assert.ok(keep.toast.includes(dollars(DEFAULT_CAP_USD)))
 })
 
+test('Raise it runs setup for the limits and says what it printed, and Do not ask again is kept for the machine', () => {
+  const facts = { now: NOW, advisorModel: 'fable', billing: 'subscription', limits: { concurrent: 20, depth: 3, env: null } }
+  const raise = press(facts, 'raise')
+  assert.deepEqual(raise.steps.map((s) => s.argv.slice(1)), [['/plug/scripts/setup.mjs', 'limits']])
+  assert.deepEqual([raise.toast, raise.dismiss], ['output', true])
+  assert.deepEqual(press(facts, 'never'), { notices: { limits: 'never' }, dismiss: true })
+  assert.deepEqual(press(facts, 'later'), { dismiss: true })
+})
+
 test('Update now gives the update its 180 seconds', () => {
   const plan = press({ now: NOW, update: { running: '0.1.0', available: { version: '0.2.0', from: '0.1.0' } } }, 'now')
   assert.equal(plan.steps[0].timeoutMs, 180000)

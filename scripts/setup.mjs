@@ -1,10 +1,10 @@
-// Setup: node setup.mjs install [--advisor]|advisor|statusline|auto|uninstall|status [--settings <path>]
+// Setup: node setup.mjs install [--advisor]|advisor|statusline|limits|auto|uninstall|status [--settings <path>]
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { home, readJson, writeAtomic, writeJson } from './lib/store.mjs'
 import { noticesFile } from '../lib/key.mjs'
-import { STATUSLINE_MOVED, isLcwStatusLine, keepsOwnStatusLine, statusLineCommands } from '../lib/banner.mjs'
+import { AGENT_LIMITS, STATUSLINE_MOVED, isLcwStatusLine, keepsOwnStatusLine, statusLineCommands } from '../lib/banner.mjs'
 import { STATUS_FILES, copyStatusFiles, isCurrentInstall } from './lib/status-files.mjs'
 
 const [cmd, ...rest] = process.argv.slice(2)
@@ -17,6 +17,9 @@ const prevFile = `${lcw}/previous-statusline.json`
 const addedDirFile = `${lcw}/added-directory`
 const advisorFile = `${lcw}/set-advisor`
 const depthFile = `${lcw}/set-depth`
+const agentsFile = `${lcw}/set-agents`
+// Each agent limit a run needs, with the record LCW keeps of having set it: the value, and under it the one it replaced.
+const LIMITS = [{ ...AGENT_LIMITS.depth, file: depthFile }, { ...AGENT_LIMITS.concurrent, file: agentsFile }]
 const attributionFile = `${lcw}/previous-attribution.json`
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 let quiet = false // auto prints only its own lines
@@ -135,14 +138,21 @@ function setAttributionOff(s) {
   return true
 }
 
-/** The depth of nested agents a run needs and the LCW folder as a place to write; each only when not already set. Returns whether it changed. */
+/** Sets one agent limit to what a run needs and records it, with the value it replaced, for uninstall to put back. */
+function setLimit(s, { env, want, file }) {
+  const was = s.env[env]
+  s.env[env] = String(want)
+  writeAtomic(file, `${want}\n${was === undefined ? '' : `was ${was}\n`}`)
+  out(`set env.${env} to "${want}"`)
+}
+
+/** The depth of nested agents a run needs, how many agents it may run at once, and the LCW folder as a place to write; each only when not already set. Returns whether it changed. */
 function setRunSettings(s) {
   let changed = false
   s.env = s.env && typeof s.env === 'object' ? s.env : {}
-  if (s.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === undefined) {
-    s.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH = '5'
-    writeAtomic(depthFile, '5\n')
-    out('set env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH to "5"')
+  for (const limit of LIMITS) {
+    if (s.env[limit.env] !== undefined) continue
+    setLimit(s, limit)
     changed = true
   }
   const perms = s.permissions && typeof s.permissions === 'object' ? s.permissions : (s.permissions = {})
@@ -175,6 +185,15 @@ if (cmd === 'install') {
   const s = load()
   setStatusLine(s)
   save(s)
+} else if (cmd === 'limits') {
+  // The box's Raise it: every limit under what a run needs is raised, a figure the person set themselves included.
+  const s = load()
+  s.env = s.env && typeof s.env === 'object' ? s.env : {}
+  quiet = true
+  let raised = 0
+  for (const limit of LIMITS) if (!(Number(s.env[limit.env]) >= limit.want)) { setLimit(s, limit); raised++ }
+  if (raised) save(s)
+  console.log(`Claude Code ${raised ? 'now runs' : 'already runs'} up to ${AGENT_LIMITS.concurrent.want} agents at once, nested ${AGENT_LIMITS.depth.want} deep, in sessions opened from now on. Open this one again to use it.`)
 } else if (cmd === 'auto') {
   // Runs on an interactive session's first draw: prints a line for each thing it turned on, and nothing otherwise.
   quiet = true
@@ -212,14 +231,23 @@ if (cmd === 'install') {
     else { delete s.statusLine; out('removed statusLine') }
   }
   done.push(prevFile) // a saved line the person has since replaced is not kept for a later install
-  if (s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === '5' && fs.existsSync(depthFile)) {
-    delete s.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH
-    if (!Object.keys(s.env).length) delete s.env
-    out('removed env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH')
-  } else if (s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH === '5') {
-    out('left env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH at "5": LCW has no record of setting it; remove it yourself if LCW did')
+  for (const { env, want, file } of LIMITS) {
+    if (s.env?.[env] === String(want) && fs.existsSync(file)) {
+      // the figure it replaced comes back; with none, the setting goes
+      const was = /^was (.+)$/m.exec(fs.readFileSync(file, 'utf8'))?.[1]
+      if (was === undefined) {
+        delete s.env[env]
+        if (!Object.keys(s.env).length) delete s.env
+        out(`removed env.${env}`)
+      } else {
+        s.env[env] = was
+        out(`put env.${env} back to "${was}"`)
+      }
+    } else if (s.env?.[env] === String(want)) {
+      out(`left env.${env} at "${want}": LCW has no record of setting it; remove it yourself if LCW did`)
+    }
+    done.push(file)
   }
-  done.push(depthFile)
   if (fs.existsSync(addedDirFile) && Array.isArray(s.permissions?.additionalDirectories)) {
     s.permissions.additionalDirectories = s.permissions.additionalDirectories.filter((x) => x !== lcw)
     if (!s.permissions.additionalDirectories.length) delete s.permissions.additionalDirectories
@@ -255,8 +283,9 @@ if (cmd === 'install') {
   out(`previous statusLine saved: ${fs.existsSync(prevFile) ? 'yes' : 'no'}`)
   out(`permissions.additionalDirectories has ${lcw}: ${s.permissions?.additionalDirectories?.includes(lcw) ? 'yes' : 'no'}`)
   out(`env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: ${s.env?.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH ?? 'unset'}`)
+  out(`env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: ${s.env?.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS ?? 'unset'}`)
   out(`advisorModel: ${s.advisorModel ?? 'unset'}`)
   out(`AI attribution: ${s.attribution?.commit === '' && s.attribution?.pr === '' ? 'off' : 'on'}`)
 } else {
-  fail('usage: node setup.mjs install [--advisor]|advisor|statusline|auto|uninstall|status [--settings <path>]')
+  fail('usage: node setup.mjs install [--advisor]|advisor|statusline|limits|auto|uninstall|status [--settings <path>]')
 }

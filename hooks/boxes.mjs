@@ -362,6 +362,9 @@ export function pressPlan(banner, option, facts, ctx) {
       if (option === 'never') return { notices: { ['cleanup:' + repoKey]: 'never' }, dismiss: true }
       if (option === 'discuss') return { prompt: { text: discussPrompt(root, facts?.cleanup, cleanupPath) }, dismiss: true }
       return { steps: [{ ...script('cleanup.mjs', 'apply'), timeoutMs: 120000 }], working: 'Cleaning up. LCW says here when it is done.', fail: 'LCW could not clean up: ', toast: 'output', dismiss: true }
+    case 'limits':
+      if (option === 'never') return { notices: { limits: 'never' }, dismiss: true }
+      return { steps: [script('setup.mjs', 'limits')], fail: 'LCW could not raise the limits: ', toast: 'output', dismiss: true }
     case 'statusline':
       if (option === 'keep') return { notices: { statuslineKept: 'never' }, dismiss: true }
       return { steps: [script('setup.mjs', 'statusline')], fail: "LCW could not put its status rows back: ", toast: "LCW's status rows are back.", dismiss: true }

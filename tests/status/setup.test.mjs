@@ -34,7 +34,7 @@ test('install, status, uninstall round trip', () => {
   let s = read(settings)
   assert.equal(s.theme, 'dark')
   assert.deepEqual(s.statusLine, lcwLine(home))
-  assert.deepEqual(s.env, { A: '1', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '5' })
+  assert.deepEqual(s.env, { A: '1', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '5', CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '80' })
   assert.deepEqual(read(home + '/previous-statusline.json'), prev)
   assert.equal(fs.readdirSync(home + '/backup').length, 1)
   for (const f of BIN) assert.equal(fs.readFileSync(`${home}/bin/${f}`, 'utf8'), fs.readFileSync(`${ROOT}/scripts/bin/${f}`, 'utf8'), f)
