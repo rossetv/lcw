@@ -137,9 +137,12 @@ try {
   if (money) {
     lines.push(...paygLines(cli, money))
     // this note is the payg instructions, so the first prompt does not tell them again
-    const file = sessionFile(home(), ids[0])
-    const session = readJson(file)
-    if (!session?.toldPayg) writeJson(file, { ...session, toldPayg: true })
+    // under every name, so a hook or the mod that sees only one of them finds it given
+    for (const id of ids) {
+      const file = sessionFile(home(), id)
+      const session = readJson(file)
+      if (!session?.toldPayg) writeJson(file, { ...session, toldPayg: true })
+    }
   }
   else lines.push(`This session has a usage mark, run or no run: ${mark}% of the week${mark === DEFAULT_MARK ? ' unless the user raises it' : ', as the user set it'}. When they say "run up to N%", run: ${cli} mark N. When they say to finish regardless of the limit, run: ${cli} mark 100. It holds for this session only. When a hook tells you the session is at its mark, stop and tell the user; never raise the mark without their explicit words.`)
   lines.push(`If the user says "set up LCW": run node ${sh(`${root}/scripts/setup.mjs`)} install (it puts LCW's status rows and the no-AI-attribution settings in place, and lets the advisor and spend banners ask again) and say what was set. If they ask to uninstall LCW: run node ${sh(`${root}/scripts/setup.mjs`)} uninstall, say what it put back, then tell them to run /plugin uninstall lcw@lcw to remove the plugin itself.`)

@@ -286,6 +286,15 @@ export const cases = [
     expect: { prompt: note(USD_MARK, true), tool: note(USD_MARK, true), lcw: note(USD_MARK, true), agent: null },
   },
   {
+    name: 'a note given under both names leaves the marker down though the transcript row records an older process',
+    transcript: 't1',
+    sessions: { p1: { ...PAYG, claudePid: 222 }, t1: { ...PAYG, claudePid: 111 } },
+    running: [111, 222],
+    pid: 222,
+    spend: { t1: 100 },
+    expect: { prompt: null, tool: null, lcw: null, agent: null },
+  },
+  {
     name: 'the run\'s driver at the mark its anchor lends',
     sessions: { p1: { markPercent: 90 }, drv: { sessionCanonicalId: 'a2' }, a2: { sessionCanonicalId: 'a2', markPercent: 60 } },
     week: 65,

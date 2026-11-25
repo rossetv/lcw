@@ -666,6 +666,16 @@ test('a resumed per-token session told at its start is not told again at its fir
   assert.ok(!/turned out/.test(prompt ?? ''), prompt)
 })
 
+test('a two-name session that settles as billed per token at its start has the note recorded under both names', () => {
+  const home = tmp('home')
+  const repo = makeRepo()
+  const input = JSON.stringify({ session_id: 'i1', transcript_path: '/x/projects/y/t1.jsonl', cwd: repo })
+  const out = withEnv({ ...clock, ...KEY }, () => run(START_HOOK, [], { home, cwd: repo, input }).out)
+  assert.match(out, /billed per token/)
+  assert.equal(sessionOf(home, 't1').toldPayg, true)
+  assert.equal(sessionOf(home, 'i1').toldPayg, true)
+})
+
 test('a resumed per-token session is not told again at its first prompt when the sign-in cannot be read', () => {
   const home = tmp('home')
   const repo = makeRepo()
