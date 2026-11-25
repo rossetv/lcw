@@ -11,10 +11,11 @@ export interface AgentInput {
   spark?: number[];             // tokens gained in each of its last 20-second spans, oldest first (the mod keeps them)
   tokensWas?: number;           // the figure its tokens moved from, at movedAt: the card rolls up from it
   movedAt?: number | null;
+  wave?: number | null;         // the wave of a sweep it works for, where known: it is listed under that wave's lane
 }
 export interface AgentNode {
   id: string; desc: string; model: string; effort: string; tokens: number | null; spark: number[] | null; elapsed: string;
-  chip: 'quiet' | 'stalled' | null; expanded: boolean; kids: AgentNode[];
+  chip: 'quiet' | 'stalled' | null; expanded: boolean; kids: AgentNode[]; wave: number | null;
 }
 /** One open wave as its lane draws it: running, or shipped and waiting on its merge while the charter merges as it goes (then at Ship, step 'merging'). */
 export interface OpenWave {
