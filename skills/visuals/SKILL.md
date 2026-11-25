@@ -6,7 +6,7 @@ user-invocable: false
 
 # Showing it
 
-A picture settles in a minute what a page of text leaves open. In the brainstorm the human approves the intent from what they see; in a README or a pull request they understand the change from it. So a picture has to be true, clear and good to look at. A rough picture gets a rough answer.
+A picture settles in a minute what a page of text leaves open. In the brainstorm the human approves the intent from what they see; in a README or a pull request they understand the change from it. So a picture has to be true, clear and good to look at. A rough picture gets a rough answer. Every picture is finished work: beautiful, exact, and with nothing off when the human looks closely. They judge the run by it.
 
 ## When to show
 
@@ -72,7 +72,7 @@ Most pictures in a run are diagrams. These are what makes one easy to read:
 - **One meaning for each mark.** A solid box is a thing that is always there, a dashed one a thing that is there only sometimes. An arrow is one thing moving one way. A colour means one kind of thing everywhere, and a thing with no kind gets no colour.
 - **Say it where it happens.** Put the word on the line or beside the icon it explains. No legend, unless a mark appears many times and cannot be labelled in place.
 - **Show the way back.** Where a step can fail, draw both outcomes, with "yes" and "no" on the lines, and draw the loop to where the work returns.
-- **Few words.** A caption is one short line. Under a flow, two or three lines at most, and none that says again what the flow shows.
+- **Few words.** A caption is one short line. Under a flow, two or three lines at most, and none that says again what the flow shows. A pull request's pictures hold more: see "A pull request's pictures".
 - **Quiet emphasis.** Mark the special thing with a small label set into its border, or a light tint. A loud filled badge is too much.
 - **Even and aligned.** Equal gaps; boxes on shared centre lines and edges; an arrow centred in the gap it crosses; a box only as wide as what it holds. Lines never cross where moving one end avoids it.
 - **Light lines.** Lines of one to one and a half pixels, open arrowheads, rounded corners where a line turns.
@@ -81,16 +81,59 @@ Most pictures in a run are diagrams. These are what makes one easy to read:
 
 Then render it and look, the whole picture and each part enlarged, on a light page and a dark one. Fix what you see and look again, until nothing is off. Expect several rounds: a diagram is rarely right the first time.
 
-As an SVG file shown as an image (a README or a pull request on GitHub): at most 830 wide, its own background, a light and a dark palette inside the file (`prefers-color-scheme`), and the system's fonts. Fix the length of each monospaced run (`textLength`), so that what you drew around it fits on every system.
+As an SVG file shown as an image (a README or a pull request on GitHub): at most 830 wide, its own background, a light and a dark palette inside the file (`prefers-color-scheme`), and the system's fonts.
 
-Render the file itself both ways with a Chromium-family browser run headless (Chrome, Chromium, Edge), naming the colour scheme each time, for light as well as dark: without it the browser follows the computer's own setting.
+Render the file itself, with the tool in this skill's folder. It draws the file light and dark with a Chromium-family browser run headless (Chrome, Chromium or Edge; `LCW_BROWSER` names one it cannot find) and prints where the PNGs are:
 
 ```
-<browser> --headless=new --hide-scrollbars --window-size=<width>,<height> --blink-settings=preferredColorScheme=1 --screenshot=light.png file://<path>.svg
-<browser> --headless=new --hide-scrollbars --window-size=<width>,<height> --blink-settings=preferredColorScheme=0 --screenshot=dark.png file://<path>.svg
+node <this skill's folder>/picture.mjs render <file.svg> <folder>
 ```
 
-On macOS, Chrome is `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`; on Linux it is usually `google-chrome` or `chromium`. `rsvg-convert` draws the light palette only, so it cannot show you the dark one; never stand in for the dark render by recolouring a copy, since then the file you ship was never drawn.
+`rsvg-convert` draws the light palette only, so it cannot show you the dark one; never stand in for the dark render by recolouring a copy, since then the file you ship was never drawn.
+
+## Nothing out of place
+
+A line of text that touches or crosses its box, two labels drawn over each other, an arrow that starts in the air: the human sees these first, and stops trusting the picture. Looking does not catch them reliably. One run's picture reached a pull request with a line 11 px past its box's border, after the agent that drew it and the one that approved it had both looked.
+
+In a page, an artifact or a local one, text wraps inside its box by itself: let it, give no box a fixed size that its text can outgrow, and look at a narrow window and a wide one. In an SVG file nothing wraps and nothing grows, so there:
+
+- **Measure, never estimate.** Lay the picture out from the browser's own measure of each line, not from a guess at so many pixels a letter. Write a small page whose script measures each line with a canvas's `measureText` in the picture's fonts, wraps and sizes from that, and leaves the finished SVG as the text of an element with the id `picture`. Then `node <this skill's folder>/picture.mjs build <page.html> <file.svg>` runs the page and saves the file.
+- **Leave room.** A line fills at most nine tenths of the room between its box's paddings, since other systems draw the same letters wider. No line ends on a word or a figure left alone.
+- **Fix every line's length.** Give each line a `textLength` of its measured width, so it is as wide on every system as it was on yours.
+- **A box reaches what it joins.** An arrow starts on one box's border and ends on another's. A box that several arrows leave is tall enough for all of them.
+- **Run the check.** `node <this skill's folder>/picture.mjs check <file.svg>` measures every text against the box it sits in, the picture's edge and the other texts, as drawn and again with wider letters, and lists what to fix. Fix and run it again until it says "Nothing to fix". An SVG file that fails it is shown to nobody.
+
+The check judges text, and knows a box only as a `rect`, so draw every box as one. It also says when the file is one a browser cannot read, which GitHub would show as a broken image. A terminal mock's grid of characters, and everything that is not text (an arrow through a label, uneven gaps, a box off its centre line, a box left mostly empty), you still find by looking, so passing the check is where looking starts.
+
+## Make it play
+
+Animate a picture wherever something in it moves or happens over time: a flow, a sequence, a change of state, a timeline. Nearly every diagram of how something works has one. Motion that shows nothing is decoration, and it is what makes a picture look generated.
+
+- **One story at a time, and say which.** A flow plays as three or four short stories in one loop: the usual case, the case the change is about, the failure. A line under the title names the story that is playing. A loop of 10 to 20 seconds, slow enough to follow.
+- **Show what moves.** A dot travels each arrow in turn, and the box it reaches lights up while it works. A timeline fills as a line crosses it. A mock of a screen moves only as the product moves, at the product's own pace.
+- **Complete at rest.** Stopped, the picture still says everything: motion is added to a finished picture and never holds part of it back. A reader who has asked for less motion (`prefers-reduced-motion`) gets that still picture.
+- **Made of CSS inside the file.** Keyframes in the SVG's own style block play wherever the file is shown as an image, on GitHub too; a script does not run there. Move things with `transform` and `opacity`. Give every animation the same loop length and no delay of its own, and put each part's timing in its keyframes' percentages.
+- **Look at it stopped.** That last rule is what lets the tool stop the whole picture at any second: `node <this skill's folder>/picture.mjs render <file.svg> <folder> 1 8 13.5` draws it at those seconds, light and dark. Look at a moment inside each story before anyone else sees it.
+
+## A pull request's pictures
+
+They sit on a GitHub page and a human judges the change from them, so they differ from a diagram elsewhere in three ways.
+
+**They wear GitHub's colours**: white or near-black, greys, and one blue.
+
+| | Light | Dark |
+|---|---|---|
+| the page | `#ffffff` | `#0d1117` |
+| a box, and a box that holds others | `#ffffff`, `#f6f8fa` | `#0d1117`, `#151b23` |
+| a box's border | `#d1d9e0` | `#3d444d` |
+| text, and quiet text | `#1f2328`, `#59636e` | `#f0f6fc`, `#9198a1` |
+| lines and arrows | `#6e7781` | `#7d8590` |
+| blue, and its tint | `#0969da`, `#ddf4ff` | `#4493f8`, `#121d2f` |
+| a failure | `#cf222e` | `#f85149` |
+
+**Blue means this change touched it**, and nothing else. What the change adds has the tint as its fill, a blue border and a small "new" label set into that border. What it alters has a blue border, the plain fill and a "changed" label. What was already there is grey with no label, so the human sees at once what there is to judge. In a mock of a screen, the product's own colours stay as they are.
+
+**They hold more.** A box may say in a sentence or two what its part does, and the picture shows every state that matters. "Few words" above is for the other pictures: in a pull request the text is short and the pictures carry it.
 
 ## Making it good
 
@@ -106,7 +149,7 @@ These hold for every picture. For a local page they are all you have, so follow 
 - **Light and dark.** Define every colour once as a named value, give each a light and a dark value, and follow the reader's setting (`prefers-color-scheme`).
 - **Diagrams.** Drawn as SVG, with real text, as the section above says. They read one way, left to right or top to bottom. More than about nine boxes in one flow is two flows.
 - **Charts.** Choose the form from the question: a line for change over time, bars for comparing, a table for exact values. Name the axes and their units, label the lines directly, start bars at zero, and no 3D.
-- **Motion** only where it explains something, such as a change of state, and none for a reader who has asked for less motion.
+- **Motion.** Wherever something moves or happens over time, as "Make it play" says, and a still picture for a reader who has asked for less motion.
 - **Any width.** It works on a narrow window and a wide one, and the page never scrolls sideways.
 - **Look before they do.** Render what you made and look at the picture (a browser run headless can take a screenshot of a page, where one is installed): clipped text, things overlapping, a colour unreadable in the dark. Fix what you see before you send the link. If you could not look, say so.
 

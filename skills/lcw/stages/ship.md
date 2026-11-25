@@ -6,7 +6,7 @@ The draft pull request is what the human comes back to, so you write its text yo
 
 ## The text
 
-Load the `lcw:pull-request` skill with the Skill tool and write the pull request as it says, from the brainstorm, the spec and the ledger: What, Why, How, in that order, each short and each with its picture, then Check, only when a decision is risky or one they might regret, as the skill says.
+Load the `lcw:pull-request` skill with the Skill tool and write the pull request as it says, from the brainstorm, the spec and the ledger: What, Why, How and Scope, in that order, each short, What and How each with its picture, then Check, only when a decision is risky or one they might regret, as the skill says.
 
 Save it in a temporary file for `--body-file`, and record the counts for the status bar:
 
