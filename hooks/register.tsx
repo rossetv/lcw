@@ -1051,6 +1051,7 @@ async function pressBanner($: EngineInterface, id: string, drawn: Banner | null)
   if (!drawn || drawn.kind !== kind) return
   if (S.pressing) return $.ui.toast('LCW is still on the last button you pressed.')
   S.pressing = true
+  let later = false
   try {
     forget()
     await refresh($).catch(() => {})
@@ -1067,9 +1068,16 @@ async function pressBanner($: EngineInterface, id: string, drawn: Banner | null)
     })
     // Before its steps run: a refresh may see the run bound before the press has finished.
     if (kind === 'unfinished' && option === 'resume') S.taken = String(facts.unfinished?.id ?? '')
+    if (plan?.working) {
+      // A press is given ten seconds, and a clean-up or an update can take minutes: it is carried out once the press has returned.
+      later = true
+      $.ui.toast(plan.working, { timeoutMs: 10000 })
+      $.clock.after(0, () => void carryOut($, fresh!, plan).catch(() => {}).finally(() => { S.pressing = false; return readBanner($).catch(() => {}) }))
+      return
+    }
     if (plan) await carryOut($, fresh!, plan)
   } finally {
-    S.pressing = false
+    if (!later) S.pressing = false
   }
   // What the press changed is seen at once: the next run to name, the hold just started.
   if (kind === 'unfinished') S.runsAt = 0

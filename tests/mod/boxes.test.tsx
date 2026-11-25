@@ -461,6 +461,31 @@ test('Not now on the newest run left halfway lets an older one show', async ($, 
   await band.unmount()
 })
 
+test('Clean Up says it has started and returns at once; the removal runs after the press, its result is said, and the box goes', async ($, on) => {
+  const apply = (a: string[]) => a.at(-1) === 'apply' && a[1]?.endsWith('/scripts/cleanup.mjs')
+  const w = engine(on, { '/lcw/repos/repo-1/cleanup.json': JSON.stringify({ at: NOW - HOUR, title: 'Two branches look done with.', bullets: ['a was merged'] }) }, {
+    answer: (a) => {
+      if (!apply(a)) return undefined
+      delete w.files['/lcw/repos/repo-1/cleanup.json']
+      return { exitCode: 0, stdout: 'removed branch a\n' }
+    },
+  })
+  await start($)
+  await w.clock.advance(4000)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:cleanup:clean' })
+  expect(w.runs.filter(apply).length).toBe(0)
+  expect(w.toasts.join('|')).toMatch(/Cleaning up/)
+  await band.press({ key: 'banner:cleanup:clean' })
+  expect(w.toasts.join('|')).toMatch(/still on the last button/)
+  await w.clock.advance(1000)
+  expect(w.runs.filter(apply).length).toBe(1)
+  expect(w.toasts.join('|')).toMatch(/removed branch a/)
+  await w.clock.advance(4000)
+  expect(await band.find({ type: 'Text', text: /Two branches look done with/ })).toBeUndefined()
+  await band.unmount()
+})
+
 for (const [platform, where] of [['macos', 'this Mac'], ['linux', 'this computer']]) {
   test(`the cleanup box on ${platform} says ${where}`, async ($, on) => {
     const w = engine(on, { '/lcw/repos/repo-1/cleanup.json': JSON.stringify({ at: NOW - HOUR, title: 'Two branches look done with.', bullets: ['a was merged'] }) }, { platform })

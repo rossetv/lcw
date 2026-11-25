@@ -277,6 +277,7 @@ export function discussPrompt(root, cleanup, cleanupPath) {
  * What pressing option on banner does, as a plan register.tsx carries out in this order:
  * - steps: commands run one after another; the first that fails (or whose output matches its halt) ends the plan,
  *   its output said in a toast, and the box stays;
+ * - working: said at once, for steps that can take minutes: they run after the press has returned, since a press is given ten seconds;
  * - prompt: submitted ({ text, asUser }); when it cannot be, the box stays and the person is told;
  * - owe: a prompt that carries the run on, sent until it goes through (the steps have already changed the run);
  * - notices: written into notices.json (the machine's "never again" choices);
@@ -352,7 +353,7 @@ export function pressPlan(banner, option, facts, ctx) {
     case 'restart':
       return close
     case 'update':
-      return { steps: [{ ...script('update.mjs', 'apply'), timeoutMs: 180000 }], fail: 'LCW could not update: ', toast: 'output', dismiss: true }
+      return { steps: [{ ...script('update.mjs', 'apply'), timeoutMs: 180000 }], working: 'Updating LCW. It says here when it is done.', fail: 'LCW could not update: ', toast: 'output', dismiss: true }
     case 'whatsnew':
       return { notices: { ['whatsnew:' + banner.key]: 'never' }, dismiss: true }
     case 'guide':
@@ -360,7 +361,7 @@ export function pressPlan(banner, option, facts, ctx) {
     case 'cleanup':
       if (option === 'never') return { notices: { ['cleanup:' + repoKey]: 'never' }, dismiss: true }
       if (option === 'discuss') return { prompt: { text: discussPrompt(root, facts?.cleanup, cleanupPath) }, dismiss: true }
-      return { steps: [{ ...script('cleanup.mjs', 'apply'), timeoutMs: 120000 }], toast: 'output', dismiss: true }
+      return { steps: [{ ...script('cleanup.mjs', 'apply'), timeoutMs: 120000 }], working: 'Cleaning up. LCW says here when it is done.', fail: 'LCW could not clean up: ', toast: 'output', dismiss: true }
     case 'statusline':
       if (option === 'keep') return { notices: { statuslineKept: 'never' }, dismiss: true }
       return { steps: [script('setup.mjs', 'statusline')], fail: "LCW could not put its status rows back: ", toast: "LCW's status rows are back.", dismiss: true }

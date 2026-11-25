@@ -38,6 +38,7 @@ export function discussPrompt(root: string, cleanup: BannerFacts['cleanup'], cle
 export type Step = { argv: string[]; timeoutMs?: number; halt?: RegExp }
 export type Plan = {
   steps?: Step[]
+  working?: string
   fail?: string
   notices?: Record<string, string>
   prompt?: { text: string; asUser?: true }

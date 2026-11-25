@@ -130,6 +130,7 @@ test('Learn more sends the words as the person, and both guide buttons keep the 
 test('Clean Up gives the removal two minutes, and Keep the default cap keeps the default cap', () => {
   const clean = press({ now: NOW, repoKey: 'repo-1', cleanup: { at: 5, title: 'Merged', bullets: [] } }, 'clean')
   assert.equal(clean.steps[0].timeoutMs, 120000)
+  assert.match(clean.working, /Cleaning up/)
   const keep = press({ now: NOW, billing: 'payg', advisorModel: 'fable' }, 'keep')
   assert.deepEqual(argvs(keep), [`cap ${DEFAULT_CAP_USD} --session s1`])
   assert.ok(keep.toast.includes(dollars(DEFAULT_CAP_USD)))
@@ -138,6 +139,7 @@ test('Clean Up gives the removal two minutes, and Keep the default cap keeps the
 test('Update now gives the update its 180 seconds', () => {
   const plan = press({ now: NOW, update: { running: '0.1.0', available: { version: '0.2.0', from: '0.1.0' } } }, 'now')
   assert.equal(plan.steps[0].timeoutMs, 180000)
+  assert.match(plan.working, /Updating LCW/)
   assert.deepEqual(plan.steps[0].argv.slice(1), ['/plug/scripts/update.mjs', 'apply'])
 })
 
