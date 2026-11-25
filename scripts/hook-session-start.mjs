@@ -3,7 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { runsDir, repoKey } from '../lib/key.mjs'
-import { home, mainCheckout, writeAtomic, readJson, writeJson, sweepTemp } from './lib/store.mjs'
+import { home, mainCheckout, writeAtomic, readJson, writeJson, sweepTemp, sweepAfter } from './lib/store.mjs'
 import { findRun, listRuns } from './lib/runs.mjs'
 import { sessionIds, sessionMark, DEFAULT_MARK, driverMark, applyGate } from './lib/gate.mjs'
 import { readMoney, dropSpend } from './lib/money.mjs'
@@ -114,6 +114,7 @@ try {
   const ids = sessionIds(input)
   // before the run is looked for: after /clear, the run's driver is this same Claude Code process
   ids.forEach(noteClaudePid) // a resumed payload names two ids; either may be the live one
+  try { sweepAfter(home(), claudeAlive) } catch {}
   let run = null
   for (const id of ids.length ? ids : [undefined]) {
     run = findRun({ sessionId: id, cwd })

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { sessionFile } from '../../lib/key.mjs'
 
 export const home = () => process.env.LCW_HOME || `${process.env.HOME}/.lcw`
 
@@ -83,6 +84,31 @@ export function sweepTemp(lcwHome, now = Date.now()) {
   try { sessions = fs.readdirSync(`${lcwHome}/frames`) } catch {}
   for (const name of sessions) {
     try { if (now - fs.statSync(`${lcwHome}/frames/${name}`).mtimeMs >= 86400_000) fs.rmSync(`${lcwHome}/frames/${name}`, { recursive: true, force: true }) } catch {}
+  }
+}
+
+/**
+ * Clears the after-call markers a session left behind, so none keeps the hook after a tool call starting Node: an empty
+ * one goes; a filled one stays while a session it names (in its content or its file name) has a recorded Claude Code
+ * process that isAlive says runs, and goes when every recorded one is dead. The mod rewrites a marker only when it is gone, so a
+ * session with no recorded process has no other sign of life: its marker goes once it is older than maxAgeMs, and a live mod puts it back within a second.
+ */
+export function sweepAfter(lcwHome, isAlive, now = Date.now(), maxAgeMs = 600_000) {
+  const dir = `${lcwHome}/after`
+  let names = []
+  try { names = fs.readdirSync(dir) } catch { return }
+  for (const name of names) {
+    try {
+      const file = `${dir}/${name}`
+      const text = fs.readFileSync(file, 'utf8')
+      if (text.trim()) {
+        let named = []
+        try { const m = JSON.parse(text); named = [m?.session, m?.transcript].filter((x) => typeof x === 'string' && x) } catch {}
+        const pids = [...named, name].map((id) => readJson(sessionFile(lcwHome, id))?.claudePid).filter(Boolean)
+        if (pids.some(isAlive) || (!pids.length && now - fs.statSync(file).mtimeMs < maxAgeMs)) continue
+      }
+      fs.rmSync(file, { force: true })
+    } catch {}
   }
 }
 
