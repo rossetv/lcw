@@ -6,6 +6,7 @@ import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, installedConfig, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
 import * as gate from '../../scripts/lib/gate.mjs'
+import { cases } from './mark-cases.mjs'
 
 process.env.TZ = 'Europe/Dublin'
 process.env.LCW_AUTH_STATUS_JSON = 'fail' // the sign-in is stubbed: no test runs the real `claude auth status`
@@ -674,6 +675,38 @@ test('a two-name session that settles as billed per token at its start has the n
   assert.match(out, /billed per token/)
   assert.equal(sessionOf(home, 't1').toldPayg, true)
   assert.equal(sessionOf(home, 'i1').toldPayg, true)
+})
+
+/**
+ * The session files session start leaves for p1, resumed on a per-token sign-in from transcript t1 whose row records
+ * an older Claude Code, running or ended; pids are given back as the limit hook's cases name them: 111 the older
+ * process, 222 this one.
+ */
+function resumed(oldRunning, t1) {
+  const home = tmp('home')
+  const repo = makeRepo()
+  const old = oldRunning ? spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' }) : spawnSync(process.execPath, ['-e', ''])
+  try {
+    writeSession(home, 't1', { ...t1, claudePid: old.pid })
+    const env = { ...clock, ...KEY, CLAUDE_PID: String(process.pid), LCW_CLAUDE_ARGS: '' }
+    run(START_HOOK, [], { home, cwd: repo, env, input: JSON.stringify({ session_id: 'p1', transcript_path: '/x/projects/y/t1.jsonl', cwd: repo }) })
+    const pids = { [old.pid]: 111, [process.pid]: 222 }
+    return Object.fromEntries(fs.readdirSync(`${home}/sessions`).map((file) => {
+      const session = readJson(`${home}/sessions/${file}`)
+      return [path.basename(file, '.json'), session.claudePid ? { ...session, claudePid: pids[session.claudePid] ?? session.claudePid } : session]
+    }))
+  } finally {
+    if (oldRunning) old.kill()
+  }
+}
+const caseRows = (name) => cases.find((c) => c.name === name).sessions
+
+test('a per-token session resumed from a transcript whose older Claude Code has ended leaves the rows its limit-hook case holds', () => {
+  assert.deepEqual(resumed(false, { billing: 'payg' }), caseRows('a note given at a resumed start under both names, which share one anchor, leaves the marker down'))
+})
+
+test('a per-token session resumed from a told transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', () => {
+  assert.deepEqual(resumed(true, { billing: 'payg', toldPayg: true }), caseRows('a note given under both names leaves the marker down though the transcript row records an older process'))
 })
 
 test('a resumed per-token session is not told again at its first prompt when the sign-in cannot be read', () => {
