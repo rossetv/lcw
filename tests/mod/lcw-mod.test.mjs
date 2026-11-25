@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import {
   addTotals, addUsage, agentTokens, buttons, cardMotion, cardPace, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
-  longNudges, quietCounts, replacesGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt, waveOfBrief, launchedId,
+  longNudges, quietCounts, replacesGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt, waveOfBrief, launchedId, briefOf,
   measureStep, retryGate, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
@@ -594,4 +594,15 @@ test('a launch answers with the new agent\'s id, as a field or in its text', () 
   assert.equal(launchedId([{ type: 'text', text: 'agentId: abc-1' }]), 'abc-1')
   assert.equal(launchedId({ status: 'completed' }), null)
   assert.equal(launchedId(undefined), null)
+})
+
+test('an agent\'s brief is the first line of its transcript, as text or as blocks; a line cut short is given as it is', () => {
+  const first = (content) => JSON.stringify({ parentUuid: null, agentId: 'a1', type: 'user', message: { role: 'user', content } })
+  assert.equal(briefOf(first('Task X1 of wave 13. Work in /repo/.claude/worktrees/tidy-wave-13') + '\n{"type":"assistant"}\n'), 'Task X1 of wave 13. Work in /repo/.claude/worktrees/tidy-wave-13')
+  assert.equal(briefOf(first([{ type: 'text', text: 'Read the brief' }, { type: 'text', text: 'then build' }])), 'Read the brief\nthen build')
+  const cut = first('Work in /repo/.claude/worktrees/tidy-wave-7 and ' + 'x'.repeat(500)).slice(0, 200)
+  assert.equal(waveOfBrief(briefOf(cut), 'Build it', 'tidy'), 7)
+  assert.equal(briefOf(first(undefined)), '')
+  assert.equal(briefOf(''), '')
+  assert.equal(briefOf(null), '')
 })

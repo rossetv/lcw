@@ -19,13 +19,17 @@ const agent = (id: string, description: string, over: object = {}) => ({
   id, description, type: 'lcw:worker', status: 'running', kind: 'local_agent', taskStatus: 'running', model: 'sonnet', startTime: NOW - 60000, tokenCount: 10, ...over,
 })
 
-function engine(on: any, agents: unknown[]) {
+function engine(on: any, agents: unknown[], logs: Record<string, string> = {}) {
   const clock = mock.clock(on, { now: NOW })
-  const files: Record<string, string> = { '/lcw/sessions/s1.json': JSON.stringify({ runDir: RUN }), [RUN + '/state.json']: SWEEP, [RUN + '/mod-alive']: String(NOW - 1000) }
+  const reads: string[] = []
+  const files: Record<string, string> = {
+    ...logs, '/lcw/sessions/s1.json': JSON.stringify({ runDir: RUN }), [RUN + '/state.json']: SWEEP, [RUN + '/mod-alive']: String(NOW - 1000) }
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
+  on('session.info', () => ({ value: { transcriptPath: '/t/s1.jsonl', platform: 'linux' } }))
   on('fs.read', (_: any, e: any) => {
+    reads.push(e.path)
     if (e.path in files) return { value: files[e.path] }
     throw new Error('ENOENT')
   })
@@ -36,8 +40,11 @@ function engine(on: any, agents: unknown[]) {
   on('agent.list', () => ({ value: agents }))
   on('config.list', () => ({ value: [] }))
   on('classic.PostToolUse', () => ({}))
-  return { advance: (ms: number) => clock.advance(ms) }
+  return { advance: (ms: number) => clock.advance(ms), reads }
 }
+
+// An agent's transcript as it starts: the message that launched it, then its work.
+const log = (id: string, brief: string) => ({ [`/t/s1/subagents/agent-${id}.jsonl`]: JSON.stringify({ parentUuid: null, agentId: id, type: 'user', message: { role: 'user', content: brief } }) + '\n{"type":"assistant"}\n' })
 
 // The launch of an agent as the mod is told of it: what the Agent tool was given, and the id it answered.
 const launch = ($: any, id: string, description: string, prompt: string, from?: string) => $.classic.PostToolUse({
@@ -77,5 +84,32 @@ test('an agent whose launch was not seen is placed by its description, where tha
   const band = await $.ui.mount(BAND)
   await w.advance(2100)
   expect(await viewed(band)).toEqual(['view:d1', 'view:a1'])
+  await band.unmount()
+})
+
+test('an agent launched before the mod was looking is placed from its transcript, whose first line is its brief', async ($, on) => {
+  const w = engine(on, [agent('h1', 'Hunt the settings pages'), agent('a1', 'Build the importer'), agent('a2', 'Fix the toast notes')], {
+    ...log('a1', 'Task T4 of the sweep. Worktree: /repo/.claude/worktrees/tidy-wave-2 (branch lcw/tidy-wave-2).'),
+    ...log('a2', 'Read the rules first: /lcw/repos/r/runs/tidy/waves/1/review-brief.md'),
+    ...log('h1', 'Hunt the settings pages in /repo/.claude/worktrees/tidy-latest'),
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await w.advance(2100)
+  expect(await viewed(band)).toEqual(['view:a2', 'view:a1', 'view:h1'])
+  const asked = () => w.reads.filter((p) => p.startsWith('/t/s1/subagents/')).length
+  expect(asked()).toBe(3)
+  await w.advance(20000)
+  expect(asked()).toBe(3)
+  await band.unmount()
+})
+
+test('a transcript that is not there is asked for three times and no more', async ($, on) => {
+  const w = engine(on, [agent('a1', 'Build the importer')])
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await w.advance(30000)
+  expect(w.reads.filter((p) => p === '/t/s1/subagents/agent-a1.jsonl').length).toBe(3)
+  expect(await viewed(band)).toEqual(['view:a1'])
   await band.unmount()
 })

@@ -374,6 +374,20 @@ export function waveOfBrief(prompt, description, name) {
   return found ? Number(found[1]) : null
 }
 
+/**
+ * An agent's brief, from the start of its transcript, whose first line is the message that started it. Where that line
+ * is longer than what was read it cannot be parsed, and its text is given as it is: the wave's worktree is still in it.
+ */
+export function briefOf(head) {
+  const line = String(head ?? '').split('\n', 1)[0]
+  try {
+    const content = JSON.parse(line)?.message?.content
+    return typeof content === 'string' ? content : Array.isArray(content) ? content.map((b) => b?.text ?? '').join('\n') : ''
+  } catch {
+    return line
+  }
+}
+
 /** The id of the agent an Agent tool call started, from what the call answered: an object with agentId, or text that names it. */
 export function launchedId(response) {
   if (response && typeof response === 'object' && typeof response.agentId === 'string') return response.agentId

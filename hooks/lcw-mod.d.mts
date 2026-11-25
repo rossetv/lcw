@@ -47,6 +47,7 @@ export function wakeable(state: any): boolean
 export function reopenDue(state: any, gate: unknown, aliveAt: number | null | undefined, now: number): boolean
 export function waveOfBrief(prompt: unknown, description: unknown, name: string | null | undefined): number | null
 export function launchedId(response: unknown): string | null
+export function briefOf(head: unknown): string
 export function usageFrom(rateLimits: readonly { kind: string; percentUsed: number; resetsAt?: string }[] | undefined, now: number, seen?: number):
   { at: number; seen?: number; sevenDay: SevenDay; source: string } | null
 export function compactInstructions(state: any, runDir: string, step: string): string
