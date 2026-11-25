@@ -146,9 +146,11 @@ function survey(cwd, lcwHome) {
 
   const items = branches.map((b) => {
     const item = { type: 'branch', name: b.name, head: b.head, why: branchWhy.get(b.name), lastCommit: b.lastCommit }
-    const run = live.find((s) => s.branch === b.name)
+    // a live sweep keeps every wave's branch until it ends, a shipped and merged one too: its own clean-up counts on them
+    const waveOf = (s) => typeof s.branch === 'string' && Array.isArray(s.sweep?.waves) && (b.name.startsWith(`${s.branch}-wave-`) || s.sweep.waves.some((x) => x?.branch === b.name))
+    const run = live.find((s) => s.branch === b.name || waveOf(s))
     const out = all.filter((w) => w.branch === b.name).map((w) => w.path)
-    if (run) item.not = `it is the branch of LCW run ${run.id}, which is ${run.status}`
+    if (run) item.not = `it is a branch of LCW run ${run.id}, which is ${run.status}`
     else if (!item.why) item.not = 'it is not merged'
     else if (out.some((p) => !safeTrees.has(p))) item.not = `it is checked out in ${out.find((p) => !safeTrees.has(p))}`
     else if (out.length) item.worktree = out[0]

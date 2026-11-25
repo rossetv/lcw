@@ -376,6 +376,18 @@ test('a live sweep keeps every wave worktree, open or shipped; an ended one free
   assert.ok(!listed.includes(`worktree:${open}`) && !listed.includes(`worktree:${shipped}`))
 })
 
+test('a live sweep keeps the branch of every wave, a merged one with no worktree too; a sweep that is over frees them', () => {
+  const repo = makeRepo()
+  const h = tmp('home')
+  for (const b of ['lcw/s', 'lcw/s-wave-1', 'lcw/s-wave-2', 'lcw/t-wave-1']) git(repo, 'branch', b)
+  const waves = [{ n: 1, status: 'shipped', merged: true, branch: 'lcw/s-wave-1', worktree: null }, { n: 2, status: 'shipped', merged: true, branch: null, worktree: null }]
+  runState(h, repo, 'r-sweep', { status: 'running', shape: 'sweep', name: 's', branch: 'lcw/s', worktree: null, sweep: { waves } })
+  runState(h, repo, 'r-done', { status: 'finished', shape: 'sweep', name: 't', branch: 'lcw/t', sweep: { waves: [{ n: 1, status: 'shipped', branch: 'lcw/t-wave-1' }] } })
+  const listed = names(candidates(repo, h))
+  assert.ok(listed.includes('branch:lcw/t-wave-1'))
+  assert.ok(!listed.some((n) => n.startsWith('branch:lcw/s')), listed.join(' '))
+})
+
 test('a live sweep keeps its detached -latest hunt worktree even at a tip already in main; a sweep that is over frees it', () => {
   const repo = makeRepo()
   const h = tmp('home')
