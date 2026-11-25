@@ -222,17 +222,13 @@ test('wave add queues more waves while waves are open, as long as none is queued
   assert.deepEqual(t.state().sweep.waves.map((w) => w.status), ['running', 'queued'])
 })
 
-test('the next wave starts once the wave before it is built, cut from that wave\'s branch in its own worktree, and is told the files it changed', () => {
+test('a wave started once the wave before it is built is cut from that wave\'s branch in its own worktree, and is told the files it changed', () => {
   const t = hunting()
   t.cli('wave', 'add', '2', '2')
   t.start()
   const wt1 = t.wt
   commit(wt1, 'b.txt', 'one\n')
-  for (const stage of ['Plan', 'Build']) {
-    t.cli('stage', stage)
-    assert.equal(t.cli('wave', 'start').code, 1, stage)
-  }
-  assert.deepEqual(t.state().sweep.waves.map((w) => w.status), ['running', 'queued'])
+  t.cli('stage', 'Build')
   t.cli('stage', 'Review')
   assert.match(t.cli('wave', 'files').out, /^ {2}b\.txt \(wave 1\)$/m)
   const r = t.start()
@@ -244,20 +240,72 @@ test('the next wave starts once the wave before it is built, cut from that wave\
   assert.deepEqual([t.state().stage, t.state().sweep.waves[0].stage], ['Plan', 'Review'], 'the run\'s stage follows the newest wave')
 })
 
-test('at most two waves are built or reviewed at once: a third waits until one of them holds in Ship', () => {
+test('a third wave starts while two are being built or reviewed', () => {
   const t = hunting()
   t.cli('wave', 'add', '1', '1', '1')
   t.start()
   t.cli('stage', 'Review')
   t.start()
   t.cli('stage', 'Review', '--wave', '2')
-  const r = t.cli('wave', 'start')
-  assert.equal(r.code, 1)
-  assert.match(r.out, /1 and 2/)
-  t.cli('stage', 'Ship', '--wave', '1')
-  assert.equal(t.start().code, 0)
-  assert.deepEqual(t.state().sweep.waves.map((w) => w.stage), ['Ship', 'Review', 'Plan'])
+  const r = t.start()
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual(t.state().sweep.waves.map((w) => w.stage), ['Review', 'Review', 'Plan'])
   assert.equal(t.state().sweep.waves[2].after, 'lcw/tidy-wave-2')
+})
+
+test('a wave starts beside one still being built, cut from where that wave was cut, and takes it in only once it is built', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1', '1')
+  t.start()
+  const wt1 = t.wt
+  const cut = git(wt1, 'rev-parse', 'HEAD')
+  t.cli('stage', 'Build')
+  commit(wt1, 'b.txt', 'half built\n')
+  const r = t.start()
+  assert.equal(r.code, 0, r.out)
+  assert.match(r.out, /beside wave 1, still being built/)
+  const wt2 = t.wt
+  const at = (n, ...a) => t.cli(...a, '--wave', String(n))
+  const w = (n) => t.state().sweep.waves[n - 1]
+  assert.deepEqual([w(2).after, w(2).base], ['lcw/tidy-wave-1', cut])
+  assert.equal(fs.existsSync(`${wt2}/b.txt`), false, 'none of wave 1\'s half-built work')
+  commit(wt2, 'e.txt', 'wave 2 fix\n')
+  const files = t.cli('wave', 'files').out
+  assert.match(files, /^ {2}b\.txt \(wave 1\)$/m)
+  assert.match(files, /^ {2}e\.txt \(wave 2\)$/m)
+  const early = at(2, 'wave', 'take')
+  assert.equal(early.code, 1)
+  assert.match(early.out, /Wave 1 is still being built/)
+  assert.equal(at(2, 'stage', 'Build').code, 0)
+  assert.equal(at(2, 'stage', 'Review').code, 0, 'its review range is its own while wave 1 is unbuilt')
+  assert.match(t.cli('status').out, /review range: git diff lcw\/tidy-wave-1\.\.\.lcw\/tidy-wave-2/)
+  assert.equal(git(t.repo, 'diff', '--name-only', 'lcw/tidy-wave-1...lcw/tidy-wave-2'), 'e.txt')
+  const built = commit(wt1, 'c.txt', 'the rest\n')
+  assert.equal(at(1, 'stage', 'Review').code, 0)
+  const held = at(2, 'stage', 'Ship')
+  assert.equal(held.code, 1, 'wave 1 is built now, so wave 2 takes it in before it goes on')
+  assert.match(held.out, /lcw wave take --wave 2/)
+  assert.equal(at(2, 'wave', 'take').code, 0)
+  assert.equal(git(wt2, 'rev-parse', 'HEAD^2'), built, 'a merge commit of wave 1\'s tip')
+  assert.equal(fs.existsSync(`${wt2}/b.txt`), true)
+  assert.equal(git(t.repo, 'diff', '--name-only', 'lcw/tidy-wave-1...lcw/tidy-wave-2'), 'e.txt', 'the range is still wave 2\'s own work')
+  assert.equal(at(2, 'stage', 'Ship').code, 0)
+})
+
+test('a third wave started beside two still being built is cut from where the first of them was cut', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1', '1', '1')
+  t.start()
+  const cut = git(t.wt, 'rev-parse', 'HEAD')
+  commit(t.wt, 'b.txt', 'one\n')
+  t.start()
+  commit(t.wt, 'e.txt', 'two\n')
+  const r = t.start()
+  assert.equal(r.code, 0, r.out)
+  assert.match(r.out, /beside waves 1, 2, still being built/)
+  assert.deepEqual(t.state().sweep.waves.map((x) => x.base), [cut, cut, cut])
+  assert.equal(t.state().sweep.waves[2].after, 'lcw/tidy-wave-2')
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 3 started in .* beside waves 1, 2, still being built, cut from where wave 1 was cut at /)
 })
 
 /** Waves 1 and 2 started: wave 1 with a commit, in Review; wave 2 cut from it, in Build. at(n, ...) runs a command for wave n. */
@@ -1590,18 +1638,14 @@ function three() {
   return { ...t, wt1, ok, w: (n) => t.state().sweep.waves[n - 1], get wt() { return t.wt } }
 }
 
-test('a wave sent back from Ship waits while two other waves are being built or reviewed', () => {
+test('a wave sent back from Ship goes back while two other waves are being built or reviewed', () => {
   const t = three()
   t.start()
   t.ok('stage', 'Ship', '--wave', '1')
   t.ok('stage', 'Review', '--wave', '2')
   t.start()
-  const r = t.cli('stage', 'Build', '--wave', '1')
-  assert.equal(r.code, 1)
-  assert.match(r.out, /2 \(Review\) and 3 \(Plan\)/)
-  assert.equal(t.w(1).stage, 'Ship')
-  t.ok('stage', 'Ship', '--wave', '2')
   t.ok('stage', 'Build', '--wave', '1')
+  assert.deepEqual([t.w(1).stage, t.w(2).stage, t.w(3).stage], ['Build', 'Review', 'Plan'])
 })
 
 test('a wave back in Build for review fixes counts as built, so the next wave may start', () => {

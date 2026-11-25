@@ -51,7 +51,7 @@ const COMMANDS = 'start status stage set task req ask answer question approval l
 const USAGE = `lcw commands: ${COMMANDS}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
 In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked, charter.md written, no wave queued and every open wave built (in Review, back in Build from it, or in Ship); a round entered with a wave short of Ship is an early one, which status shows and which cannot end the sweep; with waves open it makes .claude/worktrees/<name>-latest, detached, holding every open wave's work (the newest wave's tip alone if they conflict), which status prints as latest work while the round runs. worktree makes only the branch lcw/<name>; the session stays in the main checkout and each wave gets its own worktree.
-hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>), once that wave has reached Review and while fewer than two waves are in Plan, Build or Review (a wave sent back from Ship waits on the same cap); it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, leaving out a wave at merging, whose head is settled; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first; stage Review, stage Ship and the final checks need all of them, and stage Ship, from any stage, needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round, and wave round <r> sets it. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged; merge <wave> --wait <minutes> first waits, up to that many minutes (at most 60), for the pull request's GitHub checks, and merges only once every one has passed or been skipped, with at least one passed; it ends, merging nothing, at the first failed check, and when the run is paused, stopped or finished. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
+hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>); beside a wave still being planned or built it is cut from where that wave was cut, holds none of its work, and takes it in once it is built; any number of waves may be open at once; it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, leaving out a wave at merging, whose head is settled; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first, once the wave before it is built; stage Review, stage Ship and the final checks need all of them, and stage Ship, from any stage, needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round, and wave round <r> sets it. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged; merge <wave> --wait <minutes> first waits, up to that many minutes (at most 60), for the pull request's GitHub checks, and merges only once every one has passed or been skipped, with at least one passed; it ends, merging nothing, at the first failed check, and when the run is paused, stopped or finished. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
 --wave <n> names the wave that stage Plan|Build|Review|Ship, task, req, set plan.* or milestone, ledger, ask and wave round|step|take|defer|shipped act on. Without it they act on the open wave whose worktree lcw runs in, else the only open wave; with several open they refuse, but ledger writes the run's ledger only and ask is the run's own, as they are during a hunt. ask --wave marks the wave waiting until its asks are answered. ledger --wave may name a shipped wave, and set takes --wave with any key. A flag and its value may be one word, --wave=<n>.
 req <id> rename "<name>" and req <id> drop change a requirement when what is built changes; in a sweep's running wave req <id> park takes a fix out of the wave for the person, and req <id> partial marks a fix that was built but leaves the charter's done line unmet: it is not counted as fixed. req <id> drop --wave <n> drops a fix a shipped wave parked.
 approval ["<Go label>" ...] [--meaning "<what Go builds>"] [--recommend <n>] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. With several Go labels, --recommend <n> is needed: the one Claude recommends, which the box draws in pink. Asked again, it replaces the last; a new stage clears it.
@@ -182,6 +182,12 @@ function waveOf(s, { several = 'refuse', shipped = false } = {}) {
 const BUSY = ['Plan', 'Build', 'Review']
 // a wave back in Build for its review's fixes has been built once: its round shows it reached Review
 const isBuilt = (w) => w.stage === 'Review' || w.stage === 'Ship' || (w.stage === 'Build' && !!w.round)
+/** The open waves at the end of the line that are still being planned or built, oldest first. */
+function unbuiltTail(open) {
+  const tail = []
+  for (const x of [...open].reverse()) { if (x.status === 'running' && !isBuilt(x)) tail.unshift(x); else break }
+  return tail
+}
 // each step of a wave and the stage it belongs to: 'merging' means its final checks passed and it is landing
 const STEPS = { closures: 'Review', 'final checks': 'Ship', merging: 'Ship', none: true }
 /** What a wave cut after `after` takes in: that open wave's branch, or the sweep's own once that wave has shipped onto it. */
@@ -990,12 +996,12 @@ const commands = {
       if (!s.branch) fail('The sweep has no branch yet: run lcw worktree first. Nothing was changed.')
       const open = openWaves(s)
       const newest = open.at(-1)
-      if (newest?.status === 'running' && !isBuilt(newest)) fail(`Wave ${newest.n} is in ${newest.stage}; the next wave starts once it is built and in Review. Nothing was changed.`)
-      const busy = open.filter((x) => x.status === 'running' && BUSY.includes(x.stage))
-      if (busy.length >= 2) fail(`Waves ${busy.map((x) => x.n).join(' and ')} are being built or reviewed, and at most two are at once; the next wave starts once one of them holds in Ship. Nothing was changed.`)
       const next = w.waves.find((x) => x.status === 'queued') || fail('No wave is queued: queue one with lcw wave add. Nothing was changed.')
       const after = newest?.branch ?? s.branch
-      const from = takesFrom(s, after)
+      // beside waves still being planned or built, the new wave is cut from where the first of them was cut: half-built work stays out of it until it takes them in
+      const beside = unbuiltTail(open)
+      if (beside.length && !beside[0].base) fail(`Wave ${beside[0].n} is in ${beside[0].stage} and has no recorded start, so no wave can be cut beside it; the next wave starts once it is built and in Review. Nothing was changed.`)
+      const from = beside.length ? beside[0].base : takesFrom(s, after)
       const branch = `${s.branch}-wave-${next.n}`
       const wanted = `${s.repoRoot}/.claude/worktrees/${s.name}-wave-${next.n}`
       let worktree
@@ -1004,7 +1010,8 @@ const commands = {
       const dir = waveDir(run.dir, next.n)
       fs.mkdirSync(dir, { recursive: true })
       for (const f of ['plan.md', 'ledger.md']) if (!fs.existsSync(`${dir}/${f}`)) fs.writeFileSync(`${dir}/${f}`, '')
-      change(run, `wave ${next.n} started in ${worktree} on ${branch} from ${after} at ${base}`, (st) => {
+      const besideNames = `wave${beside.length > 1 ? 's' : ''} ${beside.map((x) => x.n).join(', ')}`
+      change(run, `wave ${next.n} started in ${worktree} on ${branch} ${beside.length ? `beside ${besideNames}, still being built, cut from where wave ${beside[0].n} was cut` : `from ${after}`} at ${base}`, (st) => {
         Object.assign(next, {
           status: 'running', branch, stage: 'Plan', stageSince: now(), step: null, round: 0, waiting: false,
           tasks: [], requirements: [], plan: freshPlan(), milestone: null, worktree, after, base, checked: null,
@@ -1012,7 +1019,8 @@ const commands = {
         Object.assign(st, { tasks: [], requirements: [], plan: freshPlan(), milestone: null })
         enterStage(st, 'Plan')
       }, next)
-      return out(`wave ${next.n} on ${branch}`, `worktree: ${worktree}`, `plan: ${dir}/plan.md`, ...changedFiles(s, open), ...unusedAnswers(s))
+      const besideLines = beside.length ? [`beside ${besideNames}, still being built: this wave holds none of ${beside.length > 1 ? 'their' : 'its'} work, and takes it in once ${beside.length > 1 ? 'each is' : 'it is'} built (lcw wave take --wave ${next.n}). The list below shows only what ${beside.length > 1 ? 'they have' : 'it has'} changed so far: ${beside.length > 1 ? 'their plans name' : 'its plan names'} the files ${beside.length > 1 ? 'their' : 'its'} tasks own, which this wave's fixes must not need either.`] : []
+      return out(`wave ${next.n} on ${branch}`, `worktree: ${worktree}`, `plan: ${dir}/plan.md`, ...besideLines, ...changedFiles(s, open), ...unusedAnswers(s))
     }
     if (sub === 'files') return out(...changedFiles(s, openWaves(s)))
     if (sub === 'round') {
@@ -1073,6 +1081,7 @@ const commands = {
       if (running.length) fail(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running, and a worker may be committing in ${wt}; wait for ${running.length > 1 ? 'them' : 'it'} to report, then lcw wave take --wave ${wave.n} again. Nothing was changed.`)
       // only the wave just before, once it holds everything beneath it, so each review range's merge base stays that wave's tip
       const prev = openWaves(s).filter((x) => x.n < wave.n && x.status === 'running').at(-1)
+      if (prev && !isBuilt(prev)) fail(`Wave ${prev.n} is still being ${prev.stage === 'Plan' ? 'planned' : 'built'}, and wave ${wave.n} was started beside it: it takes wave ${prev.n} in once that wave is built and in Review, and needs nothing from it until then. Nothing was changed.`)
       const behind = lagging(s, wave)
       if (behind) fail(`${behind.why}, and a wave takes in only the wave before it, oldest first. ${behind.how}, then lcw wave take --wave ${wave.n} again. Nothing was changed.`)
       const from = prev?.branch ?? s.branch
@@ -1378,10 +1387,6 @@ function waveStage(run, wave, stage) {
     const open = (wave.requirements ?? []).filter((r) => r.status === 'todo' || r.status === 'failing')
     if (open.length) fail(`Wave ${wave.n} cannot enter Ship with ${open.map((r) => `${r.id} ${r.status}`).join(', ')}: record each fix as it stands, lcw req <id> pass|partial --wave ${wave.n}, or take it out with lcw req <id> park|drop --wave ${wave.n}. Nothing was changed.`)
   }
-  if (wave.stage === 'Ship' && BUSY.includes(stage)) {
-    const busy = openWaves(run.state).filter((x) => x !== wave && x.status === 'running' && BUSY.includes(x.stage))
-    if (busy.length >= 2) fail(`Waves ${busy.map((x) => `${x.n} (${x.stage})`).join(' and ')} are being built or reviewed, and at most two are at once; wave ${wave.n} goes back to ${stage} once one of them holds in Ship. Nothing was changed.`)
-  }
   // the round running now may read code this wave's review will change again, as a round started with it short of Ship would
   const sw = run.state.sweep
   const early = run.state.stage === 'Hunt' && wave.stage === 'Ship' && BUSY.includes(stage) && !(sw.early ?? []).includes(wave.n)
@@ -1401,8 +1406,13 @@ function waveStage(run, wave, stage) {
   out(`wave ${wave.n} stage ${stage}`, ...(early ? [early] : []))
 }
 
-/** The branches a wave must hold, directly or through the wave before it: the sweep's own, which holds the shipped waves, and every earlier open wave's. */
-const takeIns = (s, w) => [s.branch, ...openWaves(s).filter((x) => x.n < w.n && x.status === 'running').map((x) => x.branch)]
+/** The open wave just before w, if it is still being planned or built: w was started beside it and takes nothing in until it is built. */
+const unbuiltBefore = (s, w) => { const prev = openWaves(s).filter((x) => x.n < w.n && x.status === 'running').at(-1); return prev && !isBuilt(prev) ? prev : null }
+/**
+ * The branches a wave must hold, directly or through the wave before it: the sweep's own, which holds the shipped waves, and every earlier
+ * open wave's. None while the wave before it is unbuilt: everything beneath reaches it through that wave, once it is built.
+ */
+const takeIns = (s, w) => (unbuiltBefore(s, w) ? [] : [s.branch, ...openWaves(s).filter((x) => x.n < w.n && x.status === 'running').map((x) => x.branch)])
 const contains = (s, from, branch) => { try { git(s.repoRoot, 'merge-base', '--is-ancestor', `refs/heads/${from}`, `refs/heads/${branch}`); return true } catch { return false } }
 const missingFrom = (s, w) => takeIns(s, w).filter((b) => !contains(s, b, w.branch))
 /** Whether a wave's branch holds all the work now on the branches it takes in. */
@@ -1411,7 +1421,7 @@ const hasTakenIn = (s, w) => missingFrom(s, w).length === 0
 function lagging(s, w) {
   const earlier = openWaves(s).filter((x) => x.n < w.n && x.status === 'running')
   const prev = earlier.at(-1)
-  if (!prev || hasTakenIn(s, prev)) return null
+  if (!prev || !isBuilt(prev) || hasTakenIn(s, prev)) return null
   const first = earlier.find((x) => !hasTakenIn(s, x))
   return { why: `Wave ${prev.n}, the wave before wave ${w.n}, has not taken in the latest of ${missingFrom(s, prev).join(', ')}`, how: `Run lcw wave take --wave ${first.n} first${first === prev ? '' : ', then each later wave in turn'}` }
 }
