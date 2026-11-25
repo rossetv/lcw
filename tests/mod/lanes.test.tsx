@@ -39,17 +39,17 @@ function engine(on: any, agents: unknown[], logs: Record<string, string> = {}) {
   on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
   on('agent.list', () => ({ value: agents }))
   on('config.list', () => ({ value: [] }))
-  on('classic.PostToolUse', () => ({}))
+  on('agent.spawn', (_: any, e: any) => ({ model: 'sonnet', agentId: e.tool_use_id.replace('toolu_', '') }))
   return { advance: (ms: number) => clock.advance(ms), reads }
 }
 
 // An agent's transcript as it starts: the message that launched it, then its work.
 const log = (id: string, brief: string) => ({ [`/t/s1/subagents/agent-${id}.jsonl`]: JSON.stringify({ parentUuid: null, agentId: id, type: 'user', message: { role: 'user', content: brief } }) + '\n{"type":"assistant"}\n' })
 
-// The launch of an agent as the mod is told of it: what the Agent tool was given, and the id it answered.
-const launch = ($: any, id: string, description: string, prompt: string, from?: string) => $.classic.PostToolUse({
-  tool_name: 'Agent', tool_input: { description, prompt, subagent_type: 'lcw:worker' }, tool_response: { status: 'async_launched', agentId: id },
-  tool_use_id: 'toolu_' + id, session_id: 's1', ...(from ? { agent_id: from } : {}),
+// The launch of an agent as the mod is told of it: what the Agent tool was given, and the id the launch answered.
+const launch = ($: any, id: string, description: string, prompt: string, from?: string, resume?: object) => $.agent.spawn({
+  tool_use_id: 'toolu_' + id, prompt, description, subagentType: 'lcw:worker', background: true, fork: false,
+  ...(from ? { parentAgentId: from } : {}), ...(resume ? { resume } : {}),
 } as any)
 const viewed = async (band: any) => (await band.findAll({ type: 'Button' })).map((b: any) => b.key).filter((k: string | undefined) => k?.startsWith('view:'))
 
@@ -75,6 +75,32 @@ test('an agent that one of a wave\'s agents starts is listed under that wave too
   await launch($, 'p1', 'Find where the export is built', 'Which file builds the export? Read and report.', 'a1')
   await w.advance(2100)
   expect(await viewed(band)).toEqual(['view:p1', 'view:a1', 'view:h1'])
+  await band.unmount()
+})
+
+test('a resumed agent stays under the wave it was launched for', async ($, on) => {
+  const w = engine(on, [agent('r1', 'Build the importer'), agent('r2', 'Review the export fix')])
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await launch($, 'r2', 'Review the export fix', 'Check the fix, then record it: lcw req F1 pass --wave 1')
+  await launch($, 'r1', 'Build the importer', 'Work only in /repo/.claude/worktrees/tidy-wave-2')
+  await launch($, 'r1', 'Build the importer', 'Check the fix, then record it: lcw req F1 pass --wave 1', undefined, { agentId: 'r1' })
+  await w.advance(2100)
+  expect(await viewed(band)).toEqual(['view:r2', 'view:r1'])
+  await band.unmount()
+})
+
+test('a launch whose brief names no wave keeps none, so the transcript is still asked', async ($, on) => {
+  const agents: unknown[] = []
+  const w = engine(on, agents, log('n1', 'Work only in /repo/.claude/worktrees/tidy-wave-2'))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await launch($, 'n2', 'Review the export fix', 'Check the fix, then record it: lcw req F1 pass --wave 1')
+  await launch($, 'n3', 'Build the importer', 'Work only in /repo/.claude/worktrees/tidy-wave-2')
+  await launch($, 'n1', 'Fix the toast notes', 'Fix the notes that toasts show.')
+  agents.push(agent('n1', 'Fix the toast notes'), agent('n2', 'Review the export fix'), agent('n3', 'Build the importer'))
+  await w.advance(2100)
+  expect(await viewed(band)).toEqual(['view:n2', 'view:n1', 'view:n3'])
   await band.unmount()
 })
 

@@ -18,7 +18,7 @@ import type { QuotaView } from '../lib/quota.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, completionPrompt, countsTurn, compactInstructions, cardMotion, cardPace, gateFor, isShown, layout, measureStep,
   longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
-  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, launchedId, briefOf,
+  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, briefOf,
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
@@ -195,12 +195,10 @@ function keepNotices($: EngineInterface) {
 // An agent's brief says which wave it works for, and only its launch shows the brief: the wave is kept from there, by
 // the id the launch answered. An agent that one of a wave's agents starts works for that wave too.
 const MAX_WAVES_KEPT = 400
-function noteLaunch($: EngineInterface, e: { tool_name?: string; tool_input?: unknown; tool_response?: unknown; agent_id?: string }) {
-  if ((e.tool_name !== 'Agent' && e.tool_name !== 'Task') || !S.run?.state?.sweep) return
-  const id = launchedId(e.tool_response)
-  const input = (e.tool_input ?? {}) as { prompt?: unknown; description?: unknown }
-  const wave = waveOfBrief(input.prompt, input.description, S.run.state.name) ?? (e.agent_id ? S.waves[e.agent_id] : undefined)
-  if (id && wave != null) keepWave($, id, wave)
+function noteLaunch($: EngineInterface, e: { prompt?: unknown; description?: unknown; parentAgentId?: string; resume?: unknown }, id: unknown) {
+  if (e.resume || typeof id !== 'string' || !id || S.waves[id] !== undefined || !S.run?.state?.sweep) return
+  const wave = waveOfBrief(e.prompt, e.description, S.run.state.name) ?? (e.parentAgentId ? S.waves[e.parentAgentId] : undefined)
+  if (wave != null) keepWave($, id, wave)
 }
 
 function keepWave($: EngineInterface, id: string, wave: number) {
@@ -1546,6 +1544,13 @@ export const register: Register = (on) => {
       if (await readText($, file)) await write($, file, '')
       if (file === S.after.file) S.after.up = false
     })
+    return result
+  })
+
+  // A launch never waits on this and is never changed by it: the wave is noted from the answer, whatever else beneath says.
+  on('agent.spawn', async ($, e, next) => {
+    const result = await next(e)
+    try { noteLaunch($, e as any, (result as any)?.agentId) } catch {}
     return result
   })
 
