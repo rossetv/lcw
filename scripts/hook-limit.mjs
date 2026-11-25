@@ -54,6 +54,11 @@ try {
       let won = false
       try { fs.writeFileSync(told, JSON.stringify({ payg: true }), { flag: 'wx' }); won = true } catch {}
       if (won) {
+        for (const id of ids.slice(1)) { // the other names record it too, so a hook that sees only one of them stays quiet
+          try { fs.writeFileSync(toldFile(home(), id), JSON.stringify({ payg: true })) } catch {}
+          const f = sessionFile(home(), id)
+          writeJson(f, { ...readJson(f), toldPayg: true })
+        }
         writeJson(file, { ...session, toldPayg: true })
         cli = lcwCommand(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'))
       }

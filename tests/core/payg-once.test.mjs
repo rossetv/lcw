@@ -67,3 +67,18 @@ test('a call that is one of the LCW commands carries the note once, and a later 
   assert.doesNotMatch(go('node /p/scripts/lcw.mjs status'), NOTE)
   assert.doesNotMatch(go('npm test'), NOTE)
 })
+
+const named = (repo, event) => JSON.stringify({ session_id: 's1', transcript_path: '/p/t1.jsonl', cwd: repo, hook_event_name: event, ...(event === 'PostToolUse' ? { tool_name: 'Bash', tool_input: { command: 'npm test' } } : {}) })
+
+test('a session with two names gives the note once and records it under both', async () => {
+  const f = setup()
+  const rs = await Promise.all(Array.from({ length: 4 }, () => start(f, named(f.repo, 'PostToolUse'))))
+  assert.equal(told(rs), 1)
+  for (const id of ['s1', 't1']) assert.equal(readJson(toldFile(f.home, id))?.payg, true, id)
+})
+
+test('a later hook that sees only the session id gives no note after the note went out under two names', async () => {
+  const f = setup()
+  assert.equal(told([await start(f, named(f.repo, 'PostToolUse'))]), 1)
+  assert.equal(told([await start(f, tool(f.repo)), await start(f, prompt(f.repo))]), 0)
+})
