@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="830" height="640" viewBox="0 0 830 640" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    .bg { fill: #ffffff; }
+    .frame { fill: #f6f8fa; stroke: #d1d9e0; }
+    .rule { stroke: #d1d9e0; }
+    .chip { fill: #ffffff; stroke: #d1d9e0; }
+    .stop { fill: #fff8c5; stroke: #d4a72c; }
+    .bar { fill: #bf8700; }
+    .t { fill: #1f2328; }
+    .m { fill: #59636e; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; }
+      .frame { fill: #151b23; stroke: #3d444d; }
+      .rule { stroke: #3d444d; }
+      .chip { fill: #0d1117; stroke: #3d444d; }
+      .stop { fill: #272115; stroke: #9e6a03; }
+      .bar { fill: #d29922; }
+      .t { fill: #e6edf3; }
+      .m { fill: #9198a1; }
+    }
+  </style>
+  <rect class="bg" width="830" height="640"/>
+
+  <text class="t" x="20" y="34" font-size="17" font-weight="600">At its usage mark, the session stops after its first tool call</text>
+  <text class="m" x="20" y="56" font-size="13">A live print-mode session: what Claude received and what it said, from the session's event stream</text>
+
+  <rect class="frame" x="20.5" y="74.5" width="789" height="514" rx="8"/>
+
+  <!-- the ask -->
+  <text class="m" x="40" y="104" font-size="13">Asked, in short</text>
+  <text class="t" x="196" y="104" font-size="13">Run three commands, one Bash call each:</text>
+  <text class="t mono" x="196" y="125" font-size="13" textLength="54.6" lengthAdjust="spacingAndGlyphs">sleep 5</text>
+  <text class="m" x="251" y="125" font-size="13">,</text>
+  <text class="t mono" x="261" y="125" font-size="13" textLength="62.4" lengthAdjust="spacingAndGlyphs">echo one</text>
+  <text class="m" x="331" y="125" font-size="13">and</text>
+  <text class="t mono" x="359" y="125" font-size="13" textLength="62.4" lengthAdjust="spacingAndGlyphs">echo two</text>
+  <line class="rule" x1="36" y1="142.5" x2="794" y2="142.5"/>
+
+  <!-- the tool call -->
+  <text class="m" x="40" y="170" font-size="13">Claude called</text>
+  <rect class="chip" x="190.5" y="154.5" width="482" height="24" rx="5"/>
+  <text class="t mono" x="198" y="171" font-size="12" textLength="468" lengthAdjust="spacingAndGlyphs">Bash {"command":"sleep 5","description":"Pause for five seconds"}</text>
+  <line class="rule" x1="36" y1="192.5" x2="794" y2="192.5"/>
+
+  <!-- the result -->
+  <text class="m" x="40" y="217" font-size="13">Tool result</text>
+  <text class="t mono" x="196" y="217" font-size="12" textLength="223.2" lengthAdjust="spacingAndGlyphs">(Bash completed with no output)</text>
+  <line class="rule" x1="36" y1="234.5" x2="794" y2="234.5"/>
+
+  <!-- the hook's context -->
+  <text class="m" x="40" y="267" font-size="13">PostToolUse hook</text>
+  <text class="m mono" x="40" y="285" font-size="12" textLength="122.4" lengthAdjust="spacingAndGlyphs">additionalContext</text>
+  <rect class="stop" x="186.5" y="248.5" width="604" height="112" rx="5"/>
+  <rect class="bar" x="186.5" y="248.5" width="3" height="112"/>
+  <text class="t" x="202" y="270" font-size="13">STOP! LCW: this session is at its usage mark ($50 spent in the last 7 days,</text>
+  <text class="t" x="202" y="289" font-size="13">mark $8). Make no further tool call for the work: end your turn now and tell</text>
+  <text class="t" x="202" y="308" font-size="13">the user. … Only the user's explicit words lift this: "run up to $X" (then run</text>
+  <text class="t" x="202" y="327" font-size="13">`lcw mark Xusd`), "run up to N%" of the weekly cap (then run `lcw mark N`), or</text>
+  <text class="t" x="202" y="346" font-size="13">"finish this regardless of the limit" (then run `lcw mark 100`).</text>
+  <line class="rule" x1="36" y1="374.5" x2="794" y2="374.5"/>
+
+  <!-- the reply -->
+  <text class="m" x="40" y="400" font-size="13">Claude replied</text>
+  <text class="t" x="196" y="400" font-size="13">I ran only the first command, `sleep 5`. It finished with no output. I did not run</text>
+  <text class="t" x="196" y="419" font-size="13">`echo one` or `echo two`.</text>
+  <text class="t" x="196" y="448" font-size="13">After `sleep 5`, an LCW hook reported that this session is at its usage mark: $50</text>
+  <text class="t" x="196" y="467" font-size="13">spent in the last 7 days against a mark of $8. The hook says to make no further tool</text>
+  <text class="t" x="196" y="486" font-size="13">calls, so I stopped.</text>
+  <text class="t" x="196" y="515" font-size="13">If you want me to finish the two `echo` commands, say one of these:</text>
+  <text class="t" x="196" y="534" font-size="13">- "run up to $X" for a dollar figure</text>
+  <text class="t" x="196" y="553" font-size="13">- "run up to N%" of your weekly cap</text>
+  <text class="t" x="196" y="572" font-size="13">- "finish this regardless of the limit"</text>
+
+  <text class="m" x="20" y="614" font-size="13">No “hook was skipped” notice appears in the session.</text>
+</svg>

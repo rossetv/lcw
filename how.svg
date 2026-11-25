@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="830" height="770" viewBox="0 0 830 770" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    .bg { fill: #ffffff; }
+    .box { fill: #f6f8fa; stroke: #8c959f; }
+    .inner { fill: #ffffff; stroke: #d1d9e0; }
+    .ln { stroke: #6e7781; fill: none; }
+    .tag { fill: #ffffff; }
+    .t { fill: #1f2328; }
+    .m { fill: #59636e; }
+    .acc { fill: #0969da; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; }
+      .box { fill: #151b23; stroke: #656c76; }
+      .inner { fill: #0d1117; stroke: #3d444d; }
+      .ln { stroke: #9198a1; }
+      .tag { fill: #0d1117; }
+      .t { fill: #e6edf3; }
+      .m { fill: #9198a1; }
+      .acc { fill: #4493f8; }
+    }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="ln" d="M1.5 1.5 L9 5 L1.5 8.5" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="830" height="770"/>
+
+  <text class="t" x="20" y="32" font-size="17" font-weight="600">How the stop after a tool call reaches Claude with no classic hook</text>
+  <text class="m" x="20" y="54" font-size="13">A label in a box's border marks what this change adds (new) or alters (changed).</text>
+
+  <!-- 1. Claude Code -->
+  <rect class="box" x="20.5" y="76.5" width="156" height="664" rx="8"/>
+  <text class="t" x="34" y="102" font-size="14" font-weight="600">Claude Code</text>
+  <rect class="inner" x="30.5" y="116.5" width="136" height="150" rx="6"/>
+  <text class="t" x="40" y="137" font-size="13" font-weight="600">security plugin</text>
+  <text class="m" x="40" y="156" font-size="12">Runs first. Sends</text>
+  <text class="m" x="40" y="172" font-size="12">every classic event</text>
+  <text class="m" x="40" y="188" font-size="12">past user plugins,</text>
+  <text class="m" x="40" y="204" font-size="12">so none reaches</text>
+  <text class="m" x="40" y="220" font-size="12">the mod. It lets</text>
+  <text class="m mono" x="40" y="237" font-size="12" textLength="79.2" lengthAdjust="spacingAndGlyphs">agent.spawn</text>
+  <text class="m" x="40" y="254" font-size="12">through.</text>
+
+  <!-- 6. PostToolUseFailure -->
+  <text class="m" x="186" y="110" font-size="12">a tool call fails</text>
+  <line class="ln" x1="177" y1="120" x2="319" y2="120" stroke-width="1.25" marker-end="url(#a)"/>
+  <rect class="box" x="320.5" y="88.5" width="220" height="64" rx="6"/>
+  <rect class="tag" x="332" y="82" width="56" height="14"/>
+  <text class="acc" x="336" y="93" font-size="12">changed</text>
+  <text class="t mono" x="334" y="112" font-size="12" textLength="165.6" lengthAdjust="spacingAndGlyphs">PostToolUseFailure hook</text>
+  <text class="t mono" x="334" y="128" font-size="12" textLength="122.4" lengthAdjust="spacingAndGlyphs">hook-activity.mjs</text>
+  <text class="m" x="334" y="144" font-size="12">back as a command hook</text>
+  <text class="m" x="548" y="112" font-size="12">failed call +1</text>
+  <line class="ln" x1="541" y1="120" x2="635" y2="120" stroke-width="1.25" marker-end="url(#a)"/>
+  <rect class="box" x="636.5" y="98.5" width="174" height="44" rx="6"/>
+  <text class="t" x="650" y="125" font-size="13">the status line's mascot</text>
+
+  <!-- 7. StopFailure -->
+  <text class="m" x="186" y="192" font-size="12">an API error</text>
+  <text class="m" x="186" y="207" font-size="12">ends the turn</text>
+  <line class="ln" x1="177" y1="216" x2="319" y2="216" stroke-width="1.25" marker-end="url(#a)"/>
+  <rect class="box" x="320.5" y="188.5" width="220" height="56" rx="6"/>
+  <rect class="tag" x="332" y="182" width="56" height="14"/>
+  <text class="acc" x="336" y="193" font-size="12">changed</text>
+  <text class="t mono" x="334" y="213" font-size="12" textLength="115.2" lengthAdjust="spacingAndGlyphs">StopFailure hook</text>
+  <text class="m" x="334" y="231" font-size="12">records the error kind</text>
+  <text class="m" x="548" y="208" font-size="12">error kind</text>
+  <line class="ln" x1="541" y1="216" x2="635" y2="216" stroke-width="1.25" marker-end="url(#a)"/>
+  <rect class="box" x="636.5" y="194.5" width="174" height="44" rx="6"/>
+  <path class="ln" d="M651 206.5 h8 l4 4 v11 h-12 z M659 206.5 v4 h4" stroke-width="1.1" stroke-linejoin="round"/>
+  <text class="t" x="671" y="221" font-size="13">activity record</text>
+
+  <!-- 8. agent.spawn, 2. the mod -->
+  <text class="t mono" x="186" y="292" font-size="12" textLength="79.2" lengthAdjust="spacingAndGlyphs">agent.spawn</text>
+  <text class="m" x="186" y="308" font-size="12">brief and new agent id</text>
+  <line class="ln" x1="177" y1="318" x2="319" y2="318" stroke-width="1.25" marker-end="url(#a)"/>
+  <text class="acc" x="186" y="336" font-size="12">changed</text>
+  <rect class="box" x="320.5" y="276.5" width="220" height="164" rx="6"/>
+  <rect class="tag" x="332" y="270" width="56" height="14"/>
+  <text class="acc" x="336" y="281" font-size="12">changed</text>
+  <text class="t" x="334" y="302" font-size="14" font-weight="600">LCW mod</text>
+  <text class="m" x="334" y="320" font-size="12">no classic handlers</text>
+  <text class="t" x="334" y="342" font-size="12">Its 1-second tick sets the</text>
+  <text class="t" x="334" y="358" font-size="12">session's marker while it is at</text>
+  <text class="t" x="334" y="374" font-size="12">its mark or a note is due.</text>
+  <text class="t" x="334" y="396" font-size="12">Notes each agent's wave for</text>
+  <text class="t" x="334" y="412" font-size="12">the card's wave lanes.</text>
+  <text class="t" x="334" y="428" font-size="12">Carries on after an API error.</text>
+
+  <!-- activity record read by the mod -->
+  <text class="m" x="552" y="318" font-size="12">error kind, read to</text>
+  <text class="m" x="552" y="334" font-size="12">retry after 1, 5, 15, 30 min</text>
+  <path class="ln" d="M723 239 V336 Q723 344 715 344 H542" stroke-width="1.25" marker-end="url(#a)"/>
+
+  <!-- 9. failure path -->
+  <line class="ln" x1="541" y1="420" x2="598" y2="420" stroke-width="1.25" stroke-dasharray="4 3" marker-end="url(#a)"/>
+  <text class="m" x="606" y="404" font-size="12">mod not running: no marker,</text>
+  <text class="m" x="606" y="420" font-size="12">so the stop comes at the</text>
+  <text class="m" x="606" y="436" font-size="12">next prompt or agent launch</text>
+
+  <!-- 3. the marker -->
+  <line class="ln" x1="430" y1="441" x2="430" y2="497" stroke-width="1.25" marker-end="url(#a)"/>
+  <text class="m" x="440" y="473" font-size="12">writes or clears</text>
+  <rect class="box" x="320.5" y="498.5" width="220" height="44" rx="6"/>
+  <rect class="tag" x="332" y="492" width="34" height="14"/>
+  <text class="acc" x="336" y="503" font-size="12">new</text>
+  <path class="ln" d="M335 510.5 h8 l4 4 v11 h-12 z M343 510.5 v4 h4" stroke-width="1.1" stroke-linejoin="round"/>
+  <text class="t mono" x="355" y="525" font-size="13" textLength="117" lengthAdjust="spacingAndGlyphs">after/&lt;session&gt;</text>
+
+  <!-- 4. the gate -->
+  <line class="ln" x1="430" y1="543" x2="430" y2="599" stroke-width="1.25" marker-end="url(#a)"/>
+  <text class="m" x="440" y="575" font-size="12">set or not</text>
+  <text class="m" x="186" y="624" font-size="12">after each tool call</text>
+  <line class="ln" x1="177" y1="634" x2="319" y2="634" stroke-width="1.25" marker-end="url(#a)"/>
+  <rect class="box" x="320.5" y="600.5" width="220" height="64" rx="6"/>
+  <rect class="tag" x="332" y="594" width="34" height="14"/>
+  <text class="acc" x="336" y="605" font-size="12">new</text>
+  <text class="t" x="334" y="626" font-size="13" font-weight="600">PostToolUse shell gate</text>
+  <text class="m" x="334" y="643" font-size="12">one shell line; starts Node</text>
+  <text class="m" x="334" y="658" font-size="12">only while a marker is set</text>
+
+  <!-- yes: 5. hook-limit.mjs -->
+  <text class="m" x="545" y="612" font-size="12">yes:</text>
+  <text class="m" x="545" y="626" font-size="12">a marker is set</text>
+  <line class="ln" x1="541" y1="634" x2="635" y2="634" stroke-width="1.25" marker-end="url(#a)"/>
+  <rect class="box" x="636.5" y="610.5" width="174" height="48" rx="6"/>
+  <text class="t mono" x="650" y="631" font-size="12" textLength="100.8" lengthAdjust="spacingAndGlyphs">hook-limit.mjs</text>
+  <text class="m" x="650" y="648" font-size="12">the Node check</text>
+
+  <!-- no -->
+  <line class="ln" x1="370" y1="665" x2="370" y2="690" stroke-width="1.25" marker-end="url(#a)"/>
+  <text class="m" x="380" y="686" font-size="12">no: exit 0, about 5 ms</text>
+
+  <!-- back to Claude Code -->
+  <path class="ln" d="M723 659 V704 Q723 712 715 712 H178" stroke-width="1.25" marker-end="url(#a)"/>
+  <text class="m" x="190" y="732" font-size="12">stop text or pay-per-token note</text>
+  <text class="m mono" x="190" y="749" font-size="12" textLength="136.8" lengthAdjust="spacingAndGlyphs">(additionalContext)</text>
+</svg>
