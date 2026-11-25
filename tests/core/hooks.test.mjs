@@ -487,13 +487,14 @@ test('the activity hook records the turn and its failed calls for the mascot, pr
     [{ hook_event_name: 'Notification', notification_type: 'idle_prompt' }, 'needs', 1], // closes only a turn still working
     [{ hook_event_name: 'Stop' }, 'done', 1],
     [{ hook_event_name: 'UserPromptSubmit' }, 'working', 0], // a new turn starts clean
-    [{ hook_event_name: 'StopFailure' }, 'failed', 0],
+    [{ hook_event_name: 'StopFailure', error: 'server_error' }, 'failed', 0],
   ]) {
     const r = fire(event)
     assert.equal(r.code, 0)
     assert.equal(r.out + r.err, '', 'what a hook prints on a prompt goes into the conversation')
     assert.deepEqual([record().state, record().fails], [state, fails], JSON.stringify(event))
   }
+  assert.equal(record().error, 'server_error', 'the error kind of the failed turn')
   assert.equal(fire({ hook_event_name: 'SessionEnd' }).code, 0)
   assert.ok(!fs.existsSync(`${home}/activity/a1.json`), 'a session that has ended leaves no record behind')
   assert.equal(run(ACTIVITY_HOOK, [], { home, input: 'not json' }).code, 0)
