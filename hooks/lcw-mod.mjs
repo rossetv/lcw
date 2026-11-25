@@ -362,6 +362,26 @@ export function reopenDue(state, gate, aliveAt, now) {
 }
 
 /**
+ * The wave of a sweep an agent works for, read from its brief, or null. A brief names its wave's worktree
+ * (<name>-wave-<n>), gives its lcw commands --wave <n>, or points at the wave's records (waves/<n>/, wave<n>/); failing
+ * those, the description or the brief's opening words may say "wave <n>". name is the sweep's.
+ */
+export function waveOfBrief(prompt, description, name) {
+  const brief = String(prompt ?? '')
+  const tree = name ? new RegExp(String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-wave-(\\d+)') : null
+  const found = (tree && tree.exec(brief)) ?? /--wave[ =](\d+)/.exec(brief) ?? /\/waves\/(\d+)\//.exec(brief) ?? /\/wave-?(\d+)\//.exec(brief)
+    ?? /\bwave (\d+)\b/i.exec(String(description ?? '')) ?? /\bwave (\d+)\b/i.exec(brief.slice(0, 160))
+  return found ? Number(found[1]) : null
+}
+
+/** The id of the agent an Agent tool call started, from what the call answered: an object with agentId, or text that names it. */
+export function launchedId(response) {
+  if (response && typeof response === 'object' && typeof response.agentId === 'string') return response.agentId
+  const text = typeof response === 'string' ? response : Array.isArray(response) ? response.map((b) => b?.text ?? '').join('\n') : ''
+  return /\bagentId: ([\w-]+)/.exec(text)?.[1] ?? null
+}
+
+/**
  * usage.json from a session.measure reading; null when it has no weekly figure. seen is when the session last spoke (its
  * transcript's time), left out when not known: the event also fires as the five-hour window moves in an idle session,
  * whose weekly figure is then as old as its last reply.

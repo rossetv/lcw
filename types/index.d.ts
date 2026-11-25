@@ -11,6 +11,7 @@ declare module 'claude-code' {
       repliedAt: Shaped<number>
       told: Shaped<Record<string, 1>>
       nudged: Shaped<LcwNudged>
+      waves: Shaped<Record<string, number>>
       completion: Shaped<LcwCompletion>
       carry: Shaped<{ session: string; carry: LcwCarry } | null>
       owed: Shaped<{ session: string; runDir: string; text: string } | null>

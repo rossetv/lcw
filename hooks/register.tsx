@@ -18,7 +18,7 @@ import type { QuotaView } from '../lib/quota.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, completionPrompt, countsTurn, compactInstructions, cardMotion, cardPace, gateFor, isShown, layout, measureStep,
   longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
-  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity,
+  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, launchedId,
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
@@ -42,6 +42,7 @@ const keptDismissed = atom({ plugin: 'lcw', key: 'dismissed' } as const, [], { s
 const keptReplied = atom({ plugin: 'lcw', key: 'repliedAt' } as const, 0, { shape: KEPT })
 const keptTold = atom({ plugin: 'lcw', key: 'told' } as const, {}, { shape: KEPT })
 const keptNudged = atom({ plugin: 'lcw', key: 'nudged' } as const, {}, { shape: KEPT })
+const keptWaves = atom({ plugin: 'lcw', key: 'waves' } as const, {}, { shape: KEPT })
 const keptCompletion = atom({ plugin: 'lcw', key: 'completion' } as const, {}, { shape: KEPT })
 const keptCarry = atom({ plugin: 'lcw', key: 'carry' } as const, null, { shape: KEPT })
 const keptOwed = atom({ plugin: 'lcw', key: 'owed' } as const, null, { shape: KEPT })
@@ -56,6 +57,8 @@ const S = {
   agents: [] as CardAgent[],
   seen: {} as Seen,
   nudged: {} as Nudged,
+  // The wave each agent of a sweep works for, by its id, kept from its launch: the card puts it under that wave's lane.
+  waves: {} as Record<string, number>,
   told: {} as Told,
   quiet: null as { quiet: number; stalled: number } | null,
   totals: {} as Partial<Totals>,
@@ -177,6 +180,24 @@ function keepNotices($: EngineInterface) {
   if (changed('nudged', nudged)) void update($, keptNudged, () => nudged).catch(unkept('nudged'))
 }
 
+// An agent's brief says which wave it works for, and only its launch shows the brief: the wave is kept from there, by
+// the id the launch answered. An agent that one of a wave's agents starts works for that wave too.
+const MAX_WAVES_KEPT = 400
+function noteLaunch($: EngineInterface, e: { tool_name?: string; tool_input?: unknown; tool_response?: unknown; agent_id?: string }) {
+  if ((e.tool_name !== 'Agent' && e.tool_name !== 'Task') || !S.run?.state?.sweep) return
+  const id = launchedId(e.tool_response)
+  const input = (e.tool_input ?? {}) as { prompt?: unknown; description?: unknown }
+  const wave = waveOfBrief(input.prompt, input.description, S.run.state.name) ?? (e.agent_id ? S.waves[e.agent_id] : undefined)
+  if (!id || wave == null || S.waves[id] === wave) return
+  const live = new Set(S.agents.map((a) => a.id))
+  // Past a few hundred launches the agents long gone are forgotten.
+  const kept = Object.keys(S.waves).length < MAX_WAVES_KEPT ? S.waves : Object.fromEntries(Object.entries(S.waves).filter(([k]) => live.has(k)))
+  const waves = { ...kept, [id]: wave }
+  S.waves = waves
+  S.dirty = true
+  if (changed('waves', waves)) void update($, keptWaves, () => waves).catch(unkept('waves'))
+}
+
 function setCarry($: EngineInterface, carry: Carry | null) {
   S.carry = carry
   keepCarry($)
@@ -203,6 +224,7 @@ async function restore($: EngineInterface) {
     const [dismissed, repliedAt, told, nudged, carry, session, completion, owed] = await Promise.all([
       read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(), read($, keptCompletion), read($, keptOwed),
     ])
+    S.waves = { ...(await read($, keptWaves)), ...S.waves }
     for (const k of dismissed) S.banner.dismissed.add(k)
     S.repliedAt = Math.max(S.repliedAt, repliedAt)
     S.told = { ...told, ...S.told }
@@ -608,7 +630,9 @@ async function pollAgents($: EngineInterface) {
   const list = await $.agent.list()
   const now = await $.clock.now()
   const tracked = trackAgents(list, S.seen, now)
-  S.agents = tracked.agents
+  // An agent whose launch this code did not see may still say its wave in its description.
+  const sweep = run.state?.sweep ? run.state.name : null
+  S.agents = sweep ? tracked.agents.map((a) => ({ ...a, wave: S.waves[a.id] ?? waveOfBrief('', a.description, sweep) ?? undefined })) : tracked.agents
   S.seen = tracked.seen
   noteCard(now)
   // The mascot beside the status rows shows trouble with agents. It cannot ask the mod, so the count of quiet
@@ -1343,6 +1367,7 @@ export const register: Register = (on) => {
   on('classic.PostToolUse', async ($, e, next) => {
     let texts: string[] = []
     try { if (!e.agent_id) texts = await afterTool($, e.tool_input && (e.tool_input as any).command) } catch {}
+    try { noteLaunch($, e as any) } catch {}
     // Another plugin's hook that fails beneath must not take the stop at the mark with it.
     const result = await next(e).catch(() => ({} as Awaited<ReturnType<typeof next>>))
     return texts.length ? { ...result, additionalContext: [...(result?.additionalContext ?? []), texts.join('\n')] } : result
