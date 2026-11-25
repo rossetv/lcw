@@ -193,10 +193,11 @@ test('awake holds only for a Claude Code process on record, not any live process
   } finally { other.kill(); claude.kill() }
 })
 
-test('health longer than the card shows is saved, and the reply says to say it shorter', () => {
+test('health that is longer than the card shows, or names waves by number, is saved and the reply says what to say instead', () => {
   const t = started()
-  const long = 'wave 1 in its final checks; wave 2 fixing the export tests; wave 3 planning the importer; wave 4 queued'
-  assert.match(t.cli('set', `health=${long}`).out, /cuts it at about 80/)
+  const long = 'The importer is built, but its review found the progress bar wrong on nine points, which are being fixed now, one by one. Live next: the importer, then exports by email, then the settings pages.'
+  assert.match(t.cli('set', `health=${long}`).out, /cuts it at about 160/)
   assert.equal(t.state().health, long)
-  assert.doesNotMatch(t.cli('set', 'health=on track').out, /cuts it/)
+  assert.match(t.cli('set', 'health=waves 4 and 5 finish review; then the screens of 6').out, /names waves by number.*what the card cannot/)
+  assert.equal(t.cli('set', 'health=The importer is in review. Live next: exports by email.').out.trim(), 'set health')
 })

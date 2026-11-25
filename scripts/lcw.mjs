@@ -38,8 +38,8 @@ const MUTATING = ['stage', 'set', 'task', 'req', 'ask', 'answer', 'question', 'a
 const BY_ID = ['take', 'abandon']
 // a run no session has shown for this long is no longer open anywhere
 const SHOWN_WITHIN_MS = 15 * 60000
-// What the card has room for after "running" at the usual widths.
-const HEALTH_CELLS = 80
+// What the card's two rows have room for after "running" at the usual widths.
+const HEALTH_CELLS = 160
 const STAGES = ['Brainstorm', 'Spec', 'Plan', 'Build', 'Review', 'Ship']
 const SWEEP_STAGES = ['Charter', 'Hunt', 'Plan', 'Build', 'Review', 'Ship']
 const PROTECTED = ['id', 'version', 'tasks', 'asks', 'requirements', 'driver', 'approval', 'shape', 'questions']
@@ -511,7 +511,13 @@ const commands = {
     save(run.paths, run.state)
     out(`set ${pairs.map(([k]) => k).join(', ')}`)
     const health = pairs.find(([k]) => k === 'health')?.[1]
-    if ([...String(health ?? '')].length > HEALTH_CELLS) out(`health is ${[...String(health)].length} characters and the card cuts it at about ${HEALTH_CELLS}. Say it again as one short sentence: where the run stands and what comes next. The card already shows each wave's stage and tasks.`)
+    if (health !== undefined) {
+      // the words are for the person, who reads every wave's stage and tasks off the card already
+      const cells = [...String(health)].length
+      const faults = [cells > HEALTH_CELLS && `is ${cells} characters, and the card cuts it at about ${HEALTH_CELLS}`,
+        /\bwaves? \d/i.test(String(health)) && 'names waves by number, which the card already shows with their stages and tasks'].filter(Boolean)
+      if (faults.length) out(`health ${faults.join('; it ')}. Set it again as one or two short sentences that say what the card cannot: what the work is in the person's words, what is holding it up or what a review found, what goes live next, and what is coming their way.`)
+    }
   },
 
   task() { listItem('task', 'tasks', ['todo', 'running', 'done', 'parked', ...(isSweep(need().state) ? ['dropped'] : [])],(id, title) => ({ id, title, status: 'todo', model: flags.model ?? null, effort: flags.effort ?? null })) },

@@ -36,8 +36,8 @@ function rows(t) {
   const card = renderCard(buildView({ state: t.state(), now: NOW }), { width: 115 })
   return strip(toAnsi(card, 'dark', 115)).split('\n').map((l) => l.trimEnd())
 }
-const lane = (r, n) => r.find((l) => l.startsWith(`wave ${n} `))
-const heading = (r) => r.find((l) => l.startsWith('waves '))
+const lane = (r, n) => r.find((l) => new RegExp(`^[▾▸] wave ${n} `).test(l))
+const heading = (r) => r.find((l) => l.startsWith('  waves '))
 
 test('the state the cli writes for two open waves is drawn as a lane for each, with the figure each wave is at', () => {
   const t = hunting()
@@ -65,7 +65,7 @@ test('the state the cli writes for two open waves is drawn as a lane for each, w
   let r = rows(t)
   assert.match(heading(r), /Ship {4}▰▰▱ {2}1 queued/)
   assert.match(heading(r), /Build.*Review/, 'both stages are marked')
-  assert.equal(r.filter((l) => /^wave \d /.test(l)).length, 2, 'one lane for each open wave')
+  assert.equal(r.filter((l) => /^[▾▸] wave \d /.test(l)).length, 2, 'one lane for each open wave')
   assert.match(lane(r, 1), /3 of 5 fixes pass · 1 failing · round 2/)
   assert.match(lane(r, 2), /2 of 4 tasks done · 1 running/)
   assert.equal(r.length, 3 + 2, 'three rows and one for each open wave')
