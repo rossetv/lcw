@@ -39,7 +39,7 @@ function build(row) {
     put(quotaFile(home), { v: 1, enabled: true, sourceId: SELECTION.sourceId, revision: 'r1', endpoint: SELECTION.endpoint, command: 'adapter', lastAttemptAt: NOW, cache: { revision: 'r1', requestId: 'q1', attemptedAt, completedAt: attemptedAt, result } })
   }
   const saved = Object.fromEntries(Object.keys(sessions).map((id) => [id, fs.readFileSync(sessionFile(home, id), 'utf8')]))
-  const reset = () => { for (const [id, text] of Object.entries(saved)) fs.writeFileSync(sessionFile(home, id), text) }
+  const reset = () => { fs.rmSync(`${home}/told`, { recursive: true, force: true }); for (const [id, text] of Object.entries(saved)) fs.writeFileSync(sessionFile(home, id), text) }
   return { home, repo, reset }
 }
 

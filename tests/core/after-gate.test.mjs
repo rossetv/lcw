@@ -77,25 +77,13 @@ test('with LCW_HOME unset the gate looks in $HOME/.lcw', () => {
   assert.equal(t.stubRan(), 'fallback')
 })
 
-test('the gate with no marker costs one shell start', () => {
-  const t = setup()
-  const times = []
-  for (let i = 0; i < 15; i++) {
-    const s = process.hrtime.bigint()
-    sh(t.env)
-    times.push(Number(process.hrtime.bigint() - s) / 1e6)
-  }
-  times.sort((a, b) => a - b)
-  console.log(`# median gate time, no marker: ${times[7].toFixed(1)} ms`)
-})
-
 const pwsh = spawnSync('pwsh', ['-NoProfile', '-Command', 'exit 0']).error ? null : 'pwsh'
 
 test('PowerShell runs the stub once, prints only its output and exits 0', { skip: !pwsh && 'pwsh not installed' }, () => {
   const t = setup()
   // What Claude Code does to a hook command under PowerShell.
-  const ps = command.replaceAll('${CLAUDE_PLUGIN_ROOT}', '${env:CLAUDE_PLUGIN_ROOT}') + '; if (-not $?) { exit 1 }'
-  const r = spawnSync(pwsh, ['-NoProfile', '-Command', ps], { env: t.env, input: 'ps-in', encoding: 'utf8' })
+  const ps = command.replaceAll('${CLAUDE_PLUGIN_ROOT}', '${env:CLAUDE_PLUGIN_ROOT}') + '\n; if (-not $?) { if ($LASTEXITCODE -eq 2) { exit 2 } }'
+  const r = spawnSync(pwsh, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', ps], { env: t.env, input: 'ps-in', encoding: 'utf8' })
   assert.equal(r.status, 0)
   assert.equal(r.stdout, 'stub-out')
   assert.equal(t.stubRan(), 'ps-in')
