@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
+import { test } from './kit'
 import { hex } from '../../lib/theme.mjs'
 
 // The card is redrawn when what it shows changes or its motion is due: five steps a second while work is in flight,

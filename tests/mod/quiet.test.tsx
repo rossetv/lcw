@@ -1,4 +1,5 @@
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './kit'
 
 declare const setTimeout: (fn: (value?: unknown) => void, ms: number) => unknown
 

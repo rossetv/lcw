@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
+import { test } from './kit'
 
 const NOW = Date.parse('2026-11-18T12:00:00Z')
 const RUN = '/lcw/repos/r/runs/x'

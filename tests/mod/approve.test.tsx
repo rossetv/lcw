@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
+import { test } from './kit'
 
 // The approval box at the end of the Brainstorm, as the mod wires it: drawn above the run's card, a reply only fills
 // the prompt (nothing is sent), never over a draft, and a prompt the person sends ends the box.

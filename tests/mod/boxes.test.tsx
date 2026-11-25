@@ -1,5 +1,6 @@
 import type { RenderSurface } from 'claude-code'
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
+import { test } from './kit'
 
 // The boxes as the mod wires them: the facts it gathers, what a press runs or submits, and when it stays quiet.
 

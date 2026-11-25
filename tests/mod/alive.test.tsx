@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
+import { test } from './kit'
 
 // mod-alive tells the status line the mod draws the card, so it does not draw it a second time.
 

@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
+import { test } from './kit'
 
 // What the mod reads, and how often it looks: a file is read again only when it changed, and a session with no run
 // is looked at every five seconds.
@@ -112,7 +113,7 @@ test('with no run and nothing changing, no file is read again and the files are 
 })
 
 // A thousand files and more take a while on a busy machine, so this test is given longer than the default.
-test('the mod keeps a thousand files at most: past that, the one read least lately is read again', { timeoutMs: 20000 }, async ($, on) => {
+test('the mod keeps a thousand files at most: past that, the one read least lately is read again', async ($, on) => {
   const quarter = Math.floor(NOW / 900000)
   const spent = JSON.stringify({ v: 1, base: 0, max: 10, q: { [quarter]: 10 } })
   const files: Record<string, string> = { ...unbound(), '/lcw/sessions/s1.json': JSON.stringify({ billing: 'payg' }) }

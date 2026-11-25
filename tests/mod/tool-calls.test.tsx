@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
+import { test } from './kit'
 import { cases } from '../core/mark-cases.mjs'
 import { next as olderHook } from '../../lib/activity.mjs'
 

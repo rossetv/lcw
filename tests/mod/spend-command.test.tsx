@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
+import { test } from './kit'
 import { gateFor, retryGate } from '../../hooks/lcw-mod.mjs'
 import { moneyFrom, readingOf } from '../../lib/spend.mjs'
 
