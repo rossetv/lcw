@@ -89,6 +89,27 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo `# <#` >/dev/null; [ \"$OS\" = Windows_NT ] && exec node \"$CLAUDE_PLUGIN_ROOT/scripts/hook-limit.mjs\"; for f in \"${LCW_HOME:-$HOME/.lcw}\"/after/*; do [ -s \"$f\" ] && exec node \"$CLAUDE_PLUGIN_ROOT/scripts/hook-limit.mjs\"; done; exit 0\n#> > $null\nnode \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-limit.mjs\""
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-activity.mjs\""
+          }
+        ]
+      }
     ]
   },
   "modules": [
