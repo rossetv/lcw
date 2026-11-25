@@ -8,6 +8,12 @@
 //   cap       the weekly cap in dollars, when the user has stated one
 //   quota     an external quota for a session, by id: ok (80%), blocked (42%, refused), under (42%) or missing
 //   run       who started the run: p1, or drv (then p1 is bound to it and drv drives)
+//   transcript the name of the session's transcript, when it is not p1: the session is known by both names
+//   running   the Claude Code processes the rows record (claudePid) that still run; the others have ended
+//   pid       the CLAUDE_PID the hook is started with, unset when not given
+//   marker    the mod's after-call marker, where it differs from whether the check after a tool call says something:
+//             the mod cannot see which processes run nor the hook's CLAUDE_PID, so it keeps the marker up when the
+//             check would speak under any answer to those
 //   expect    prompt, tool (an Edit), lcw (a Bash call of LCW's own command) and agent (a subagent's Edit); a call
 //             that is not named is not pinned
 // The text `{cli}` stands for the lcw command line of the plugin.
@@ -200,5 +206,99 @@ export const cases = [
     spend: { drv: 3500 },
     run: 'drv',
     expect: { prompt: driverStop('$3,500 spent in the last 7 days, mark $3,000'), tool: driverStop('$3,500 spent in the last 7 days, mark $3,000'), lcw: null },
+  },
+  {
+    name: 'an anchor with no mark leaves the mark of the row under the id',
+    transcript: 't1',
+    sessions: { p1: { markPercent: 70 }, t1: { sessionCanonicalId: 'a1' }, a1: { sessionCanonicalId: 'a1' } },
+    week: 72,
+    expect: { prompt: pctPrompt(72, 70, LIFT_PCT), tool: pctTool(72, 70, NO_RUN, LIFT_PCT), lcw: null, agent: null },
+  },
+  {
+    name: 'an anchor with no mark leaves the dollar mark of the row under the id',
+    transcript: 't1',
+    sessions: { p1: { ...PAYG, markUsd: 2000 }, t1: { ...PAYG, sessionCanonicalId: 'a1' }, a1: { sessionCanonicalId: 'a1' } },
+    spend: { p1: 2500 },
+    expect: { prompt: usdPrompt('$2,500', '$2,000', LIFT_USD), tool: usdTool('$2,500', '$2,000', NO_RUN, LIFT_USD), lcw: null },
+  },
+  {
+    name: 'an anchor lends its mark to a session with none',
+    transcript: 't1',
+    sessions: { p1: {}, t1: { sessionCanonicalId: 'a1' }, a1: { sessionCanonicalId: 'a1', markPercent: 60 } },
+    week: 65,
+    expect: { prompt: pctPrompt(65, 60, LIFT_PCT), tool: pctTool(65, 60, NO_RUN, LIFT_PCT), lcw: null },
+  },
+  {
+    name: 'an anchor lends its dollar mark to a session with none',
+    transcript: 't1',
+    sessions: { p1: PAYG, t1: { ...PAYG, sessionCanonicalId: 'a1' }, a1: { sessionCanonicalId: 'a1', markUsd: 2000 } },
+    spend: { p1: 2500 },
+    expect: { prompt: usdPrompt('$2,500', '$2,000', LIFT_USD), tool: usdTool('$2,500', '$2,000', NO_RUN, LIFT_USD), lcw: null },
+  },
+  {
+    name: 'an anchor another running Claude Code owns lends nothing, but the marker stays up for when it ends',
+    transcript: 't1',
+    sessions: { p1: { claudePid: 4102 }, t1: { sessionCanonicalId: 'a1', claudePid: 4102 }, a1: { sessionCanonicalId: 'a1', markPercent: 60, claudePid: 4101 } },
+    running: [4101, 4102],
+    pid: 4102,
+    week: 65,
+    expect: { prompt: null, tool: null, lcw: null },
+    marker: true,
+  },
+  {
+    name: 'an anchor whose owner has ended lends its mark',
+    transcript: 't1',
+    sessions: { p1: { claudePid: 4102 }, t1: { sessionCanonicalId: 'a1', claudePid: 4102 }, a1: { sessionCanonicalId: 'a1', markPercent: 60, claudePid: 4101 } },
+    running: [4102],
+    pid: 4102,
+    week: 65,
+    expect: { prompt: pctPrompt(65, 60, LIFT_PCT), tool: pctTool(65, 60, NO_RUN, LIFT_PCT), lcw: null },
+  },
+  {
+    name: 'rows under both names that disagree on the mark take the one under the id',
+    transcript: 't1',
+    sessions: { p1: { markPercent: 70 }, t1: { markPercent: 90 } },
+    week: 80,
+    expect: { prompt: pctPrompt(80, 70, LIFT_PCT), tool: pctTool(80, 70, NO_RUN, LIFT_PCT), lcw: null },
+  },
+  {
+    name: 'a mark raised on the row under the id holds for the row under the transcript\'s name too',
+    transcript: 't1',
+    sessions: { p1: { markPercent: 90 }, t1: { markPercent: 70 } },
+    week: 80,
+    expect: { prompt: null, tool: null, lcw: null },
+  },
+  {
+    name: 'a transcript row another running Claude Code keeps leaves the mark of the row under the id',
+    transcript: 't1',
+    sessions: { p1: { markPercent: 70 }, t1: { markPercent: 90, claudePid: 4101 } },
+    running: [4101],
+    week: 80,
+    expect: { prompt: pctPrompt(80, 70, LIFT_PCT), tool: pctTool(80, 70, NO_RUN, LIFT_PCT), lcw: null },
+  },
+  {
+    name: 'with the caller\'s CLAUDE_PID, an id row another running Claude Code keeps is set aside, and the note is still to give',
+    transcript: 't1',
+    sessions: { p1: { ...PAYG, claudePid: 4102 }, t1: { billing: 'payg', claudePid: 4101 } },
+    running: [4101, 4102],
+    pid: 4101,
+    spend: { t1: 100 },
+    expect: { prompt: note(USD_MARK, true), tool: note(USD_MARK, true), lcw: note(USD_MARK, true), agent: null },
+  },
+  {
+    name: 'the run\'s driver at the mark its anchor lends',
+    sessions: { p1: { markPercent: 90 }, drv: { sessionCanonicalId: 'a2' }, a2: { sessionCanonicalId: 'a2', markPercent: 60 } },
+    week: 65,
+    run: 'drv',
+    expect: { prompt: driverStop('65% of the week used, mark 60%'), tool: driverStop('65% of the week used, mark 60%'), lcw: null },
+  },
+  {
+    name: 'the run\'s driver borrows no mark from an anchor another running Claude Code owns, but the marker stays up',
+    sessions: { p1: { markPercent: 90 }, drv: { sessionCanonicalId: 'a2', claudePid: 4102 }, a2: { sessionCanonicalId: 'a2', markPercent: 60, claudePid: 4101 } },
+    running: [4101],
+    week: 65,
+    run: 'drv',
+    expect: { prompt: null, tool: null, lcw: null },
+    marker: true,
   },
 ]

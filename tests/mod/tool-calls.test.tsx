@@ -42,7 +42,8 @@ function filesFor(row: any) {
 
 // A file system in memory whose times move with every change, as a real one's do.
 // process answers a command the mod runs, as the script would; id and transcript are the session's, which a /clear changes.
-function engine(on: any, initial: Record<string, string>, opts: { process?: (argv: string[]) => void | Promise<void>; transcript?: string } = {}) {
+// ps finds the processes in running.
+function engine(on: any, initial: Record<string, string>, opts: { process?: (argv: string[]) => void | Promise<void>; transcript?: string; running?: number[] } = {}) {
   const now = (instant += STEP)
   const clock = mock.clock(on, { now })
   const times: Record<string, number> = {}
@@ -71,7 +72,13 @@ function engine(on: any, initial: Record<string, string>, opts: { process?: (arg
     if (e.path in files) return { value: { kind: 'file', size: files[e.path]!.length, mtimeMs: times[e.path], isLink: false } }
     throw new Error('ENOENT')
   })
-  on('process.run', async (_: any, e: any) => { w.runs.push([...e.argv]); await opts.process?.(e.argv); return { value: { exitCode: 1, stdout: '', stderr: '' } } })
+  on('process.run', async (_: any, e: any) => {
+    w.runs.push([...e.argv])
+    await opts.process?.(e.argv)
+    const pid = Number(e.argv[e.argv.indexOf('-p') + 1])
+    if (e.argv[0] === 'ps' && opts.running?.includes(pid)) return { value: { exitCode: 0, stdout: `${pid}\n`, stderr: '' } }
+    return { value: { exitCode: 1, stdout: '', stderr: '' } }
+  })
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.stop', (_: any, e: any) => ({ isTurnRunning: e.isTurnRunning }))
   on('agent.list', () => ({ value: [] }))
@@ -85,13 +92,15 @@ const atMark = cases.find((c) => c.name === 'the percent mark, no run')!
 const payg = cases.find((c) => c.name.startsWith('a session that turns out to be pay-per-token'))!
 const week = (percentUsed: number) => JSON.stringify({ at: 1, sevenDay: { percentUsed, resetsAt: '2026-06-12T12:00:00.000Z' } })
 
-for (const row of cases.filter((c) => 'tool' in c.expect)) {
-  const said = (row.expect as any).tool !== null
-  test(`the marker is ${said ? 'up' : 'down'} where the check after a tool call says ${said ? 'something' : 'nothing'}: ${row.name}`, async ($, on) => {
-    const w = engine(on, filesFor(row))
+for (const row of cases.filter((c) => 'tool' in c.expect) as any[]) {
+  const said = row.expect.tool !== null
+  const raised = row.marker ?? said
+  test(`the marker is ${raised ? 'up' : 'down'} where the check after a tool call says ${said ? 'something' : 'nothing'}: ${row.name}`, async ($, on) => {
+    expect(said && !raised).toBe(false)
+    const w = engine(on, filesFor(row), { transcript: row.transcript ? `/t/${row.transcript}.jsonl` : '', running: row.running })
     await $.session.start(START)
     await w.clock.advance(1000)
-    expect(up(w)).toBe(said)
+    expect(up(w)).toBe(raised)
   })
 }
 
@@ -104,42 +113,13 @@ test('the marker names the session, its transcript and when it was raised', asyn
   expect(marker.at >= w.now && marker.at <= w.now + 1000).toBe(true)
 })
 
-test('the session row under the transcript\'s name is read first: at the mark there, the marker is raised', async ($, on) => {
-  const files = filesFor({ week: 80, sessions: { p1: { markPercent: 90 } } })
-  files['/lcw/sessions/t1.json'] = JSON.stringify({ markPercent: 70 })
-  const w = engine(on, files, { transcript: '/t/t1.jsonl' })
-  await $.session.start(START)
-  await w.clock.advance(1000)
-  expect(up(w)).toBe(true)
-})
-
-test('a mark raised on the row under the transcript\'s name keeps the marker down', async ($, on) => {
-  const files = filesFor({ week: 80, sessions: { p1: { markPercent: 70 } } })
-  files['/lcw/sessions/t1.json'] = JSON.stringify({ markPercent: 90 })
-  const w = engine(on, files, { transcript: '/t/t1.jsonl' })
-  await $.session.start(START)
-  await w.clock.advance(2000)
-  expect(up(w)).toBe(false)
-})
-
 test('the marker of a session with a backslash transcript path comes up at the mark on the row under its name', async ($, on) => {
-  const files = filesFor({ week: 80, sessions: { p1: { markPercent: 90 } } })
-  files['/lcw/sessions/t1.json'] = JSON.stringify({ markPercent: 70 })
+  const files = filesFor({ week: 72, sessions: { t1: { markPercent: 70 } } })
   const w = engine(on, files, { transcript: 'C:\\Users\\me\\.claude\\projects\\x\\t1.jsonl' })
   await $.session.start(START)
   await w.clock.advance(1000)
   expect(up(w)).toBe(true)
   expect(JSON.parse(w.files[MARKER]!)).toMatchObject({ transcript: 't1' })
-})
-
-// The mod cannot tell whether the recorded Claude Code still runs, and the hook reads the id's row alone while it does.
-test('a transcript row that records another Claude Code does not keep the marker down for the id\'s own row', async ($, on) => {
-  const files = filesFor({ week: 80, sessions: { p1: { markPercent: 70 } } })
-  files['/lcw/sessions/t1.json'] = JSON.stringify({ markPercent: 90, claudePid: 4242 })
-  const w = engine(on, files, { transcript: '/t/t1.jsonl' })
-  await $.session.start(START)
-  await w.clock.advance(1000)
-  expect(up(w)).toBe(true)
 })
 
 test('the marker is lowered once the session is under its mark, and written only when that changes', async ($, on) => {

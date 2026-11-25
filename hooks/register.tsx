@@ -12,6 +12,7 @@ import { buildView, renderCard } from '../lib/card.mjs'
 import { hex, thresholds as TH } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import { atMark, stopTexts, toldFile } from '../lib/mark.mjs'
+import { aliasRows, anchorName, rowsBilling, runMark, sessionPick } from '../lib/session.mjs'
 import { activeQuota, CLAIM_MS, evaluateQuota, quotaOff, REFRESH_MS } from '../lib/quota.mjs'
 import type { QuotaView } from '../lib/quota.mjs'
 import {
@@ -400,38 +401,39 @@ async function transcriptName($: EngineInterface) {
 async function readMoney($: EngineInterface, session: any, state: any, gate: any, now: number) {
   const quota = await readQuota($, session, state?.markPercent ?? session?.markPercent ?? TH.usageMarkPercent, now)
   if (quotaBilling(session, quota) !== 'payg') return null
-  session = { ...session, billing: 'payg' }
+  const spend = await spendFacts($, now)
+  const own = spend.records[spend.names.indexOf(`${await spendName($)}.json`)]
+  const money: any = moneyFrom({ records: spend.records.filter(Boolean), cap: spend.cap, reading: spend.reading, session: { ...session, billing: 'payg' }, state, sessionCum: own?.max, now })
+  return gate?.unit === 'usd' ? { ...money, retryAt: gate.retryAt, retried: !!gate.retried } : money
+}
+
+// What the money view counts: every spend record still in the 7 days (and the file names they came from), the cap
+// and the spend command's reading.
+async function spendFacts($: EngineInterface, now: number) {
   const home = await lcwHome($)
   const dir = spendDir(home)
   const names = [...((await folder($, dir))?.values() ?? [])]
     .filter((f) => f.kind === 'file' && f.name.endsWith('.json') && spendFileCounts(f.mtimeMs, now)).map((f) => f.name)
-  const records = await Promise.all(names.map((name) => readJson($, `${dir}/${name}`)))
-  const own = records[names.indexOf(`${await spendName($)}.json`)]
-  const money: any = moneyFrom({
-    records: records.filter(Boolean), cap: await readJson($, capFile(home)), session, state, sessionCum: own?.max, now,
+  return {
+    names,
+    records: await Promise.all(names.map((name) => readJson($, `${dir}/${name}`))),
+    cap: await readJson($, capFile(home)),
     // Read only: the spend command is run by the scripts, never by the mod.
     reading: readingOf(await readJson($, spendCommandFile(home)), await readJson($, spendReadingFile(home))),
-  })
-  return gate?.unit === 'usd' ? { ...money, retryAt: gate.retryAt, retried: !!gate.retried } : money
+  }
 }
 
 // The facts the usage mark is judged by, as the files stand when it is called, whatever the timers last saw (a look
 // of the last LOOK_MS stands for now): this session's row, mark, outside quota and money view, the week's figure, and
 // the run shown with its driver's row, mark, quota and money. A file is read only if it changed since its last read.
-// With pick, of the row given and of the first unfinished run bound to one of its names, as the limit hook finds them.
-async function markFacts($: EngineInterface, pick?: { session: any; names: string[] }) {
+async function markFacts($: EngineInterface) {
   const now = await $.clock.now()
-  const session = pick ? pick.session : await readSession($, await $.session.id())
+  const session = await readSession($, await $.session.id())
   const mark: number = session?.markPercent ?? TH.usageMarkPercent
   const quota = await readQuota($, session, mark, now)
   const usage = await readJson($, usageFile(await lcwHome($)))
   const money = await readMoney($, session, null, null, now)
-  let run: Run | null = null
-  for (const name of pick?.names ?? []) {
-    const r = await readRun($, now, name)
-    if (r && !['finished', 'stopped'].includes(r.state.status)) { run = r; break }
-  }
-  if (!pick) run = await readRun($, now)
+  const run = await readRun($, now)
   if (run) run.money = await readMoney($, run.session, run.state, run.gate, now)
   return { now, session, mark, quota, usage, money, run }
 }
@@ -1167,42 +1169,81 @@ function noteStopped($: EngineInterface) {
 }
 
 // Whether the limit hook would tell Claude anything after one of the session's own tool calls now: the stop at the
-// mark or the once-only note on pay-per-token billing. It reads the session's rows under its names in the hook's order,
-// the first that has a field giving it. Which names the hook reads turns on whether a Claude Code a row records still
-// runs, which the mod does not ask each second, so the names for every answer to that are judged.
+// mark or the once-only note on pay-per-token billing, with the rows read and rewritten as the hook reads and rewrites
+// them. What the hook reads turns on two facts the mod cannot know fresh: which Claude Code each row records still
+// runs, and the CLAUDE_PID the hook is started with (none, one a row records, or another). Every answer to both is
+// judged, and the hook speaks if it would under any: with k processes recorded, 2^k * (k + 2) answers, each worked
+// out in memory, and only the ones that differ in what the hook would read are judged against the quota and the spend.
+// One Claude Code's rows record one process; past six (at most 512 answers) the marker is kept up unjudged.
 async function afterDue($: EngineInterface, transcript: string | null, id: string) {
   const home = await lcwHome($)
-  const raw = new Map<string, any>()
-  for (const name of new Set([transcript ?? id, id])) raw.set(name, await readJson($, sessionFile(home, name)))
-  const envPid = raw.size > 1 ? Number(await $.env.get('CLAUDE_PID')) : 0
-  const pids = [...new Set([...raw.values()].map((r) => r?.claudePid).filter(Boolean))]
-  const choices = new Map<string, string[]>()
+  const now = await $.clock.now()
+  const rows = new Map<string, any>()
+  const read = async (name: string) => {
+    if (!rows.has(name)) rows.set(name, await readJson($, sessionFile(home, name)))
+    return rows.get(name)
+  }
+  const load = async (name: unknown) => {
+    if (typeof name !== 'string' || !name) return
+    const anchor = anchorName(await read(name))
+    if (anchor) await read(anchor)
+  }
+  await load(transcript)
+  await load(id)
+  // An anchor's run is the hook's too: its rewrite gives each name the anchor's run.
+  const runs = new Map<string, any>()
+  for (const row of [...rows.values()]) {
+    const dir = row?.runDir
+    if (typeof dir !== 'string' || runs.has(dir)) continue
+    const text = await readText($, runPaths(dir).state)
+    const state = text === null ? null : JSON.parse(text)
+    runs.set(dir, state && !['finished', 'stopped'].includes(state.status) ? state : null)
+    await load(state?.driver)
+  }
+  const told = (names: string[]) => Promise.all(names.map((name) => readJson($, toldFile(home, name)).then((t) => !!t?.payg)))
+  const off = quotaOff(await readJson($, quotaFile(home)))
+  const usage = await readJson($, usageFile(home))
+  const marks = (row: any) => row && { markUsd: row.markUsd, markPercent: row.markPercent }
+
+  const pids = [...new Set([...rows.values()].map((row) => row?.claudePid).filter((pid) => Number.isInteger(pid) && pid > 1))]
+  if (pids.length > 6) return true
+  const judged = new Set<string>()
+  let spend: Promise<Awaited<ReturnType<typeof spendFacts>>> | null = null
+  const money = async (pick: ReturnType<typeof sessionPick>, state: any) => {
+    if (rowsBilling(pick.rows, off) !== 'payg') return null
+    const { records, cap, reading } = await (spend ??= spendFacts($, now))
+    return moneyFrom({ records: records.filter(Boolean), cap, reading, session: pick.money, state, now })
+  }
   for (let running = 0; running < 1 << pids.length; running++) {
-    const names = sessionNames(transcript, id, (name) => raw.get(name), (pid) => pids.includes(pid) && ((running >> pids.indexOf(pid)) & 1) === 1, envPid)
-    choices.set(names.join('/'), names)
-  }
-  const views = []
-  for (const names of choices.values()) {
-    const rows = await Promise.all(names.map((name) => readSession($, name)))
-    const merged = Object.assign({}, ...rows.filter(Boolean).reverse())
-    // The hook's money view takes both mark fields from the first row that has either.
-    if (rows.find((r) => typeof r?.markUsd === 'number' || typeof r?.markPercent === 'number')?.markUsd === undefined) delete merged.markUsd
-    views.push({ session: names.length > 1 ? (rows.some(Boolean) ? merged : null) : rows[0], names })
-  }
-  for (const view of views) {
-    const f = await markFacts($, view)
-    const told = f.money && await Promise.all(view.names.flatMap((name) => [
-      readJson($, sessionFile(home, name)).then((s) => !!s?.toldPayg), readJson($, toldFile(home, name)).then((t) => !!t?.payg),
-    ]))
-    const run = f.run
-    const driverMark: number | null = run ? run.state.markPercent ?? TH.usageMarkPercent : null
-    const driverMoney = run && !run.quota ? run.money : null
-    const texts = stopTexts({
-      event: 'PostToolUse', lcwCall: false, hasRun: !!run, cli: told && !told.includes(true) ? 'lcw' : null, money: f.money, quota: f.quota,
-      heldQuota: f.quota?.hold ? f.quota : run?.quota?.hold ? run.quota : null, mark: f.mark, usage: f.usage, now: f.now,
-      driverHeld: !!run && !run.quota && atMark(driverMark, f.usage, f.now, driverMoney), driverMoney, driverMark,
-    })
-    if (texts.length) return true
+    const alive = (pid: unknown) => pids.includes(pid as number) && ((running >> pids.indexOf(pid as number)) & 1) === 1
+    // -1 stands for a CLAUDE_PID that no row records.
+    for (const pid of [0, -1, ...pids]) {
+      const names = sessionNames(transcript, id, (name) => rows.get(name), alive, pid)
+      const rewritten = aliasRows(names, (name) => rows.get(name), alive, pid)
+      const row = (name: string) => (Object.prototype.hasOwnProperty.call(rewritten, name) ? rewritten[name] : rows.get(name))
+      const own = sessionPick(names, row, alive, pid)
+      const dir = names.map((name) => row(name)?.runDir).find((d) => typeof d === 'string' && runs.get(d))
+      const state = dir ? runs.get(dir) : null
+      const driver = state ? sessionPick(state.driver, row, alive, pid) : null
+      const driverMark = state ? runMark(state, row, alive, pid) : null
+      const key = JSON.stringify([
+        names, names.some((name) => row(name)?.toldPayg), own.mark, own.quotaSelection, rowsBilling(own.rows, off), marks(own.money),
+        dir, driverMark, driver?.quotaSelection, driver && rowsBilling(driver.rows, off), marks(driver?.money),
+      ])
+      if (judged.has(key)) continue
+      judged.add(key)
+      const quota = await readQuota($, { quotaSelection: own.quotaSelection }, own.mark, now)
+      const ownMoney = await money(own, null)
+      const given = ownMoney && (names.some((name) => row(name)?.toldPayg) || (await told(names)).includes(true))
+      const driverQuota = state ? await readQuota($, { quotaSelection: driver!.quotaSelection }, driverMark!, now) : null
+      const driverMoney = state && !driverQuota ? await money(driver!, state) : null
+      const texts = stopTexts({
+        event: 'PostToolUse', lcwCall: false, hasRun: !!state, cli: ownMoney && !given ? 'lcw' : null, money: ownMoney, quota,
+        heldQuota: quota?.hold ? quota : driverQuota?.hold ? driverQuota : null, mark: own.mark, usage, now,
+        driverHeld: !!state && !driverQuota && atMark(driverMark, usage, now, driverMoney), driverMoney, driverMark,
+      })
+      if (texts.length) return true
+    }
   }
   return false
 }

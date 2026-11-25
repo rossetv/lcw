@@ -7,7 +7,8 @@ import { thresholds } from '../../lib/theme.mjs'
 import { next0800 } from '../../lib/spend.mjs'
 import { home, readJson, writeJson, removeFile, forgetReads } from './store.mjs'
 import { readMoney } from './money.mjs'
-import { readSessionQuota, sessionQuota, sessionIdentity } from './quota-session.mjs'
+import { readSessionQuota, sessionQuota, sessionIdentity, pickSession, readRow, callerPid } from './quota-session.mjs'
+import { runMark } from '../../lib/session.mjs'
 import { alive } from './awake.mjs'
 import { isDeepStrictEqual } from 'node:util'
 import { atMark, lcwOnly } from '../../lib/mark.mjs'
@@ -20,22 +21,13 @@ export const readUsage = () => readJson(usageFile(home()))
 /** The ids a session is known by, as sessionNames chooses them from the hook's input and the session files. */
 export function sessionIds(input) {
   const fromPath = input?.transcript_path ? path.basename(String(input.transcript_path), '.jsonl') : null
-  return sessionNames(fromPath, input?.session_id, (id) => readJson(sessionFile(home(), id)), alive, Number(process.env.CLAUDE_PID))
+  return sessionNames(fromPath, input?.session_id, readRow, alive, callerPid())
 }
 
 /** The usage mark the human set for a session ("run up to N%"), else the default. It belongs to the session, run or no run. */
-export function sessionMark(ids) {
-  for (const id of [].concat(ids ?? [])) {
-    const mark = readJson(sessionFile(home(), sessionIdentity(id)))?.markPercent
-    if (typeof mark === 'number') return mark
-  }
-  return DEFAULT_MARK
-}
+export const sessionMark = (ids) => pickSession(ids).mark
 
-export function driverMark(state) {
-  const session = state.driver ? readJson(sessionFile(home(), sessionIdentity(state.driver))) : null
-  return session?.markPercent ?? (session?.markUsd != null ? DEFAULT_MARK : state.markPercent ?? thresholds.usageMarkPercent)
-}
+export const driverMark = (state) => runMark(state, readRow, alive, callerPid())
 
 /** Sets the session's mark: a number is a share of the week, {usd} a dollar figure. Setting one clears the other. */
 export function setSessionMark(sessionId, mark) {

@@ -5,14 +5,13 @@ import { sessionFile, spendFile, spendDir, capFile, runsDir, runPaths, repoKey }
 import { moneyFrom, recordReading, spendFileCounts, readingOf } from '../../lib/spend.mjs'
 import { home, readJson, writeJson, removeFile } from './store.mjs'
 import { readSetting, readReading } from './spend-command.mjs'
-import { sessionBilling, sessionIdentity } from './quota-session.mjs'
+import { pickSession } from './quota-session.mjs'
+import { readQuotaState } from './quota-command.mjs'
+import { quotaOff } from '../../lib/quota.mjs'
+import { rowsBilling } from '../../lib/session.mjs'
 
-const sessionsFor = (id) => [...new Set([sessionIdentity(id), id])].map((key) => readJson(sessionFile(home(), key)) ?? {})
-function billingFor(sessions) {
-  const source = sessions.find((session) => Object.hasOwn(session, 'quotaSelection'))
-  if (source?.quotaSelection && sessionBilling(source) === 'subscription') return 'subscription'
-  return sessionBilling(sessions.find((session) => typeof session.billing === 'string' || session.quotaSelection))
-}
+const sessionsFor = (id) => pickSession(id).rows
+const billingFor = (sessions) => rowsBilling(sessions, sessions.some((session) => session.quotaSelection) && quotaOff(readQuotaState(home())))
 
 /** The stated weekly cap ({usd, at}), or null when none is stated and $4,000 is assumed. */
 export function readCap() {
@@ -74,11 +73,9 @@ export function spendRecords(now) {
  * own count; it is read only here, after the billing check, so a subscription never sees it.
  */
 export function readMoney({ sessionId, now, state = null }) {
-  const ids = [...new Set([].concat(sessionId ?? []).flatMap((id) => [sessionIdentity(id), id]))]
-  const sessions = ids.map((id) => readJson(sessionFile(home(), id)) ?? {})
-  if (billingFor(sessions) !== 'payg') return null
-  const session = sessions.find((s) => typeof s.markUsd === 'number' || typeof s.markPercent === 'number') ?? null
-  const own = ids.map((id) => readJson(spendFile(home(), id))).find((rec) => typeof rec?.max === 'number')
+  const { names, rows, money: session } = pickSession(sessionId)
+  if (billingFor(rows) !== 'payg') return null
+  const own = names.map((id) => readJson(spendFile(home(), id))).find((rec) => typeof rec?.max === 'number')
   const reading = readingOf(readSetting(home()), readReading(home()))
   const money = moneyFrom({ records: spendRecords(now), cap: readCap(), session, state, sessionCum: state ? own?.max : undefined, now, reading })
   if (state?.id && state.repoRoot) {

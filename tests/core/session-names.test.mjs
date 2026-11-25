@@ -1,7 +1,5 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { sessionNames } from '../../lib/key.mjs'
 
 // rows by name, the processes that run, and the caller's own Claude Code (0: CLAUDE_PID unset).
@@ -34,17 +32,4 @@ test('a recorded Claude Code that no longer runs, or is the caller, sets no row 
 test('an id row another running Claude Code keeps is set aside only when the caller knows its own', () => {
   assert.deepEqual(names('t1', 's1', { s1: { claudePid: 60 } }, [60], 50), ['t1'])
   assert.deepEqual(names('t1', 's1', { s1: { claudePid: 60 } }, [60]), ['t1', 's1'])
-})
-
-// Both the limit hook (through sessionIds) and the mod's after-call marker choose a session's names with sessionNames,
-// so the marker cannot stay down for names the hook reads.
-test('the limit hook and the mod both choose the names with sessionNames', () => {
-  const body = (file, start) => {
-    const text = fs.readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8')
-    const from = text.indexOf(start)
-    assert.ok(from >= 0, `${start} in ${file}`)
-    return text.slice(from, text.indexOf('\n}\n', from))
-  }
-  assert.match(body('../../scripts/lib/gate.mjs', 'export function sessionIds('), /\bsessionNames\(/)
-  assert.match(body('../../hooks/register.tsx', 'async function afterDue('), /\bsessionNames\(/)
 })
