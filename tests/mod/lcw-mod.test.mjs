@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import {
   addTotals, addUsage, agentTokens, buttons, cardMotion, cardPace, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
-  longNudges, quietCounts, replacesGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt,
+  longNudges, quietCounts, replacesGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt, waveOfBrief, launchedId, briefOf,
   measureStep, retryGate, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
@@ -572,4 +572,37 @@ test('a row with wide characters is laid out to the width in terminal cells', as
   const wide = (spans) => len(spans.map((s) => s.t).join(''))
   assert.equal(wide(left) + gap + wide(right), 30)
   assert.match(left[1].t, /…$/)
+})
+
+test('an agent\'s wave is read from its brief: the wave\'s worktree first, then a --wave flag, the wave\'s records, the description, the opening words', () => {
+  const tree = 'Work only in /repo/.claude/worktrees/tidy-wave-13. An earlier fix: lcw task T1 done --wave 12.'
+  assert.equal(waveOfBrief(tree, 'Build the importer', 'tidy'), 13)
+  assert.equal(waveOfBrief('Mark it: lcw task X1 done --wave 7', 'Fix it', 'tidy'), 7)
+  assert.equal(waveOfBrief('Read and follow /home/runs/r/waves/9/review-brief.md', 'Review R2', 'tidy'), 9)
+  assert.equal(waveOfBrief('Read /home/runs/r/artifacts/wave12/common.md first', 'Fix it', 'tidy'), 12)
+  assert.equal(waveOfBrief('Do as the brief says.', 'Deploy wave 8 to the server', 'tidy'), 8)
+  assert.equal(waveOfBrief('Design reviewer D of wave 13, with no requirement.', 'Check the ratings', 'tidy'), 13)
+  assert.equal(waveOfBrief('x'.repeat(200) + ' as wave 4 did', 'Check the ratings', 'tidy'), null, 'a wave named far into the brief is another wave\'s')
+  assert.equal(waveOfBrief('Hunt the settings pages in /repo/.claude/worktrees/tidy-latest', 'Hunt settings', 'tidy'), null)
+  assert.equal(waveOfBrief('Work in /repo/.claude/worktrees/other-wave-2', 'Build it', 'tidy'), null, 'another sweep\'s worktree')
+  assert.equal(waveOfBrief(null, undefined, null), null)
+})
+
+test('a launch answers with the new agent\'s id, as a field or in its text', () => {
+  assert.equal(launchedId({ status: 'async_launched', agentId: 'a1b2c3' }), 'a1b2c3')
+  assert.equal(launchedId('Async agent launched successfully.\nagentId: a43d97fe465bf20e8 (internal ID)'), 'a43d97fe465bf20e8')
+  assert.equal(launchedId([{ type: 'text', text: 'agentId: abc-1' }]), 'abc-1')
+  assert.equal(launchedId({ status: 'completed' }), null)
+  assert.equal(launchedId(undefined), null)
+})
+
+test('an agent\'s brief is the first line of its transcript, as text or as blocks; a line cut short is given as it is', () => {
+  const first = (content) => JSON.stringify({ parentUuid: null, agentId: 'a1', type: 'user', message: { role: 'user', content } })
+  assert.equal(briefOf(first('Task X1 of wave 13. Work in /repo/.claude/worktrees/tidy-wave-13') + '\n{"type":"assistant"}\n'), 'Task X1 of wave 13. Work in /repo/.claude/worktrees/tidy-wave-13')
+  assert.equal(briefOf(first([{ type: 'text', text: 'Read the brief' }, { type: 'text', text: 'then build' }])), 'Read the brief\nthen build')
+  const cut = first('Work in /repo/.claude/worktrees/tidy-wave-7 and ' + 'x'.repeat(500)).slice(0, 200)
+  assert.equal(waveOfBrief(briefOf(cut), 'Build it', 'tidy'), 7)
+  assert.equal(briefOf(first(undefined)), '')
+  assert.equal(briefOf(''), '')
+  assert.equal(briefOf(null), '')
 })

@@ -130,11 +130,11 @@ test('during a run the banner sits above the card, and where both do not fit the
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const band = await $.ui.mount(BAND)
   expect(await band.find({ type: 'Text', text: /Turn on Fable as your advisor\?/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /in Build/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /^LCW Build · $/ })).toBeDefined()
   await band.unmount()
   const tight = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 12, bodyColumns: 50 } })
   expect(await tight.find({ type: 'Text', text: /advisor/ })).toBeUndefined()
-  expect(await tight.find({ type: 'Text', text: /in Build/ })).toBeDefined()
+  expect(await tight.find({ type: 'Text', text: /^LCW Build · $/ })).toBeDefined()
   await tight.unmount()
 })
 

@@ -18,7 +18,7 @@ import type { QuotaView } from '../lib/quota.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, completionPrompt, countsTurn, compactInstructions, cardMotion, cardPace, gateFor, isShown, layout, measureStep,
   longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
-  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity,
+  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, launchedId, briefOf,
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
@@ -42,6 +42,7 @@ const keptDismissed = atom({ plugin: 'lcw', key: 'dismissed' } as const, [], { s
 const keptReplied = atom({ plugin: 'lcw', key: 'repliedAt' } as const, 0, { shape: KEPT })
 const keptTold = atom({ plugin: 'lcw', key: 'told' } as const, {}, { shape: KEPT })
 const keptNudged = atom({ plugin: 'lcw', key: 'nudged' } as const, {}, { shape: KEPT })
+const keptWaves = atom({ plugin: 'lcw', key: 'waves' } as const, {}, { shape: KEPT })
 const keptCompletion = atom({ plugin: 'lcw', key: 'completion' } as const, {}, { shape: KEPT })
 const keptCarry = atom({ plugin: 'lcw', key: 'carry' } as const, null, { shape: KEPT })
 const keptOwed = atom({ plugin: 'lcw', key: 'owed' } as const, null, { shape: KEPT })
@@ -56,6 +57,11 @@ const S = {
   agents: [] as CardAgent[],
   seen: {} as Seen,
   nudged: {} as Nudged,
+  // The wave each agent of a sweep works for, by its id, kept from its launch: the card puts it under that wave's lane.
+  waves: {} as Record<string, number>,
+  // How often an agent's transcript was read for its wave, and where this session's agents keep theirs.
+  waveAsked: {} as Record<string, number>,
+  agentLogs: '',
   told: {} as Told,
   quiet: null as { quiet: number; stalled: number } | null,
   totals: {} as Partial<Totals>,
@@ -186,6 +192,48 @@ function keepNotices($: EngineInterface) {
   if (changed('nudged', nudged)) void update($, keptNudged, () => nudged).catch(unkept('nudged'))
 }
 
+// An agent's brief says which wave it works for, and only its launch shows the brief: the wave is kept from there, by
+// the id the launch answered. An agent that one of a wave's agents starts works for that wave too.
+const MAX_WAVES_KEPT = 400
+function noteLaunch($: EngineInterface, e: { tool_name?: string; tool_input?: unknown; tool_response?: unknown; agent_id?: string }) {
+  if ((e.tool_name !== 'Agent' && e.tool_name !== 'Task') || !S.run?.state?.sweep) return
+  const id = launchedId(e.tool_response)
+  const input = (e.tool_input ?? {}) as { prompt?: unknown; description?: unknown }
+  const wave = waveOfBrief(input.prompt, input.description, S.run.state.name) ?? (e.agent_id ? S.waves[e.agent_id] : undefined)
+  if (id && wave != null) keepWave($, id, wave)
+}
+
+function keepWave($: EngineInterface, id: string, wave: number) {
+  if (S.waves[id] === wave) return
+  const live = new Set(S.agents.map((a) => a.id))
+  // Past a few hundred launches the agents long gone are forgotten.
+  const kept = Object.keys(S.waves).length < MAX_WAVES_KEPT ? S.waves : Object.fromEntries(Object.entries(S.waves).filter(([k]) => live.has(k)))
+  const waves = { ...kept, [id]: wave }
+  S.waves = waves
+  S.dirty = true
+  if (changed('waves', waves)) void update($, keptWaves, () => waves).catch(unkept('waves'))
+}
+
+// An agent launched before this code was loaded, and woken again since, was never seen at its launch. Its brief is the
+// first line of its transcript: the start of that file is read for it, a few agents at each look and each agent at most
+// three times, so a transcript that is not there costs no more than that.
+const WAVE_READS = 6, WAVE_TRIES = 3, BRIEF_BYTES = 65536
+async function recallWaves($: EngineInterface, sweep: string, agents: readonly { id: string; description: string; parentId?: string }[]) {
+  const unknown = agents.filter((a) => S.waves[a.id] === undefined && (S.waveAsked[a.id] ?? 0) < WAVE_TRIES).slice(0, WAVE_READS)
+  if (!unknown.length) return
+  if (!S.agentLogs) {
+    const main = await $.session.info().then((i) => i.transcriptPath).catch(() => '')
+    if (main) S.agentLogs = main.replace(/\.jsonl$/, '') + '/subagents'
+  }
+  for (const a of unknown) {
+    const head = S.agentLogs ? await $.fs.read(`${S.agentLogs}/agent-${a.id}.jsonl`, { length: BRIEF_BYTES }).catch(() => null) : null
+    // read: asked for good, whatever it says; not read: tried again at a later look
+    S.waveAsked[a.id] = head === null ? (S.waveAsked[a.id] ?? 0) + 1 : WAVE_TRIES
+    const wave = head === null ? null : waveOfBrief(briefOf(head), a.description, sweep) ?? (a.parentId ? S.waves[a.parentId] : undefined)
+    if (wave != null) keepWave($, a.id, wave)
+  }
+}
+
 function setCarry($: EngineInterface, carry: Carry | null) {
   S.carry = carry
   keepCarry($)
@@ -212,6 +260,7 @@ async function restore($: EngineInterface) {
     const [dismissed, repliedAt, told, nudged, carry, session, completion, owed] = await Promise.all([
       read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(), read($, keptCompletion), read($, keptOwed),
     ])
+    S.waves = { ...(await read($, keptWaves)), ...S.waves }
     for (const k of dismissed) S.banner.dismissed.add(k)
     S.repliedAt = Math.max(S.repliedAt, repliedAt)
     S.told = { ...told, ...S.told }
@@ -654,7 +703,10 @@ async function pollAgents($: EngineInterface) {
   const list = await $.agent.list()
   const now = await $.clock.now()
   const tracked = trackAgents(list, S.seen, now)
-  S.agents = tracked.agents
+  const sweep = run.state?.sweep ? run.state.name : null
+  if (sweep) await recallWaves($, sweep, tracked.agents).catch(() => {})
+  // An agent whose brief could not be read may still say its wave in its description.
+  S.agents = sweep ? tracked.agents.map((a) => ({ ...a, wave: S.waves[a.id] ?? waveOfBrief('', a.description, sweep) ?? undefined })) : tracked.agents
   S.seen = tracked.seen
   noteCard(now)
   // The mascot beside the status rows shows trouble with agents. It cannot ask the mod, so the count of quiet

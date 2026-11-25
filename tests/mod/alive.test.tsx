@@ -85,7 +85,7 @@ test('while the approval box takes all the room from the card, mod-alive stays f
   await start($)
   const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 13 } })
   expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /in Brainstorm/ })).toBeUndefined()
+  expect(await band.find({ type: 'Text', text: /^LCW Build · $/ })).toBeUndefined()
   await w.advance(20000)
   expect(w.age(A)).toBeLessThan(15000)
   await band.unmount()

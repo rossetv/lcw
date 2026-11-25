@@ -10,21 +10,21 @@ import { inputsOf, fixtures, NOW } from './boards.mjs';
 // and the bottom border, each the text inside the frame. The last but one is drawn 40 cells wide, with no frame.
 const SWEEP = {
   "01-charter-with-you": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ───────────────────────────────────────────────────────────────────────── 6m in Charter ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 6m ─╮",
     "★ with you · asking you: how should the pull requests come, and may I merge them?                  ≈ 12% of your week",
     "› Charter  ○ Hunt  ○ Plan  ○ Build  ○ Review  ○ Ship",
     "Charter · agreeing the rules of the sweep with you; the one step that needs you",
     "charter  …  ✓ anti-goals  ✓ no-go zones  ✓ changes  ✓ proof  ✓ park  ✓ stop  ✓ waves  › PRs           1 question open",
   ],
   "03-hunt-round-1-probes-at-work": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 9m in Hunt ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 9m ─╮",
     "● running · hunting, area by area                                                                  ≈ 12% of your week",
     "waves none queued yet                                                                                         round 1",
     "✓ Charter  › Hunt  ○ Plan  ○ Build  ○ Review  ○ Ship",
     "areas ▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱  14 hunted · 6 running · 16 left                                    23 findings so far",
   ],
   "04-hunt-sorted-the-queue-is-filled": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────── 31m in Hunt ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 31m ─╮",
     "● running · sorted against the charter                                                             ≈ 12% of your week",
     "waves ▱▱▱▱▱▱  6 queued                                                               round 1 · 14 parked · 21 dropped",
     "✓ Charter  › Hunt  ○ Plan  ○ Build  ○ Review  ○ Ship",
@@ -67,14 +67,14 @@ const SWEEP = {
     "wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▰  ▰▰▰▰▰▰    final checks next                                                     2m",
   ],
   "11-ship-when-your-charter-lets-claude-merge": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 6m in Ship ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 6m ─╮",
     "● running · wave 2’s PR #42 merged: it met your charter’s rule                                     ≈ 12% of your week",
     "waves ▰▰▱▱▱▱  2 done · 4 queued                                           round 1 · 54 fixed · 14 parked · 22 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  › Ship",
     "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰  27 done · 1 dropped",
   ],
   "12-hunt-round-2-the-queue-ran-dry": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────── 5m in Hunt ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 5m ─╮",
     "● running · hunting again, round 2                                                                 ≈ 29% of your week",
     "waves ▰▰▰▰▰▰  6 done                                                     round 2 · 148 fixed · 14 parked · 22 dropped",
     "✓ Charter  › Hunt  ○ Plan  ○ Build  ○ Review  ○ Ship",
@@ -146,7 +146,7 @@ const SWEEP = {
     "3 rounds · 7 waves · 212 agents · 48.3M tokens · ≈ 31% of your week",
   ],
   "21-stopped": [
-    "╭─ ◆ LCW Sweep · backlog-sweep ────────────────────────────────────────────────────────────────────────── 12m in Build ─╮",
+    "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 12m ─╮",
     "■ stopped",
     "waves ▰▰▰▱▱▱  3 done · 3 queued                                           round 1 · 81 fixed · 14 parked · 22 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  › Build  ○ Review  ○ Ship",
@@ -158,7 +158,7 @@ const SWEEP = {
     "wave 2  ▰▰▰ ▰▰▱ ▱▱▱ ▱▱▱  Build",
   ],
   "23-a-build-for-comparison": [
-    "╭─ ◆ LCW Build · shared-lists ─────────────────────────────────────────────────────────────────────────── 18m in Build ─╮",
+    "╭─ ◆ LCW Build · shared-lists ──────────────────────────────────────────────────────────────────────────────────── 18m ─╮",
     "● running · on track                                                                                ≈ 5% of your week",
     "✓ Brainstorm  ✓ Spec  ✓ Plan  › Build  ○ Review  ○ Ship",
     "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱  7 done · 4 running · 6 left",
@@ -273,7 +273,7 @@ const cols = s => [...s].length;
 
 test('the frame has the title in the top border and a rule between sections', () => {
   const lines = strip(toAnsi(card('RunningA', { width: 100, frame: true }), 'dark', 100)).split('\n');
-  assert.match(lines[0], /^╭─ ◆ LCW Build · export-csv ─+ 2h 14m in Build ─╮$/);
+  assert.match(lines[0], /^╭─ ◆ LCW Build · export-csv ─+ 2h 14m ─╮$/);
   assert.equal(lines.filter(l => l.startsWith('├')).length, 2);
   assert.match(lines.at(-1), /^╰─+╯$/);
   assert.ok(lines.every(l => cols(l) === 100));
@@ -305,7 +305,7 @@ test('the right group sits against the right edge at 126 and 80 columns', () => 
     assert.ok(status[1].endsWith('resets in 3d · -15% short'));
     const plain = renderCard(buildView(inputsOf('Stalled')), { width });
     const text = strip(toAnsi(plain, 'dark', width)).split('\n');
-    assert.ok(text[0].endsWith('≈ 12% of your week') || text[0].endsWith('3h 02m in Build'));
+    assert.ok(text[0].endsWith('≈ 12% of your week') || text[0].endsWith('3h 02m'));
   }
 });
 
@@ -552,7 +552,7 @@ test('a run the human paused says so and promises no reset', () => {
 test('the share of the week survives a weekly reset', () => {
   const i = inputsOf('RunningA');
   const { usage } = i;
-  const before = '2026-11-15T14:00:00.000Z', after = usage.sevenDay.resetsAt;
+  const after = usage.sevenDay.resetsAt, before = new Date(Date.parse(after) - 7 * 24 * 3600 * 1000).toISOString();
   const view = (state, used) => buildView({ ...i, state: { ...i.state, ...state }, usage: { sevenDay: { percentUsed: used, resetsAt: after } } }).share;
   const started = { weekAtStart: 40, weekUsed: 70, weekResetsAt: before };
   assert.equal(view(started, 12), 42, 'what the run used of the old week (30) plus the new week (12)');
@@ -563,6 +563,41 @@ test('the share of the week survives a weekly reset', () => {
   assert.deepEqual(weekOf(started, { percentUsed: 12, resetsAt: after }),
     { shareBefore: 30, weekAtStart: 0, weekResetsAt: after, weekUsed: 12 });
   assert.equal(weekShare({ ...started, weekResetsAt: after }, { percentUsed: 30, resetsAt: before }), 0, 'an older reading is ignored for the fold');
+});
+
+test('a week of another account starts where its first reading stands: what that account had used is not the run\'s', () => {
+  const i = inputsOf('RunningA');
+  const after = i.usage.sevenDay.resetsAt, other = new Date(Date.parse(after) - 3 * 24 * 3600 * 1000).toISOString();
+  const started = { weekAtStart: 80, weekUsed: 97, weekResetsAt: other };
+  assert.deepEqual(weekOf(started, { percentUsed: 30, resetsAt: after }), { shareBefore: 17, weekAtStart: 30, weekResetsAt: after, weekUsed: 30 });
+  assert.equal(weekShare(started, { percentUsed: 30, resetsAt: after }), 17);
+  // once that is kept, what the run goes on to use in the new account is added
+  const kept = { ...started, ...weekOf(started, { percentUsed: 30, resetsAt: after }) };
+  assert.equal(weekShare(kept, { percentUsed: 42, resetsAt: after }), 29);
+});
+
+test('a limit reset inside the week keeps what the run had used before it', () => {
+  const i = inputsOf('RunningA');
+  const week = i.usage.sevenDay.resetsAt;
+  const run = { shareBefore: 17, weekAtStart: 0, weekUsed: 99, weekResetsAt: week };
+  assert.deepEqual(weekOf(run, { percentUsed: 21, resetsAt: week }), { shareBefore: 116, weekAtStart: 0, weekResetsAt: week, weekUsed: 21 });
+  assert.equal(weekShare(run, { percentUsed: 21, resetsAt: week }), 137);
+  // a point or two lower is another session's slightly older figure, not a reset
+  assert.equal(weekOf(run, { percentUsed: 96, resetsAt: week }).shareBefore, 17);
+  assert.equal(weekShare(run, { percentUsed: 96, resetsAt: week }), 113);
+  // kept, it counts on from the reset and folds nothing twice
+  const kept = { ...run, ...weekOf(run, { percentUsed: 21, resetsAt: week }) };
+  assert.equal(weekShare(kept, { percentUsed: 25, resetsAt: week }), 141);
+});
+
+test('a share past a whole week is still said as a share of the week', () => {
+  const i = inputsOf('RunningA');
+  const week = i.usage.sevenDay.resetsAt;
+  const said = (state, used) => strip(toAnsi(renderCard(buildView({ ...i, state: { ...i.state, ...state }, usage: { sevenDay: { percentUsed: used, resetsAt: week } } }), { width: 126 }), 'dark', 126));
+  assert.match(said({ shareBefore: 116, weekAtStart: 0, weekUsed: 21, weekResetsAt: week }, 21), /≈ 137% of your week/);
+  assert.match(said({ shareBefore: 80, weekAtStart: 0, weekUsed: 20, weekResetsAt: week }, 20), /≈ 100% of your week/);
+  assert.match(said({ shareBefore: 81, weekAtStart: 0, weekUsed: 20, weekResetsAt: week }, 20), /≈ 101% of your week/);
+  assert.match(said({ shareBefore: 0, weekAtStart: 0, weekUsed: 38, weekResetsAt: week }, 38), /≈ 38% of your week/);
 });
 
 test('an orchestrator opens, and the more row opens everything', () => {
@@ -1190,4 +1225,60 @@ test('a cut inside a span ahead of a separator drops the separator too', () => {
       assert.ok(cols(r) <= w, name + ' at ' + w + ': ' + r);
     }
   }
+});
+
+// Three waves open, and agents that say which wave they work for: each is listed under its own wave's lane.
+const underLanes = (agents, opts = {}) => {
+  const i = inputsOf('26-lanes-three-open');
+  i.agents = agents.map(([id, description, wave, more = {}]) => ({ id, description, model: 'claude-opus-5-5', effort: 'high', tokens: 1000, startTime: i.now - 60000, status: 'running', ...(wave == null ? {} : { wave }), ...more }));
+  const width = opts.width ?? 115;
+  return strip(toAnsi(renderCard(buildView(i), { width, ...opts }), 'dark', width)).split('\n').map(l => l.trimEnd());
+};
+// Each row below the title and the state, by how it starts: a lane's name, or an agent's mark and words.
+const startsOf = rows => rows.slice(2).map(l => (/^waves?\b/.test(l) ? l.match(/^waves?( \d+)?/)[0] : l.match(/^( *\S.*?)(?: {2,}|$)/)[1]));
+
+test('each wave\'s agents are listed under its lane, in the lanes\' order, stood in by two', () => {
+  const rows = underLanes([['a', 'Build the importer', 3], ['b', 'Review the export fix', 2], ['c', 'Build the settings page', 3], ['d', 'Run the final checks', 1]]);
+  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', '  → Run the final checks', 'wave 2', '  → Review the export fix', 'wave 3', '  → Build the importer', '  → Build the settings page']);
+  // each stands in by two, and every agent's figures stand in the same columns
+  const under = rows.filter(l => l.startsWith('  → '));
+  assert.equal(new Set(under.map(l => l.indexOf('Opus'))).size, 1);
+  assert.equal(new Set(under.map(cols)).size, 1);
+});
+
+test('an agent with no wave, or of a wave that is not open, stays in the list beneath the lanes, lined up with the rest', () => {
+  const rows = underLanes([['a', 'Build the importer', 3], ['h', 'Hunt the settings pages', null], ['z', 'Deploy the last wave', 9]]);
+  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', 'wave 2', 'wave 3', '  → Build the importer', '→ Hunt the settings pages', '→ Deploy the last wave']);
+  const agents = rows.filter(l => /^ *→ /.test(l));
+  assert.equal(new Set(agents.map(l => l.indexOf('Opus'))).size, 1);
+  const framed = underLanes([['a', 'Build the importer', 3], ['h', 'Hunt the settings pages', null]], { frame: true });
+  assert.equal(framed.filter(l => l.startsWith('├')).length, 2, 'the list beneath keeps its own section');
+});
+
+test('with no agent that names an open wave the card is as it was', () => {
+  const plain = [['a', 'Build the importer', null], ['b', 'Review the export fix', null]];
+  assert.deepEqual(startsOf(underLanes(plain)), ['waves', 'wave 1', 'wave 2', 'wave 3', '→ Build the importer', '→ Review the export fix']);
+});
+
+test('where the rows run out, the wave with the most agents gives one up first, and the row beneath says how many are out of sight', () => {
+  const many = [['a', 'One', 3], ['b', 'Two', 3], ['c', 'Three', 3], ['d', 'Four', 3], ['e', 'Review it', 2], ['f', 'Check it', 1]];
+  // title, state, heading and three lanes are six rows: four more hold three agents and the row that counts the rest
+  const rows = underLanes(many, { maxRows: 10 });
+  assert.equal(rows.length, 10);
+  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', '  → Check it', 'wave 2', '  → Review it', 'wave 3', '  → One', '▸ 3 more agents']);
+});
+
+test('an orchestrator under a lane keeps its caret, and its workers stand in under it', () => {
+  const rows = underLanes([['o', 'Drive the backend work', 3], ['k', 'Build the queue', null, { parentId: 'o' }]], { });
+  const open = (() => { const i = inputsOf('26-lanes-three-open'); i.agents = [{ id: 'o', description: 'Drive the backend work', model: 'claude-opus-5-5', effort: 'high', tokens: 10, startTime: i.now, status: 'running', wave: 3 }, { id: 'k', description: 'Build the queue', model: 'claude-sonnet-5-5', effort: 'medium', tokens: 10, startTime: i.now, status: 'running', parentId: 'o' }]; i.ui = { expanded: { o: true } }; return strip(toAnsi(renderCard(buildView(i), { width: 115 }), 'dark', 115)).split('\n').map(l => l.trimEnd()); })();
+  assert.match(rows.find(l => l.includes('Drive the backend work')), /^ {2}▸ ◈ Drive the backend work/);
+  assert.match(open.find(l => l.includes('Drive the backend work')), /^ {2}▾ ◈ Drive the backend work/);
+  assert.match(open.find(l => l.includes('Build the queue')), /^ {6}→ Build the queue/);
+});
+
+test('the narrow card keeps its one agent and its count beneath the lanes', () => {
+  const rows = underLanes([['a', 'Build the importer', 3], ['b', 'Review the export fix', 2]], { width: 35 });
+  assert.deepEqual(rows.slice(2, 5).map(l => l.slice(0, 6)), ['wave 1', 'wave 2', 'wave 3']);
+  assert.match(rows[5], /^→ Build the importer/);
+  assert.match(rows.at(-1), /1 more/);
 });

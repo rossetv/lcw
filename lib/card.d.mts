@@ -11,10 +11,11 @@ export interface AgentInput {
   spark?: number[];             // tokens gained in each of its last 20-second spans, oldest first (the mod keeps them)
   tokensWas?: number;           // the figure its tokens moved from, at movedAt: the card rolls up from it
   movedAt?: number | null;
+  wave?: number | null;         // the wave of a sweep it works for, where known: it is listed under that wave's lane
 }
 export interface AgentNode {
   id: string; desc: string; model: string; effort: string; tokens: number | null; spark: number[] | null; elapsed: string;
-  chip: 'quiet' | 'stalled' | null; expanded: boolean; kids: AgentNode[];
+  chip: 'quiet' | 'stalled' | null; expanded: boolean; kids: AgentNode[]; wave: number | null;
 }
 /** One open wave as its lane draws it: running, or shipped and waiting on its merge while the charter merges as it goes (then at Ship, step 'merging'). */
 export interface OpenWave {
@@ -45,7 +46,7 @@ export interface SweepView {
 export interface View {
   /** 'sweep' only when state.shape says so; a run with no shape is a build. */
   name: string; shape: 'build' | 'sweep'; stage: string;
-  /** How long the run has been at its stage; while a sweep has a wave open, how long the sweep has run, and once finished, how long it took. */
+  /** How long the run has run, a build or a sweep at whatever stage; once finished, how long it took. */
   titleRight: string;
   mode: 'running' | 'with-you' | 'paused' | 'finished' | 'stopped';
   /** The colour of the frame: 'needsYou' with open asks, 'caution' paused, 'ok' finished, else 'hairline'. */
