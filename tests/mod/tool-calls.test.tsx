@@ -1,20 +1,16 @@
 import { expect, mock } from 'claude-code/testing'
 import { test } from './kit'
 import { cases } from '../core/mark-cases.mjs'
-import { next as olderHook } from '../../lib/activity.mjs'
+import { register } from '../../hooks/register'
 
-// After a tool call the mod says what the limit hook said, in the same cases, and counts a failed call for the
-// mascot as the activity hook did, with no process.
+// The command hook after a tool call starts the limit check only while the session's marker is up: the mod keeps it
+// up whenever that check would say something, in the limit hook's cases.
 
 const RUN = '/lcw/repos/r/runs/demo'
 const SELECTION = { sourceId: 'external-quota', endpoint: 'http://localhost:8080/v1' }
 const QUOTA: Record<string, [number, boolean]> = { ok: [80, false], blocked: [42, true], under: [42, false] }
-const RECORD = '/lcw/activity/p1.json'
-const CALLS: Record<string, object> = {
-  tool: { tool_name: 'Edit', tool_input: { file_path: 'a.txt' }, agent_id: undefined },
-  lcw: { tool_name: 'Bash', tool_input: { command: 'node /p/scripts/lcw.mjs mark 5500usd' }, agent_id: undefined },
-  agent: { tool_name: 'Edit', tool_input: { file_path: 'a.txt' }, agent_id: 'a1' },
-}
+const MARKER = '/lcw/after/p1'
+const START = { cwd: '/repo', surface: 'terminal', isInteractive: false } as const
 
 // Every test has its own instant and every write its own time, so nothing one test read stands for another's files.
 let instant = Date.UTC(2026, 5, 10, 12, 0, 0)
@@ -45,19 +41,20 @@ function filesFor(row: any) {
 }
 
 // A file system in memory whose times move with every change, as a real one's do.
-// beneath stands for the hooks of the session's list, under the mod.
-// process answers a command the mod runs, as the script would.
-function engine(on: any, initial: Record<string, string>, opts: { beneath?: (e: any) => object; process?: (argv: string[]) => void | Promise<void> } = {}) {
+// process answers a command the mod runs, as the script would; id and transcript are the session's, which a /clear changes.
+// ps finds the processes in running. pid is the CLAUDE_PID the engine gives as the command hooks', inherited the one in its own environment.
+function engine(on: any, initial: Record<string, string>, opts: { process?: (argv: string[]) => void | Promise<void>; transcript?: string; running?: number[]; pid?: number; inherited?: number; hookEnv?: () => Promise<Record<string, string>> } = {}) {
   const now = (instant += STEP)
   const clock = mock.clock(on, { now })
   const times: Record<string, number> = {}
   const files = new Proxy({} as Record<string, string>, { set: (all, path: string, text) => { all[path] = text; times[path] = now - 1000 + ++writes / 1000; return true } })
   Object.assign(files, initial)
-  const w = { now, clock, files, written: [] as string[], runs: [] as string[][] }
+  const w = { now, clock, files, written: [] as string[], runs: [] as string[][], id: 'p1', hookEnvCalls: 0 }
   const kids = (dir: string) => Object.keys(files).filter((p) => p.startsWith(dir + '/'))
-  on('session.id', () => ({ value: 'p1' }))
-  on('session.info', () => ({ value: { transcriptPath: '', platform: 'linux' } }))
-  on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
+  on('session.id', () => ({ value: w.id }))
+  on('session.info', () => ({ value: { transcriptPath: opts.transcript ?? '', platform: 'linux' } }))
+  on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : e.name === 'CLAUDE_PID' && opts.inherited ? String(opts.inherited) : undefined }))
+  on('process.hookEnv', async () => { w.hookEnvCalls++; return { value: opts.hookEnv ? await opts.hookEnv() : opts.pid ? { CLAUDE_PID: String(opts.pid) } : {} } })
   on('fs.read', (_: any, e: any) => {
     if (e.path in files) return { value: files[e.path] }
     throw new Error('ENOENT')
@@ -76,113 +73,184 @@ function engine(on: any, initial: Record<string, string>, opts: { beneath?: (e: 
     if (e.path in files) return { value: { kind: 'file', size: files[e.path]!.length, mtimeMs: times[e.path], isLink: false } }
     throw new Error('ENOENT')
   })
-  on('process.run', async (_: any, e: any) => { w.runs.push([...e.argv]); await opts.process?.(e.argv); return { value: { exitCode: 1, stdout: '', stderr: '' } } })
+  on('process.run', async (_: any, e: any) => {
+    w.runs.push([...e.argv])
+    await opts.process?.(e.argv)
+    const pid = Number(e.argv[e.argv.indexOf('-p') + 1])
+    if (e.argv[0] === 'ps' && opts.running?.includes(pid)) return { value: { exitCode: 0, stdout: `${pid}\n`, stderr: '' } }
+    return { value: { exitCode: 1, stdout: '', stderr: '' } }
+  })
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.stop', (_: any, e: any) => ({ isTurnRunning: e.isTurnRunning }))
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
-  on('classic.PostToolUse', (_: any, e: any) => opts.beneath?.(e) ?? {})
-  on('classic.PostToolUseFailure', (_: any, e: any) => opts.beneath?.(e) ?? {})
+  on('session.end', (_: any, e: any) => ({ sessionId: e.sessionId }))
+  on('session.measure', (_: any, e: any) => ({ changed: e.changed }))
   return w
 }
 
-const call = ($: any, kind: string) => $.classic.PostToolUse({ ...CALLS[kind], tool_response: {}, tool_use_id: 'toolu_1' })
-// What Claude is told, with the plugin's lcw command line written as the cases write it.
-const said = (r: any) => (r?.additionalContext ?? []).join('\n').replace(/node ('[^']*\/scripts\/lcw\.mjs'|\S*\/scripts\/lcw\.mjs)/g, '{cli}') || null
-const fail = ($: any, id: string, more: object = {}) => $.classic.PostToolUseFailure({ tool_name: 'Bash', tool_input: { command: 'false' }, tool_use_id: id, error: 'exit 1', session_id: 'p1', transcript_path: '', agent_id: undefined, ...more })
+const up = (w: { files: Record<string, string> }, file = MARKER) => !!w.files[file]
+const atMark = cases.find((c) => c.name === 'the percent mark, no run')!
+const payg = cases.find((c) => c.name.startsWith('a session that turns out to be pay-per-token'))!
+const week = (percentUsed: number) => JSON.stringify({ at: 1, sevenDay: { percentUsed, resetsAt: '2026-06-12T12:00:00.000Z' } })
 
-for (const row of cases) {
-  for (const kind of ['tool', 'lcw', 'agent'].filter((k) => k in row.expect)) {
-    test(`after a ${kind} call, the usage mark: ${row.name}`, async ($, on) => {
-      const w = engine(on, filesFor(row))
-      const want = (row.expect as any)[kind]
-      expect(said(await call($, kind))).toBe(want)
-      expect(w.runs).toEqual([])
-    })
-  }
+for (const row of cases.filter((c) => 'tool' in c.expect) as any[]) {
+  const said = row.expect.tool !== null
+  const raised = row.marker ?? said
+  test(`the marker is ${raised ? 'up' : 'down'} where the check after a tool call says ${said ? 'something' : 'nothing'}: ${row.name}`, async ($, on) => {
+    expect(said && !raised).toBe(false)
+    const w = engine(on, filesFor(row), { transcript: row.transcript ? `/t/${row.transcript}.jsonl` : '', running: row.running, pid: row.pid })
+    await $.session.start(START)
+    await w.clock.advance(1000)
+    expect(up(w)).toBe(raised)
+  })
 }
 
-const payg = cases.find((c) => c.name.startsWith('a session that turns out to be pay-per-token'))!
-const atMark = cases.find((c) => c.name === 'the percent mark, no run')!
-
-test('the pay-per-token note is said after one tool call only, and the session file is left as it was', async ($, on) => {
-  const w = engine(on, filesFor(payg))
-  const session = w.files['/lcw/sessions/p1.json']
-  expect(said(await call($, 'tool'))).toMatch(/^LCW: this session turned out to be billed per token\./)
-  expect(said(await call($, 'tool'))).toBe(null)
-  expect(said(await call($, 'lcw'))).toBe(null)
-  expect(w.files['/lcw/sessions/p1.json']).toBe(session)
-})
-
-test('the pay-per-token note is not said after a tool call once the hook at a prompt has said it', async ($, on) => {
-  const files = filesFor(payg)
-  files['/lcw/sessions/p1.json'] = JSON.stringify({ billing: 'payg', toldPayg: true })
-  engine(on, files)
-  expect(said(await call($, 'tool'))).toBe(null)
-})
-
-test('a successful tool call writes nothing, under the mark or at it', async ($, on) => {
-  const w = engine(on, filesFor(atMark))
-  expect(said(await call($, 'tool'))).toMatch(/^STOP!/)
-  w.files['/lcw/usage.json'] = JSON.stringify({ at: 1, sevenDay: { percentUsed: 50, resetsAt: '2026-06-12T12:00:00.000Z' } })
-  w.written.length = 0
-  await w.clock.advance(100)
-  expect(said(await call($, 'tool'))).toBe(null)
-  expect(w.written).toEqual([])
-})
-
-test('a run finished a moment ago, still shown on the card, is no run to the stop', async ($, on) => {
-  const files = filesFor({ ...atMark, run: 'p1' })
-  const state = JSON.parse(files[RUN + '/state.json']!)
-  files[RUN + '/state.json'] = JSON.stringify({ ...state, status: 'finished', finishedAt: instant + STEP - 1000 })
-  engine(on, files)
-  expect(said(await call($, 'tool'))).toBe(atMark.expect.tool)
-})
-
-test('three failed calls in a row are counted, with no process', async ($, on) => {
-  const w = engine(on, { [RECORD]: JSON.stringify({ state: 'working', at: 5, fails: 0 }) })
-  for (const id of ['toolu_1', 'toolu_2', 'toolu_3']) await fail($, id)
-  expect(JSON.parse(w.files[RECORD]!)).toMatchObject({ state: 'working', at: 5, fails: 3, failAt: w.now })
-  expect(w.runs).toEqual([])
-})
-
-test('a failed call is counted once when an older list of hooks counts it too', async ($, on) => {
-  // The activity hook of an older list of hooks, beneath the mod, with the rule it runs.
-  const w = engine(on, { [RECORD]: JSON.stringify({ state: 'working', at: 5, fails: 0 }) }, {
-    beneath: (e) => {
-      const record = olderHook(e, JSON.parse(w.files[RECORD] ?? 'null'), w.now)
-      if (record) w.files[RECORD] = JSON.stringify(record)
-      return {}
-    },
+// Where the engine gives no CLAUDE_PID, the mod takes each one the hook may be started with.
+for (const row of cases.filter((c) => 'tool' in c.expect && c.pid) as any[]) {
+  const raised = row.guessed ?? row.marker ?? row.expect.tool !== null
+  test(`without this Claude Code's pid, the marker is ${raised ? 'up' : 'down'}: ${row.name}`, async ($, on) => {
+    const w = engine(on, filesFor(row), { transcript: row.transcript ? `/t/${row.transcript}.jsonl` : '', running: row.running })
+    await $.session.start(START)
+    await w.clock.advance(1000)
+    expect(up(w)).toBe(raised)
   })
-  await fail($, 'toolu_1')
-  await fail($, 'toolu_2')
-  expect(JSON.parse(w.files[RECORD]!).fails).toBe(2)
+}
+
+// The engine's own CLAUDE_PID is that of whatever launched it, so only the command hooks' says which Claude Code this is.
+for (const { hooks, inherited, lent } of [{ hooks: 400, inherited: 300, lent: false }, { hooks: 300, inherited: undefined, lent: true }]) {
+  test(`billing a reading settles reaches the anchor only where the command hooks' CLAUDE_PID names its running owner: ${lent ? 'it does' : 'an inherited one does not'}`, async ($, on) => {
+    const w = engine(on, {
+      '/lcw/sessions/p1.json': JSON.stringify({ sessionCanonicalId: 'a1', billing: 'unclear' }),
+      '/lcw/sessions/a1.json': JSON.stringify({ sessionCanonicalId: 'a1', claudePid: 300, billing: 'unclear' }),
+    }, { running: [300], pid: hooks, inherited })
+    await $.session.start(START)
+    await $.session.measure({ context: { window: 200000 }, changed: ['rateLimits'], rateLimits: [{ kind: 'seven_day', percentUsed: 50, resetsAt: '2026-06-12T12:00:00Z' }], cost: { usd: 10 } } as any)
+    expect(JSON.parse(w.files['/lcw/sessions/p1.json']!).billing).toBe('subscription')
+    expect(JSON.parse(w.files['/lcw/sessions/a1.json']!).billing).toBe(lent ? 'subscription' : 'unclear')
+  })
+}
+
+const LENT = {
+  '/lcw/sessions/p1.json': JSON.stringify({ sessionCanonicalId: 'a1', billing: 'unclear' }),
+  '/lcw/sessions/a1.json': JSON.stringify({ sessionCanonicalId: 'a1', claudePid: 300, billing: 'unclear' }),
+}
+const settle = ($: any) => $.session.measure({ context: { window: 200000 }, changed: ['rateLimits'], rateLimits: [{ kind: 'seven_day', percentUsed: 50, resetsAt: '2026-06-12T12:00:00Z' }], cost: { usd: 10 } } as any)
+
+test('a hooks environment that never answers does not hold back the marker or the end of the session, and is not asked on every tick', async ($, on) => {
+  const w = engine(on, { ...filesFor(atMark), ...LENT }, { hookEnv: () => new Promise(() => {}) })
+  await $.session.start(START)
+  await w.clock.advance(2000)
+  expect(up(w)).toBe(true)
+  const ended = $.session.end({ reason: 'clear', sessionId: 'p1' } as any)
+  await w.clock.advance(2000)
+  await ended
+  expect(w.files[MARKER]).toBe('')
+  await w.clock.advance(10000)
+  expect(w.hookEnvCalls).toBe(1)
 })
 
-test('failed calls that end together are each counted', async ($, on) => {
-  const w = engine(on, { [RECORD]: JSON.stringify({ state: 'working', at: 5, fails: 0 }) })
-  await Promise.all(['toolu_1', 'toolu_2', 'toolu_3'].map((id) => fail($, id)))
-  expect(JSON.parse(w.files[RECORD]!).fails).toBe(3)
+test('the pid a hooks environment gives after a failure or a timeout is then used', async ($, on) => {
+  let asks = 0
+  let late: (env: Record<string, string>) => void = () => {}
+  const w = engine(on, { ...LENT }, {
+    running: [300],
+    hookEnv: () => (++asks === 1 ? Promise.reject(new Error('no')) : asks === 2 ? new Promise((r) => { late = r }) : Promise.resolve({})),
+  })
+  await $.session.start(START)
+  await w.clock.advance(5000)
+  expect(asks).toBe(2)
+  late({ CLAUDE_PID: '300' })
+  await w.clock.advance(2000)
+  await settle($)
+  expect(JSON.parse(w.files['/lcw/sessions/a1.json']!).billing).toBe('subscription')
 })
 
-test('a call the person interrupted, or a subagent\'s failed call, is not counted and writes nothing', async ($, on) => {
-  const was = JSON.stringify({ state: 'working', at: 5, fails: 1 })
-  const w = engine(on, { [RECORD]: was })
-  await fail($, 'toolu_1', { is_interrupt: true })
-  await fail($, 'toolu_2', { agent_id: 'a1' })
-  expect(w.files[RECORD]).toBe(was)
-  expect(w.written).toEqual([])
+test('the marker names the session, its transcript and when it was raised', async ($, on) => {
+  const w = engine(on, filesFor(atMark), { transcript: '/t/t1.jsonl' })
+  await $.session.start(START)
+  await w.clock.advance(1000)
+  const marker = JSON.parse(w.files[MARKER]!)
+  expect(marker).toMatchObject({ session: 'p1', transcript: 't1' })
+  expect(marker.at >= w.now && marker.at <= w.now + 1000).toBe(true)
 })
 
-test('a hook beneath that fails after a tool call does not keep the stop at the mark from being said, nor break the call', async ($, on) => {
-  engine(on, filesFor(atMark), { beneath: () => { throw new Error('beneath') } })
-  expect(said(await call($, 'tool'))).toBe(atMark.expect.tool)
-  expect(await fail($, 'toolu_1')).toEqual({})
+test('the marker of a session with a backslash transcript path comes up at the mark on the row under its name', async ($, on) => {
+  const files = filesFor({ week: 72, sessions: { t1: { markPercent: 70 } } })
+  const w = engine(on, files, { transcript: 'C:\\Users\\me\\.claude\\projects\\x\\t1.jsonl' })
+  await $.session.start(START)
+  await w.clock.advance(1000)
+  expect(up(w)).toBe(true)
+  expect(JSON.parse(w.files[MARKER]!)).toMatchObject({ transcript: 't1' })
 })
 
-// The note that the run is held at its mark, its gate, is no longer written at the tool call: the mod writes it itself
-// when an outside quota's reading comes to hold the run.
+test('the marker is lowered once the session is under its mark, and written only when that changes', async ($, on) => {
+  const w = engine(on, filesFor(atMark))
+  const writes = () => w.written.filter((p) => p === MARKER).length
+  await $.session.start(START)
+  await w.clock.advance(1000)
+  expect(up(w)).toBe(true)
+  const raised = writes()
+  await w.clock.advance(3000)
+  expect(writes()).toBe(raised)
+  w.files['/lcw/usage.json'] = week(50)
+  await w.clock.advance(1000)
+  expect(w.files[MARKER]).toBe('')
+  await w.clock.advance(3000)
+  expect(writes()).toBe(raised + 1)
+})
+
+test('a marker cleared while the session is at its mark is put back within a second', async ($, on) => {
+  const w = engine(on, filesFor(atMark))
+  await $.session.start(START)
+  await w.clock.advance(1000)
+  delete w.files[MARKER]
+  await w.clock.advance(1000)
+  expect(up(w)).toBe(true)
+})
+
+test('the marker stays up for the pay-per-token note until the session row shows it was given', async ($, on) => {
+  const w = engine(on, filesFor(payg))
+  await $.session.start(START)
+  await w.clock.advance(1000)
+  expect(up(w)).toBe(true)
+  w.files['/lcw/sessions/p1.json'] = JSON.stringify({ billing: 'payg', toldPayg: true })
+  await w.clock.advance(1000)
+  expect(up(w)).toBe(false)
+})
+
+test('a session that ends has its marker lowered, and one cleared into a new id has its own', async ($, on) => {
+  const w = engine(on, filesFor(atMark))
+  await $.session.start(START)
+  await w.clock.advance(1000)
+  await $.session.end({ reason: 'clear', sessionId: 'p1' } as any)
+  expect(w.files[MARKER]).toBe('')
+  w.id = 'p2'
+  await w.clock.advance(1000)
+  expect(up(w)).toBe(false)
+  expect(up(w, '/lcw/after/p2')).toBe(true)
+})
+
+test('a second start under a new id lowers the marker of the first', async ($, on) => {
+  const w = engine(on, filesFor(atMark))
+  await $.session.start(START)
+  await w.clock.advance(1000)
+  w.id = 'p2'
+  await $.session.start(START)
+  await w.clock.advance(1000)
+  expect(up(w)).toBe(false)
+  expect(up(w, '/lcw/after/p2')).toBe(true)
+})
+
+test('the mod hooks no classic event, which managed settings can send past it', () => {
+  const names: string[] = []
+  const chain: any = { catch: () => chain }
+  register(((name: string) => { names.push(name); return chain }) as any, {} as any)
+  expect(names).toContain('turn.complete')
+  expect(names.filter((n) => n.startsWith('classic.'))).toEqual([])
+})
+
+// The run's gate, when an outside quota's reading comes to hold it, the mod also writes itself within a second, not waiting for the next tool call or prompt.
 const held = { name: 'an outside quota under the mark, then over it', sessions: { p1: { billing: 'subscription' } }, quota: { p1: 'under' }, run: 'p1' }
 const syncs = (runs: string[][]) => runs.filter((a) => a[1]?.endsWith('/scripts/gate-reconcile.mjs') && JSON.parse(a[2] ?? '{}').action === 'sync')
 const over = (files: Record<string, string>, requestId = 'q2') => {
@@ -239,17 +307,4 @@ test('a reading that came while a gate check was still running is tried once tha
   expect(syncs(w.runs).length).toBe(2)
   await w.clock.advance(20000)
   expect(syncs(w.runs).length).toBe(2)
-})
-
-test('three tool calls that end together give the pay-per-token note once, and each is told to stop at the mark', async ($, on) => {
-  engine(on, filesFor(cases.find((c) => c.name.startsWith('the note comes before the stop'))!))
-  const told = (await Promise.all([1, 2, 3].map((n) => $.classic.PostToolUse({ ...CALLS.tool, tool_response: {}, tool_use_id: `toolu_${n}` } as any)))).map(said)
-  expect(told.filter((t) => /^LCW: this session turned out to be billed per token\./.test(t ?? '')).length).toBe(1)
-  expect(told.every((t) => /STOP! LCW: this session is at its usage mark/.test(t ?? ''))).toBe(true)
-})
-
-test('a failed call and Stop pressed at the same moment both reach the mascot\'s record', async ($, on) => {
-  const w = engine(on, { [RECORD]: JSON.stringify({ state: 'working', at: 5, fails: 0 }) })
-  await Promise.all([fail($, 'toolu_1'), $.session.stop({ isTurnRunning: true })])
-  expect(JSON.parse(w.files[RECORD]!)).toMatchObject({ state: 'rest', fails: 1 })
 })

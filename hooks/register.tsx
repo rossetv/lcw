@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { LcwCompletion } from '../types'
 
 import {
-  activityFile, capFile, cleanupFile, noticesFile, proxyQuotaNoticeFile, quotaFile, runPaths, runsDir, sessionFile, spendCommandFile, spendDir, spendFile, spendReadingFile, updateFile, usageFile,
+  activityFile, afterFile, capFile, cleanupFile, noticesFile, proxyQuotaNoticeFile, quotaFile, runPaths, runsDir, sessionFile, sessionNames, spendCommandFile, spendDir, spendFile, spendReadingFile, updateFile, usageFile,
 } from '../lib/key.mjs'
 import { answerKey, bannerFor, bannerRows, limitsShort } from '../lib/banner.mjs'
 import type { Banner, BannerFacts } from '../lib/banner.mjs'
@@ -11,14 +11,14 @@ import { moneyFrom, readingOf, spendFileCounts } from '../lib/spend.mjs'
 import { buildView, renderCard } from '../lib/card.mjs'
 import { hex, thresholds as TH } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
-import { atMark, lcwCommand, lcwOnly, stopTexts, toldFile } from '../lib/mark.mjs'
-import { next as nextActivity } from '../lib/activity.mjs'
+import { atMark, stopTexts, toldFile } from '../lib/mark.mjs'
+import { aliasRows, anchorName, rowsBilling, runMark, sessionPick } from '../lib/session.mjs'
 import { activeQuota, CLAIM_MS, evaluateQuota, quotaOff, REFRESH_MS } from '../lib/quota.mjs'
 import type { QuotaView } from '../lib/quota.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, completionPrompt, countsTurn, compactInstructions, cardMotion, cardPace, gateFor, isShown, layout, measureStep,
   longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
-  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, launchedId, briefOf,
+  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, briefOf,
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
@@ -91,6 +91,10 @@ const S = {
   quotaSynced: '' as string | null,
   // Whether the Claude Code owning a canonical session row was running, by row and owner, and until when that holds.
   owners: new Map<string, { until: number; open: boolean }>(),
+  // This Claude Code's pid, as its command hooks get it in CLAUDE_PID: 0 when the engine gives none, null until asked.
+  claudePid: null as number | null,
+  pidCall: null as Promise<void> | null,
+  pidRetryAt: 0,
   startedAt: 0,
   reopenChecked: false,
   // The id of the run a Resume press on the unfinished-run box takes over: no reopened session's, so no reopen prompt.
@@ -141,8 +145,13 @@ const S = {
   unfocusUntil: 0,
   // When the person last sent a prompt: one sent after the Brainstorm's playback asked for approval ends that box.
   repliedAt: 0,
-  // The main session's turn ended on an API error that clears on its own: the tries to carry it on (carryFailed).
+  // The main session's turn ended on an API error that clears on its own, as its activity record says: the tries to carry it on (carryFailed).
   carry: null as Carry | null,
+  // When the main turn now running, or last run, started; after one that ended on an API error, until when its record is looked for.
+  turnStartedAt: 0,
+  seek: null as { since: number; until: number } | null,
+  // The marker of the hook after a tool call: its file, whether it is up (undefined until looked at), and an ended session's, never raised again.
+  after: { file: '', up: undefined as boolean | undefined, ended: '' },
   // A prompt that carries the run on (the reopen, the resume after a checkpoint) and has not been sent yet: see owe.
   owed: null as { runDir: string; text: string } | null,
   // A refresh has finished: until then a null run is not yet known, not none.
@@ -186,12 +195,10 @@ function keepNotices($: EngineInterface) {
 // An agent's brief says which wave it works for, and only its launch shows the brief: the wave is kept from there, by
 // the id the launch answered. An agent that one of a wave's agents starts works for that wave too.
 const MAX_WAVES_KEPT = 400
-function noteLaunch($: EngineInterface, e: { tool_name?: string; tool_input?: unknown; tool_response?: unknown; agent_id?: string }) {
-  if ((e.tool_name !== 'Agent' && e.tool_name !== 'Task') || !S.run?.state?.sweep) return
-  const id = launchedId(e.tool_response)
-  const input = (e.tool_input ?? {}) as { prompt?: unknown; description?: unknown }
-  const wave = waveOfBrief(input.prompt, input.description, S.run.state.name) ?? (e.agent_id ? S.waves[e.agent_id] : undefined)
-  if (id && wave != null) keepWave($, id, wave)
+function noteLaunch($: EngineInterface, e: { prompt?: unknown; description?: unknown; parentAgentId?: string; resume?: unknown }, id: unknown) {
+  if (e.resume || typeof id !== 'string' || !id || S.waves[id] !== undefined || !S.run?.state?.sweep) return
+  const wave = waveOfBrief(e.prompt, e.description, S.run.state.name) ?? (e.parentAgentId ? S.waves[e.parentAgentId] : undefined)
+  if (wave != null) keepWave($, id, wave)
 }
 
 function keepWave($: EngineInterface, id: string, wave: number) {
@@ -342,6 +349,29 @@ async function lcwHome($: EngineInterface) {
   return S.home
 }
 
+// How long a tick waits for the engine to give the environment of the command hooks.
+const PID_WAIT_MS = 500
+
+// The engine's own CLAUDE_PID is inherited from whatever launched it; the command hooks' is this Claude Code's.
+// Never throws and never waits past PID_WAIT_MS: where the engine has no such call (the call throws), or it fails or does not answer,
+// there is no pid (0). One call is pending at a time, and a failed one is asked again no sooner than a second later.
+async function claudePid($: EngineInterface) {
+  if (S.claudePid === null && !S.pidCall && await $.clock.now() >= S.pidRetryAt) {
+    const call = (async () => {
+      const env = await $.process.hookEnv()
+      const pid = Number(env?.CLAUDE_PID)
+      if (!env) throw new Error('no environment')
+      S.claudePid = Number.isInteger(pid) && pid > 1 ? pid : 0
+    })()
+    S.pidCall = call
+    call.catch(async () => { S.pidRetryAt = (await $.clock.now()) + 1000 }).finally(() => { if (S.pidCall === call) S.pidCall = null })
+  }
+  try {
+    if (S.claudePid === null && S.pidCall) await Promise.race([S.pidCall, $.clock.sleep(PID_WAIT_MS)])
+  } catch {}
+  return S.claudePid ?? 0
+}
+
 // The canonical row a session's own row points at, when it may be used: not a stranger's, and not one whose owner is
 // another Claude Code still running. Null otherwise.
 async function lentAnchor($: EngineInterface, id: string, session: any) {
@@ -350,7 +380,7 @@ async function lentAnchor($: EngineInterface, id: string, session: any) {
   if (typeof canonical !== 'string' || !/^[\w.-]{1,256}$/.test(canonical) || /^\.+$/.test(canonical) || canonical === id) return null
   const anchor = await readJson($, sessionFile(home, canonical))
   if (anchor?.sessionCanonicalId !== canonical) return null
-  const pid = Number(session?.claudePid) || Number(await $.env.get('CLAUDE_PID'))
+  const pid = Number(session?.claudePid) || await claudePid($)
   if (Number.isInteger(anchor.claudePid) && anchor.claudePid > 1 && anchor.claudePid !== pid) {
     const key = id + ':' + canonical + ':' + anchor.claudePid
     const now = await $.clock.now()
@@ -378,17 +408,18 @@ async function readSession($: EngineInterface, id: string) {
   }
 }
 
-// The run bound to this session, or null. A state.json caught mid-write throws, keeping the last one.
-async function readRun($: EngineInterface, now: number): Promise<Run | null> {
+// The run bound to this session, or to the session row named id, or null. A state.json caught mid-write throws, keeping the last one.
+async function readRun($: EngineInterface, now: number, id?: string): Promise<Run | null> {
   const home = await lcwHome($)
-  const binding = await readSession($, await $.session.id())
+  const self = id ?? await $.session.id()
+  const binding = await readSession($, self)
   if (!binding?.runDir) return null
   const paths = runPaths(binding.runDir)
   const text = await readText($, paths.state)
   if (text === null) return null
   let state = JSON.parse(text)
   if (!isShown(state, now)) return null
-  const session = state.driver && state.driver !== await $.session.id()
+  const session = state.driver && state.driver !== self
     ? await readSession($, state.driver) : binding
   state = { ...state, markPercent: session?.markPercent ?? (session?.markUsd != null ? TH.usageMarkPercent : state.markPercent) }
   const quota = await readQuota($, session, state.markPercent ?? TH.usageMarkPercent, now)
@@ -428,8 +459,14 @@ async function limitsFact($: EngineInterface): Promise<BannerFacts['limits']> {
 // The name a session's spend is kept under: its transcript's, which a resumed session keeps and the status line
 // goes by too, else its id. One session kept under two names would count its dollars twice.
 async function spendName($: EngineInterface) {
-  const path = await $.session.info().then((i) => i.transcriptPath).catch(() => '')
-  return path ? path.split('/').pop()!.replace(/\.jsonl$/, '') : await $.session.id()
+  return (await transcriptName($)) ?? await $.session.id()
+}
+
+// The base name of the session's transcript, null when it has none. Asked as a look, so the money views and the
+// timers that fire together share one answer.
+async function transcriptName($: EngineInterface) {
+  const path = await look($, 'info', () => $.session.info().then((i) => i.transcriptPath).catch(() => ''))
+  return path ? path.split(/[\\/]/).pop()!.replace(/\.jsonl$/, '') : null
 }
 
 // The money view for a session billed per token, else null: the machine's spend from every session's record, the
@@ -438,19 +475,26 @@ async function spendName($: EngineInterface) {
 async function readMoney($: EngineInterface, session: any, state: any, gate: any, now: number) {
   const quota = await readQuota($, session, state?.markPercent ?? session?.markPercent ?? TH.usageMarkPercent, now)
   if (quotaBilling(session, quota) !== 'payg') return null
-  session = { ...session, billing: 'payg' }
+  const spend = await spendFacts($, now)
+  const own = spend.records[spend.names.indexOf(`${await spendName($)}.json`)]
+  const money: any = moneyFrom({ records: spend.records.filter(Boolean), cap: spend.cap, reading: spend.reading, session: { ...session, billing: 'payg' }, state, sessionCum: own?.max, now })
+  return gate?.unit === 'usd' ? { ...money, retryAt: gate.retryAt, retried: !!gate.retried } : money
+}
+
+// What the money view counts: every spend record still in the 7 days (and the file names they came from), the cap
+// and the spend command's reading.
+async function spendFacts($: EngineInterface, now: number) {
   const home = await lcwHome($)
   const dir = spendDir(home)
   const names = [...((await folder($, dir))?.values() ?? [])]
     .filter((f) => f.kind === 'file' && f.name.endsWith('.json') && spendFileCounts(f.mtimeMs, now)).map((f) => f.name)
-  const records = await Promise.all(names.map((name) => readJson($, `${dir}/${name}`)))
-  const own = records[names.indexOf(`${await spendName($)}.json`)]
-  const money: any = moneyFrom({
-    records: records.filter(Boolean), cap: await readJson($, capFile(home)), session, state, sessionCum: own?.max, now,
+  return {
+    names,
+    records: await Promise.all(names.map((name) => readJson($, `${dir}/${name}`))),
+    cap: await readJson($, capFile(home)),
     // Read only: the spend command is run by the scripts, never by the mod.
     reading: readingOf(await readJson($, spendCommandFile(home)), await readJson($, spendReadingFile(home))),
-  })
-  return gate?.unit === 'usd' ? { ...money, retryAt: gate.retryAt, retried: !!gate.retried } : money
+  }
 }
 
 // The facts the usage mark is judged by, as the files stand when it is called, whatever the timers last saw (a look
@@ -1184,65 +1228,159 @@ async function checkpoint($: EngineInterface) {
   })().catch(() => {}).finally(() => { S.compacting = false }))
 }
 
-// The writes of the mascot's record, one at a time, so that two at once (two failed calls, or one and Stop) both count.
+// The mod's rewrites of the mascot's record, one at a time, so a second reads what the first wrote.
 let counting: Promise<unknown> = Promise.resolve()
 
 // The person pressed Stop on a running turn. No Stop hook fires for that, so the turn the mascot shows as
-// working is closed here; without it the creature would go on looking busy until the next turn ended. Written in
-// turn with the count of failed calls, which keeps the same record.
+// working is closed here; without it the creature would go on looking busy until the next turn ended. A turn a hook
+// has already ended is left as it is: a failed one's record is what the carry-on looks for.
 function noteStopped($: EngineInterface) {
   counting = counting.catch(() => {}).then(async () => {
     const file = activityFile(await lcwHome($), await $.session.id())
     forget(file)
-    await write($, file, JSON.stringify({ ...(await readJson($, file)), state: 'rest', at: await $.clock.now() }))
+    const record = await readJson($, file)
+    if (['failed', 'done'].includes(record?.state) && record.at >= S.turnStartedAt) return
+    await write($, file, JSON.stringify({ ...record, state: 'rest', at: await $.clock.now() }))
   })
   return counting
 }
 
-// What Claude is told after one of the session's own tool calls: the stop at the mark and the once-only note on
-// pay-per-token billing, in the words and cases of the limit hook. A finished run is no run here, as it is no run to the hook.
-async function afterTool($: EngineInterface, command: unknown) {
-  const f = await markFacts($)
-  const run = f.run && !['finished', 'stopped'].includes(f.run.state.status) ? f.run : null
-  const driverMark: number | null = run ? run.state.markPercent ?? TH.usageMarkPercent : null
-  const driverMoney = run && !run.quota ? run.money : null
-  // Checked and recorded one call at a time, so calls that end together give the note once.
-  const cli = f.money ? await (telling = telling.catch(() => null).then(() => tellPayg($))) : null
-  return stopTexts({
-    event: 'PostToolUse', lcwCall: lcwOnly(command), hasRun: !!run, cli, money: f.money, quota: f.quota,
-    heldQuota: f.quota?.hold ? f.quota : run?.quota?.hold ? run.quota : null, mark: f.mark, usage: f.usage, now: f.now,
-    driverHeld: !!run && !run.quota && atMark(driverMark, f.usage, f.now, driverMoney), driverMoney, driverMark,
-  })
-}
-
-let telling: Promise<string | null> = Promise.resolve(null)
-
-// The lcw command line for the once-only note on pay-per-token billing, when it is due; null once it was given.
-async function tellPayg($: EngineInterface) {
+// Whether the limit hook would tell Claude anything after one of the session's own tool calls now: the stop at the
+// mark or the once-only note on pay-per-token billing, with the rows read and rewritten as the hook reads and rewrites
+// them. What the hook reads turns on which Claude Code each row records still runs, which the mod cannot know fresh,
+// and on the CLAUDE_PID the hook is started with: this Claude Code's, when the engine gives it, else any (none, one a
+// row records, or another). Every answer is judged, and the hook speaks if it would under any: with k other processes
+// recorded, 2^k answers, or 2^k * (k + 2) without the pid, each worked out in memory, and only the ones that differ in
+// what the hook would read are judged against the quota and the spend. One Claude Code's rows record one process;
+// past six others the marker is kept up unjudged.
+async function afterDue($: EngineInterface, transcript: string | null, id: string) {
   const home = await lcwHome($)
-  const ids = [...new Set([await $.session.id(), await spendName($)])]
-  const told = await Promise.all(ids.flatMap((id) => [
-    readJson($, sessionFile(home, id)).then((s) => !!s?.toldPayg), readJson($, toldFile(home, id)).then((t) => !!t?.payg),
-  ]))
-  if (told.includes(true)) return null
-  // Recorded before it is said: a note not recorded would be said again after every call.
-  await write($, toldFile(home, ids[0]!), JSON.stringify({ payg: true }))
-  return lcwCommand($.plugin.root)
+  const now = await $.clock.now()
+  const rows = new Map<string, any>()
+  const read = async (name: string) => {
+    if (!rows.has(name)) rows.set(name, await readJson($, sessionFile(home, name)))
+    return rows.get(name)
+  }
+  const load = async (name: unknown) => {
+    if (typeof name !== 'string' || !name) return
+    const anchor = anchorName(await read(name))
+    if (anchor) await read(anchor)
+  }
+  await load(transcript)
+  await load(id)
+  // An anchor's run is the hook's too: its rewrite gives each name the anchor's run.
+  const runs = new Map<string, any>()
+  for (const row of [...rows.values()]) {
+    const dir = row?.runDir
+    if (typeof dir !== 'string' || runs.has(dir)) continue
+    const text = await readText($, runPaths(dir).state)
+    const state = text === null ? null : JSON.parse(text)
+    runs.set(dir, state && !['finished', 'stopped'].includes(state.status) ? state : null)
+    await load(state?.driver)
+  }
+  const told = (names: string[]) => Promise.all(names.map((name) => readJson($, toldFile(home, name)).then((t) => !!t?.payg)))
+  const off = quotaOff(await readJson($, quotaFile(home)))
+  const usage = await readJson($, usageFile(home))
+  const marks = (row: any) => row && { markUsd: row.markUsd, markPercent: row.markPercent }
+
+  const self = await claudePid($)
+  const pids = [...new Set([...rows.values()].map((row) => row?.claudePid).filter((pid) => Number.isInteger(pid) && pid > 1 && pid !== self))]
+  if (pids.length > 6) return true
+  const judged = new Set<string>()
+  let spend: Promise<Awaited<ReturnType<typeof spendFacts>>> | null = null
+  const money = async (pick: ReturnType<typeof sessionPick>, state: any) => {
+    if (rowsBilling(pick.rows, off) !== 'payg') return null
+    const { records, cap, reading } = await (spend ??= spendFacts($, now))
+    return moneyFrom({ records: records.filter(Boolean), cap, reading, session: pick.money, state, now })
+  }
+  for (let running = 0; running < 1 << pids.length; running++) {
+    const alive = (pid: unknown) => (!!self && pid === self) || (pids.includes(pid as number) && ((running >> pids.indexOf(pid as number)) & 1) === 1)
+    // -1 stands for a CLAUDE_PID that no row records.
+    for (const pid of self ? [self] : [0, -1, ...pids]) {
+      const names = sessionNames(transcript, id, (name) => rows.get(name), alive, pid)
+      const rewritten = aliasRows(names, (name) => rows.get(name), alive, pid)
+      const row = (name: string) => (Object.prototype.hasOwnProperty.call(rewritten, name) ? rewritten[name] : rows.get(name))
+      const own = sessionPick(names, row, alive, pid)
+      const dir = names.map((name) => row(name)?.runDir).find((d) => typeof d === 'string' && runs.get(d))
+      const state = dir ? runs.get(dir) : null
+      const driver = state ? sessionPick(state.driver, row, alive, pid) : null
+      const driverMark = state ? runMark(state, row, alive, pid) : null
+      const key = JSON.stringify([
+        names, names.some((name) => row(name)?.toldPayg), own.mark, own.quotaSelection, rowsBilling(own.rows, off), marks(own.money),
+        dir, driverMark, driver?.quotaSelection, driver && rowsBilling(driver.rows, off), marks(driver?.money),
+      ])
+      if (judged.has(key)) continue
+      judged.add(key)
+      const quota = await readQuota($, { quotaSelection: own.quotaSelection }, own.mark, now)
+      const ownMoney = await money(own, null)
+      const given = ownMoney && (names.some((name) => row(name)?.toldPayg) || (await told(names)).includes(true))
+      const driverQuota = state ? await readQuota($, { quotaSelection: driver!.quotaSelection }, driverMark!, now) : null
+      const driverMoney = state && !driverQuota ? await money(driver!, state) : null
+      const texts = stopTexts({
+        event: 'PostToolUse', lcwCall: false, hasRun: !!state, cli: ownMoney && !given ? 'lcw' : null, money: ownMoney, quota,
+        heldQuota: quota?.hold ? quota : driverQuota?.hold ? driverQuota : null, mark: own.mark, usage, now,
+        driverHeld: !!state && !driverQuota && atMark(driverMark, usage, now, driverMoney), driverMoney, driverMark,
+      })
+      if (texts.length) return true
+    }
+  }
+  return false
 }
 
+// The ticks, a start and an end take the marker one at a time, so a look begun for a session that has just ended cannot raise its marker again.
+let marking: Promise<unknown> = Promise.resolve()
+const inTurn = (fn: () => Promise<void>) => (marking = marking.then(fn).catch(() => {}))
 
-// A failed tool call of the session's own, counted in the record the activity hook keeps, under the name it uses.
-function countFailure($: EngineInterface, e: Parameters<typeof nextActivity>[0] & { session_id?: string; transcript_path?: string }) {
-  const name = e.transcript_path ? e.transcript_path.split('/').pop()!.replace(/\.jsonl$/, '') : e.session_id
-  counting = counting.catch(() => {}).then(async () => {
-    if (!name) return
-    const file = activityFile(await lcwHome($), name)
-    // The hooks write it too: read as it stands, not as a look a moment ago saw it.
+// The marker (afterFile) is the one fact the command hook after a tool call reads before it starts the limit check:
+// up while the check would say something. Its folder's look, fresh each tick, sees a session's start clear it.
+async function markAfter($: EngineInterface) {
+  const id = await $.session.id()
+  const file = afterFile(await lcwHome($), id)
+  if (file === S.after.ended) return
+  if (file !== S.after.file) {
+    await lowerAfter($)
+    S.after = { ...S.after, file, up: undefined }
+  }
+  const transcript = await transcriptName($)
+  const due = await afterDue($, transcript, id)
+  if (!due && S.after.up === false) return
+  const up = !!(await readText($, file))
+  if (due && !up) await write($, file, JSON.stringify({ session: id, transcript, at: await $.clock.now() }))
+  if (!due && up) await write($, file, '')
+  S.after.up = due
+}
+
+// The engine's $.fs removes no file: a marker is lowered by emptying it.
+async function lowerAfter($: EngineInterface) {
+  const file = S.after.file
+  if (!file || S.after.up === false) return
+  if (await readText($, file)) await write($, file, '')
+  S.after.up = false
+}
+
+// How long the activity record of a turn that ended on an API error is looked for: the StopFailure hook may write it after the turn ends.
+const SEEK_MS = 10000
+
+// The main turn ended on an API error: its kind is in the record the StopFailure hook writes, stamped at or after the
+// turn's start. The carry-on's tries are timed from the record's own time.
+async function seekFailure($: EngineInterface) {
+  const seek = S.seek
+  if (!seek) return
+  const now = await $.clock.now()
+  const home = await lcwHome($)
+  const id = await $.session.id()
+  for (const name of new Set([(await transcriptName($)) ?? id, id])) {
+    const file = activityFile(home, name)
     forget(file)
-    const record = nextActivity(e, await readJson($, file), await $.clock.now())
-    if (record) await write($, file, JSON.stringify(record))
-  })
-  return counting
+    const record = await readJson($, file)
+    if (S.seek !== seek) return
+    if (record?.state === 'failed' && typeof record.at === 'number' && record.at >= seek.since) {
+      S.seek = null
+      setCarry($, carryFailed(S.carry, record.error, record.at))
+      return
+    }
+  }
+  if (now >= seek.until && S.seek === seek) S.seek = null
 }
 
 async function start($: EngineInterface) {
@@ -1267,7 +1405,10 @@ async function start($: EngineInterface) {
   $.clock.every(1000, paced(2000, () => readBanner($)))
   // Its look over the repository's runs keeps its own pace, and without a run the rest reads no file.
   $.clock.every(2000, quietly(() => slowFacts($)))
-  $.clock.every(1000, quietly(() => carryOn($)))
+  $.clock.every(1000, quietly(async () => { await seekFailure($); await carryOn($) }))
+  // A look still going when the next tick comes is not queued behind.
+  let free = true
+  $.clock.every(1000, () => { if (free) { free = false; void inTurn(() => markAfter($)).finally(() => { free = true }) } })
   // The one place that redraws: when something changed, or the card's motion has come to its next step.
   $.clock.every(100, () => void (async () => {
     const pace = S.run && !S.collapsed ? cardPace(S.mode, working()) : 0
@@ -1295,8 +1436,11 @@ export const register: Register = (on) => {
     // A cleared or another session has no reply to carry on.
     S.carry = null
     S.owed = null
+    S.seek = null
     // session.start fires again when this code is reloaded.
     await restore($)
+    S.after.ended = ''
+    void inTurn(() => markAfter($))
     S.atPrompt = e.isInteractive === true
     S.interactive = S.atPrompt || e.surface != null || (await $.session.surfaces().catch(() => [])).length > 0
     await start($).catch(() => {})
@@ -1318,7 +1462,12 @@ export const register: Register = (on) => {
 
   // A turn of the main loop running; the weekly checks wait for none.
   on('turn.start', async ($, e, next) => {
-    if (!e.agentId) { S.turnRunning = true; S.completionReadyAt = 0 }
+    if (!e.agentId) {
+      S.turnRunning = true
+      S.completionReadyAt = 0
+      S.seek = null
+      S.turnStartedAt = await $.clock.now().catch(() => S.turnStartedAt)
+    }
     return next(e)
   })
 
@@ -1329,8 +1478,12 @@ export const register: Register = (on) => {
       S.turnEndedAt = await $.clock.now().catch(() => S.turnEndedAt)
       S.completionReadyAt = !e.isAborted && e.reason === 'answer' ? S.turnEndedAt : 0
     }
-    // A main turn that did not end in error has carried the session on; one that did was judged by classic.StopFailure.
+    // A main turn that did not end in error has carried the session on; one that did is judged by its activity record.
     if (!e.agentId && e.reason !== 'error' && S.carry) setCarry($, null)
+    if (!e.agentId && e.reason === 'error') {
+      S.seek = { since: S.turnStartedAt || S.startedAt, until: S.turnEndedAt + SEEK_MS }
+      await seekFailure($).catch(() => {})
+    }
     await countTurn($, e).catch(() => {})
     if (!e.agentId && !e.isAborted) await checkpoint($).catch(() => {})
     return result
@@ -1360,6 +1513,7 @@ export const register: Register = (on) => {
       if (!e.command) { S.repliedAt = await $.clock.now().catch(() => S.repliedAt); keepReplied($) }
       // What the person sends takes over from any carry-on.
       if (S.carry) setCarry($, null)
+      S.seek = null
       S.owed = null
       keepOwed($)
       S.completionReadyAt = 0
@@ -1373,40 +1527,32 @@ export const register: Register = (on) => {
     if (PERSON.includes((e as any).origin?.kind)) {
       S.completionReadyAt = 0
       if (S.carry) setCarry($, null)
+      S.seek = null
     }
     return next(e)
   })
 
-  // The main session's turn ended on an API error: carried on later if its kind clears on its own. A subagent's
-  // error is its orchestrator's to deal with.
   // The Artifact tool's definition is as large as every other tool's together and seldom used: it waits behind tool search, for the session and its agents.
   on('tool.describe', { tool: 'Artifact' }, async ($, e, next) => ({ ...(await next(e)), isDeferred: true }))
 
-  on('classic.StopFailure', async ($, e, next) => {
+  // An ended session's marker is lowered and stays down: after a /clear the process goes on under a new id.
+  on('session.end', async ($, e, next) => {
     const result = await next(e)
-    try { if (!e.agent_id) setCarry($, carryFailed(S.carry, e.error, await $.clock.now())) } catch {}
+    await inTurn(async () => {
+      const file = afterFile(await lcwHome($), e.sessionId ?? await $.session.id())
+      S.after.ended = file
+      if (await readText($, file)) await write($, file, '')
+      if (file === S.after.file) S.after.up = false
+    })
     return result
   })
 
-  // After each of the session's own tool calls: the stop at the mark, said here with no process. A subagent's call
-  // says nothing: its orchestrator is the one to stop. agent_id is present, with no value, on the session's own calls.
-  // Worked out before the hooks beneath run, so an older list of hooks that still has the limit hook finds the note recorded.
-  // Whatever fails, the call goes on: with what the hooks beneath said, or with nothing added.
-  on('classic.PostToolUse', async ($, e, next) => {
-    let texts: string[] = []
-    try { if (!e.agent_id) texts = await afterTool($, e.tool_input && (e.tool_input as any).command) } catch {}
-    try { noteLaunch($, e as any) } catch {}
-    // Another plugin's hook that fails beneath must not take the stop at the mark with it.
-    const result = await next(e).catch(() => ({} as Awaited<ReturnType<typeof next>>))
-    return texts.length ? { ...result, additionalContext: [...(result?.additionalContext ?? []), texts.join('\n')] } : result
-  }).catch(($, e, next) => next(e).catch(() => ({})))
-
-  // A failed call of the session's own moves the mascot. Counted before the hooks beneath run, so the activity hook of
-  // an older list of hooks finds it counted.
-  on('classic.PostToolUseFailure', async ($, e, next) => {
-    try { if (!e.agent_id) await countFailure($, e) } catch {}
-    return next(e)
-  }).catch(($, e, next) => next(e).catch(() => ({})))
+  // A launch never waits on this and is never changed by it: the wave is noted from the answer, whatever else beneath says.
+  on('agent.spawn', async ($, e, next) => {
+    const result = await next(e)
+    try { noteLaunch($, e as any, (result as any)?.agentId) } catch {}
+    return result
+  })
 
   on('session.stop', async ($, e, next) => {
     const result = await next(e)

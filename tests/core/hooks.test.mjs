@@ -6,6 +6,7 @@ import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, installedConfig, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
 import * as gate from '../../scripts/lib/gate.mjs'
+import { cases } from './mark-cases.mjs'
 
 process.env.TZ = 'Europe/Dublin'
 process.env.LCW_AUTH_STATUS_JSON = 'fail' // the sign-in is stubbed: no test runs the real `claude auth status`
@@ -487,13 +488,14 @@ test('the activity hook records the turn and its failed calls for the mascot, pr
     [{ hook_event_name: 'Notification', notification_type: 'idle_prompt' }, 'needs', 1], // closes only a turn still working
     [{ hook_event_name: 'Stop' }, 'done', 1],
     [{ hook_event_name: 'UserPromptSubmit' }, 'working', 0], // a new turn starts clean
-    [{ hook_event_name: 'StopFailure' }, 'failed', 0],
+    [{ hook_event_name: 'StopFailure', error: 'server_error' }, 'failed', 0],
   ]) {
     const r = fire(event)
     assert.equal(r.code, 0)
     assert.equal(r.out + r.err, '', 'what a hook prints on a prompt goes into the conversation')
     assert.deepEqual([record().state, record().fails], [state, fails], JSON.stringify(event))
   }
+  assert.equal(record().error, 'server_error', 'the error kind of the failed turn')
   assert.equal(fire({ hook_event_name: 'SessionEnd' }).code, 0)
   assert.ok(!fs.existsSync(`${home}/activity/a1.json`), 'a session that has ended leaves no record behind')
   assert.equal(run(ACTIVITY_HOOK, [], { home, input: 'not json' }).code, 0)
@@ -663,6 +665,60 @@ test('a resumed per-token session told at its start is not told again at its fir
   assert.match(startNote(home, repo, KEY, 'B'), /billed per token/)
   const prompt = limit(home, repo, { hook_event_name: 'UserPromptSubmit' }, 'B')
   assert.ok(!/turned out/.test(prompt ?? ''), prompt)
+})
+
+test('a two-name session that settles as billed per token at its start has the note recorded under both names', () => {
+  const home = tmp('home')
+  const repo = makeRepo()
+  const input = JSON.stringify({ session_id: 'i1', transcript_path: '/x/projects/y/t1.jsonl', cwd: repo })
+  const out = withEnv({ ...clock, ...KEY }, () => run(START_HOOK, [], { home, cwd: repo, input }).out)
+  assert.match(out, /billed per token/)
+  assert.equal(sessionOf(home, 't1').toldPayg, true)
+  assert.equal(sessionOf(home, 'i1').toldPayg, true)
+})
+
+/**
+ * The session files the real hooks leave for p1, resumed (on a per-token sign-in unless signIn says otherwise) from
+ * transcript t1 whose row records an older Claude Code, running or ended, after then(home, repo); pids are given back
+ * as the limit hook's cases name them: 111 the older process, 222 this one.
+ */
+function resumed(oldRunning, t1, signIn = KEY, then = () => {}) {
+  const home = tmp('home')
+  const repo = makeRepo()
+  const old = oldRunning ? spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' }) : spawnSync(process.execPath, ['-e', ''])
+  try {
+    writeSession(home, 't1', { ...t1, claudePid: old.pid })
+    const env = { ...clock, ...signIn, CLAUDE_PID: String(process.pid), LCW_CLAUDE_ARGS: '' }
+    run(START_HOOK, [], { home, cwd: repo, env, input: JSON.stringify({ session_id: 'p1', transcript_path: '/x/projects/y/t1.jsonl', cwd: repo }) })
+    then(home, repo)
+    const pids = { [old.pid]: 111, [process.pid]: 222 }
+    return Object.fromEntries(fs.readdirSync(`${home}/sessions`).map((file) => {
+      const session = readJson(`${home}/sessions/${file}`)
+      return [path.basename(file, '.json'), session.claudePid ? { ...session, claudePid: pids[session.claudePid] ?? session.claudePid } : session]
+    }))
+  } finally {
+    if (oldRunning) old.kill()
+  }
+}
+const caseRows = (name) => cases.find((c) => c.name === name).sessions
+
+test('a per-token session resumed from a transcript whose older Claude Code has ended leaves the rows its limit-hook case holds', () => {
+  assert.deepEqual(resumed(false, { billing: 'payg' }), caseRows('a note given at a resumed start under both names, which share one anchor, leaves the marker down'))
+})
+
+test('a per-token session resumed from a told transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', () => {
+  assert.deepEqual(resumed(true, { billing: 'payg', toldPayg: true }), caseRows('a note given under both names leaves the marker down though the transcript row records an older process'))
+})
+
+test('a per-token session resumed from an untold transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', () => {
+  assert.deepEqual(resumed(true, { billing: 'payg' }), caseRows('a note given under the id at a resumed start leaves the marker down though the transcript row, kept by an older process, records none'))
+})
+
+test('a mark raised in a session resumed from a transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', () => {
+  const rows = resumed(true, {}, { LCW_AUTH_STATUS_JSON: 'fail' }, (home, repo) => {
+    assert.equal(lcw(['mark', '90'], { home, cwd: repo, session: 'p1', env: { CLAUDE_PID: String(process.pid) } }).code, 0)
+  })
+  assert.deepEqual(rows, caseRows('a mark raised under the id while the transcript row is kept by an older process leaves the marker down below it'))
 })
 
 test('a resumed per-token session is not told again at its first prompt when the sign-in cannot be read', () => {

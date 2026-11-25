@@ -15,6 +15,9 @@ test('before a tool call the agent gate and the question hook stay', () => {
   assert.deepEqual(scripts('PreToolUse', 'AskUserQuestion'), ['hook-activity.mjs'])
 })
 
-test('a tool call that ends, well or not, starts no LCW process: the mod answers it', () => {
-  assert.deepEqual([hooks.PostToolUse, hooks.PostToolUseFailure], [undefined, undefined])
+test('after a tool call a shell gate starts Node only when something is to be told, and a failed call is counted', () => {
+  const [post] = hooks.PostToolUse
+  assert.equal(post.matcher, '*')
+  assert.deepEqual(scripts('PostToolUse', '*'), ['hook-limit.mjs'])
+  assert.deepEqual(hooks.PostToolUseFailure.flatMap((group) => group.hooks.map((h) => h.command)), ['node "${CLAUDE_PLUGIN_ROOT}/scripts/hook-activity.mjs"'])
 })

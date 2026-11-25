@@ -105,6 +105,8 @@ for (const choice of ['setup', 'keep', 'dismiss']) {
     expect(JSON.parse(saved).choice).toBe(choice)
     expect(JSON.stringify(w.kept)).not.toMatch(/proxy\.example|private|team/)
     const withoutChoice = { ...w.files }; delete withoutChoice[file]
+    // The marker that has the hook after a tool call give the pay-per-token note is no accounting.
+    for (const path of Object.keys(withoutChoice)) if (path.startsWith('/lcw/after/')) delete withoutChoice[path]
     expect(JSON.stringify(withoutChoice)).toBe(before)
     expect(w.runs.filter((a) => a[1]?.split('/').pop()?.startsWith('quota') || a.slice(2).some((v) => /^(quota-command|billing|mark|resume)$/.test(v)))).toEqual([])
     expect(w.reads.filter((p) => /(?:^|\/)(?:\.credentials\.json|auth\.json|settings(?:\.local)?\.json)$/.test(p))).toEqual([])

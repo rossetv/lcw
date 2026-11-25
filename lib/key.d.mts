@@ -14,6 +14,7 @@ export function spendTryFile(lcwHome: string, window: number): string
 export function quotaFile(lcwHome: string): string
 export function usageFile(lcwHome: string): string
 export function activityFile(lcwHome: string, sessionId: string): string
+export function afterFile(lcwHome: string, sessionId: string): string
 export function runsDir(lcwHome: string, key: string): string
 export function updateFile(lcwHome: string): string
 export function checksFile(lcwHome: string): string
@@ -24,3 +25,7 @@ export function runPaths(runDir: string): {
   dir: string; state: string; ledger: string; brainstorm: string; spec: string; plan: string; artifacts: string
   checkpoint: string; gate: string; modAlive: string; quiet: string; awake: string
 }
+export function sessionNames(
+  transcript: string | null | undefined, id: string | null | undefined,
+  row: (name: string) => { claudePid?: unknown } | null | undefined, alive: (pid: unknown) => boolean, pid: number,
+): string[]

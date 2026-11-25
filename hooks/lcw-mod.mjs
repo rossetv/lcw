@@ -388,13 +388,6 @@ export function briefOf(head) {
   }
 }
 
-/** The id of the agent an Agent tool call started, from what the call answered: an object with agentId, or text that names it. */
-export function launchedId(response) {
-  if (response && typeof response === 'object' && typeof response.agentId === 'string') return response.agentId
-  const text = typeof response === 'string' ? response : Array.isArray(response) ? response.map((b) => b?.text ?? '').join('\n') : ''
-  return /\bagentId: ([\w-]+)/.exec(text)?.[1] ?? null
-}
-
 /**
  * usage.json from a session.measure reading; null when it has no weekly figure. seen is when the session last spoke (its
  * transcript's time), left out when not known: the event also fires as the five-hour window moves in an idle session,

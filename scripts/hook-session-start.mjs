@@ -3,7 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { runsDir, repoKey } from '../lib/key.mjs'
-import { home, mainCheckout, writeAtomic, readJson, writeJson, sweepTemp } from './lib/store.mjs'
+import { home, mainCheckout, writeAtomic, readJson, writeJson, sweepTemp, sweepAfter } from './lib/store.mjs'
 import { findRun, listRuns } from './lib/runs.mjs'
 import { sessionIds, sessionMark, DEFAULT_MARK, driverMark, applyGate } from './lib/gate.mjs'
 import { readMoney, dropSpend } from './lib/money.mjs'
@@ -114,6 +114,7 @@ try {
   const ids = sessionIds(input)
   // before the run is looked for: after /clear, the run's driver is this same Claude Code process
   ids.forEach(noteClaudePid) // a resumed payload names two ids; either may be the live one
+  try { sweepAfter(home(), claudeAlive) } catch {}
   let run = null
   for (const id of ids.length ? ids : [undefined]) {
     run = findRun({ sessionId: id, cwd })
@@ -136,9 +137,12 @@ try {
   if (money) {
     lines.push(...paygLines(cli, money))
     // this note is the payg instructions, so the first prompt does not tell them again
-    const file = sessionFile(home(), ids[0])
-    const session = readJson(file)
-    if (!session?.toldPayg) writeJson(file, { ...session, toldPayg: true })
+    // under every name, so a hook or the mod that sees only one of them finds it given
+    for (const id of ids) {
+      const file = sessionFile(home(), id)
+      const session = readJson(file)
+      if (!session?.toldPayg) writeJson(file, { ...session, toldPayg: true })
+    }
   }
   else lines.push(`This session has a usage mark, run or no run: ${mark}% of the week${mark === DEFAULT_MARK ? ' unless the user raises it' : ', as the user set it'}. When they say "run up to N%", run: ${cli} mark N. When they say to finish regardless of the limit, run: ${cli} mark 100. It holds for this session only. When a hook tells you the session is at its mark, stop and tell the user; never raise the mark without their explicit words.`)
   lines.push(`If the user says "set up LCW": run node ${sh(`${root}/scripts/setup.mjs`)} install (it puts LCW's status rows and the no-AI-attribution settings in place, and lets the advisor and spend banners ask again) and say what was set. If they ask to uninstall LCW: run node ${sh(`${root}/scripts/setup.mjs`)} uninstall, say what it put back, then tell them to run /plugin uninstall lcw@lcw to remove the plugin itself.`)

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import {
   addTotals, addUsage, agentTokens, buttons, cardMotion, cardPace, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
-  longNudges, quietCounts, replacesGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt, waveOfBrief, launchedId, briefOf,
+  longNudges, quietCounts, replacesGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt, waveOfBrief, briefOf,
   measureStep, retryGate, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
@@ -586,14 +586,6 @@ test('an agent\'s wave is read from its brief: the wave\'s worktree first, then 
   assert.equal(waveOfBrief('Hunt the settings pages in /repo/.claude/worktrees/tidy-latest', 'Hunt settings', 'tidy'), null)
   assert.equal(waveOfBrief('Work in /repo/.claude/worktrees/other-wave-2', 'Build it', 'tidy'), null, 'another sweep\'s worktree')
   assert.equal(waveOfBrief(null, undefined, null), null)
-})
-
-test('a launch answers with the new agent\'s id, as a field or in its text', () => {
-  assert.equal(launchedId({ status: 'async_launched', agentId: 'a1b2c3' }), 'a1b2c3')
-  assert.equal(launchedId('Async agent launched successfully.\nagentId: a43d97fe465bf20e8 (internal ID)'), 'a43d97fe465bf20e8')
-  assert.equal(launchedId([{ type: 'text', text: 'agentId: abc-1' }]), 'abc-1')
-  assert.equal(launchedId({ status: 'completed' }), null)
-  assert.equal(launchedId(undefined), null)
 })
 
 test('an agent\'s brief is the first line of its transcript, as text or as blocks; a line cut short is given as it is', () => {
