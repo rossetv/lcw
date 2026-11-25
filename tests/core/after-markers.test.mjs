@@ -31,7 +31,7 @@ test('a marker whose recorded Claude Code runs stays, found by the transcript na
   const home = tmp('home')
   const child = fakeClaude()
   try {
-    const f = marker(home, 'sid', body('sid', 'transcript-1'))
+    const f = marker(home, 'sid', body('sid', 'transcript-1'), 3600_000)
     row(home, 'transcript-1', child.pid)
     assert.equal(start(home).code, 0)
     assert.equal(fs.existsSync(f), true)
@@ -64,14 +64,18 @@ test('a broken marker and an unreadable one do not fail the start', () => {
   assert.equal(fs.existsSync(broken), false)
 })
 
-test('SessionEnd removes the marker under the transcript name and under the session id', () => {
+test('only SessionEnd removes the marker, and only the ending session\'s own', () => {
   const home = tmp('home')
-  const a = marker(home, 'transcript-9', body('sid-9', 'transcript-9'))
-  const b = marker(home, 'sid-9', body('sid-9', 'transcript-9'))
+  const own = marker(home, 'sid-9', body('sid-9', 'transcript-9'))
+  const named = marker(home, 'transcript-9', body('sid-9', 'transcript-9'))
   const other = marker(home, 'other', body('other'))
-  const input = JSON.stringify({ hook_event_name: 'SessionEnd', session_id: 'sid-9', transcript_path: '/x/transcript-9.jsonl' })
-  assert.equal(run(ACTIVITY_HOOK, [], { home, input }).code, 0)
-  assert.equal(fs.existsSync(a), false)
-  assert.equal(fs.existsSync(b), false)
+  const send = (hook_event_name) => run(ACTIVITY_HOOK, [], { home, input: JSON.stringify({ hook_event_name, session_id: 'sid-9', transcript_path: '/x/transcript-9.jsonl' }) })
+  for (const e of ['PostToolUse', 'UserPromptSubmit', 'Stop']) {
+    assert.equal(send(e).code, 0)
+    assert.equal(fs.existsSync(own), true, e)
+  }
+  assert.equal(send('SessionEnd').code, 0)
+  assert.equal(fs.existsSync(own), false)
+  assert.equal(fs.existsSync(named), true)
   assert.equal(fs.existsSync(other), true)
 })

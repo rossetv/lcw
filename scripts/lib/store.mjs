@@ -93,7 +93,9 @@ export function sweepTemp(lcwHome, now = Date.now()) {
  * process that isAlive says runs, and goes when every recorded one is dead. The mod rewrites a marker only when it is gone, so a
  * session with no recorded process has no other sign of life: its marker goes once it is older than maxAgeMs, and a live mod puts it back within a second.
  */
-export function sweepAfter(lcwHome, isAlive, now = Date.now(), maxAgeMs = 600_000) {
+export function sweepAfter(lcwHome, isAlive) {
+  const now = Date.now()
+  const maxAgeMs = 600_000
   const dir = `${lcwHome}/after`
   let names = []
   try { names = fs.readdirSync(dir) } catch { return }

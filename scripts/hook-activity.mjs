@@ -31,10 +31,7 @@ try {
     const { afterFile } = await import('../lib/key.mjs')
     const ids = sessionIds(input)
     const id = ids[0] // the id the status line looks under
-    if (input.hook_event_name === 'SessionEnd') {
-      // the mod names its marker by the transcript or by the session id
-      for (const name of new Set([input.transcript_path ? path.basename(String(input.transcript_path), '.jsonl') : null, input.session_id, ...ids].filter(Boolean))) fs.rmSync(afterFile(home(), name), { force: true })
-    }
+    if (input.hook_event_name === 'SessionEnd' && input.session_id) fs.rmSync(afterFile(home(), input.session_id), { force: true })
     if (id) {
       const file = activityFile(home(), id)
       const lockFile = `${file}.lock`
