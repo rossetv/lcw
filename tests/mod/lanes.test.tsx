@@ -19,7 +19,7 @@ const agent = (id: string, description: string, over: object = {}) => ({
   id, description, type: 'lcw:worker', status: 'running', kind: 'local_agent', taskStatus: 'running', model: 'sonnet', startTime: NOW - 60000, tokenCount: 10, ...over,
 })
 
-function engine(on: any, agents: unknown[], logs: Record<string, string> = {}) {
+function engine(on: any, agents: unknown[], logs: Record<string, string> = {}, spawn?: (e: any) => unknown) {
   const clock = mock.clock(on, { now: NOW })
   const reads: string[] = []
   const files: Record<string, string> = {
@@ -39,8 +39,8 @@ function engine(on: any, agents: unknown[], logs: Record<string, string> = {}) {
   on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
   on('agent.list', () => ({ value: agents }))
   on('config.list', () => ({ value: [] }))
-  on('agent.spawn', (_: any, e: any) => ({ model: 'sonnet', agentId: e.tool_use_id.replace('toolu_', '') }))
-  return { advance: (ms: number) => clock.advance(ms), reads }
+  on('agent.spawn', (_: any, e: any) => spawn ? spawn(e) : ({ model: 'sonnet', agentId: e.tool_use_id.replace('toolu_', '') }))
+  return { advance: (ms: number) => clock.advance(ms), reads, files }
 }
 
 // An agent's transcript as it starts: the message that launched it, then its work.
@@ -102,6 +102,43 @@ test('a launch whose brief names no wave keeps none, so the transcript is still 
   await w.advance(2100)
   expect(await viewed(band)).toEqual(['view:n2', 'view:n1', 'view:n3'])
   await band.unmount()
+})
+
+test('a launch in a run that is not a sweep notes no wave', async ($, on) => {
+  const agents: unknown[] = []
+  const w = engine(on, agents)
+  w.files[RUN + '/state.json'] = JSON.stringify({ ...JSON.parse(SWEEP), shape: 'build', sweep: undefined })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await w.advance(2100)
+  await launch($, 'g2', 'Review the export fix', 'Check the fix, then record it: lcw req F1 pass --wave 1')
+  agents.push(agent('g1', 'Fix the toast notes'), agent('g2', 'Review the export fix'))
+  w.files[RUN + '/state.json'] = SWEEP
+  await w.advance(2100)
+  expect(await viewed(band)).toEqual(['view:g1', 'view:g2'])
+  await band.unmount()
+})
+
+test('a resume of an agent whose launch was not seen notes no wave from its new brief', async ($, on) => {
+  const agents: unknown[] = []
+  const w = engine(on, agents)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await w.advance(2100)
+  await launch($, 'u2', 'Review the export fix', 'Check the fix, then record it: lcw req F1 pass --wave 1', undefined, { agentId: 'u2' })
+  agents.push(agent('u1', 'Fix the toast notes'), agent('u2', 'Review the export fix'))
+  await w.advance(2100)
+  expect(await viewed(band)).toEqual(['view:u1', 'view:u2'])
+  await band.unmount()
+})
+
+test('a launch is passed on whole: its refusal comes back as it is and its error goes on', async ($, on) => {
+  const answer: { value: unknown } = { value: { deny: 'no more agents' } }
+  engine(on, [], {}, () => { if (answer.value instanceof Error) throw answer.value; return answer.value })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(await launch($, 'v1', 'Build it', 'Work in /repo/.claude/worktrees/tidy-wave-2')).toEqual({ deny: 'no more agents' })
+  answer.value = new Error('spawn failed')
+  await expect(launch($, 'v1', 'Build it', 'Work in /repo/.claude/worktrees/tidy-wave-2')).rejects.toThrow()
 })
 
 test('an agent whose launch was not seen is placed by its description, where that names a wave', async ($, on) => {
