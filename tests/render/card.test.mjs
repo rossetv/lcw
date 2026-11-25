@@ -552,7 +552,7 @@ test('a run the human paused says so and promises no reset', () => {
 test('the share of the week survives a weekly reset', () => {
   const i = inputsOf('RunningA');
   const { usage } = i;
-  const before = '2026-11-15T14:00:00.000Z', after = usage.sevenDay.resetsAt;
+  const after = usage.sevenDay.resetsAt, before = new Date(Date.parse(after) - 7 * 24 * 3600 * 1000).toISOString();
   const view = (state, used) => buildView({ ...i, state: { ...i.state, ...state }, usage: { sevenDay: { percentUsed: used, resetsAt: after } } }).share;
   const started = { weekAtStart: 40, weekUsed: 70, weekResetsAt: before };
   assert.equal(view(started, 12), 42, 'what the run used of the old week (30) plus the new week (12)');
@@ -563,6 +563,41 @@ test('the share of the week survives a weekly reset', () => {
   assert.deepEqual(weekOf(started, { percentUsed: 12, resetsAt: after }),
     { shareBefore: 30, weekAtStart: 0, weekResetsAt: after, weekUsed: 12 });
   assert.equal(weekShare({ ...started, weekResetsAt: after }, { percentUsed: 30, resetsAt: before }), 0, 'an older reading is ignored for the fold');
+});
+
+test('a week of another account starts where its first reading stands: what that account had used is not the run\'s', () => {
+  const i = inputsOf('RunningA');
+  const after = i.usage.sevenDay.resetsAt, other = new Date(Date.parse(after) - 3 * 24 * 3600 * 1000).toISOString();
+  const started = { weekAtStart: 80, weekUsed: 97, weekResetsAt: other };
+  assert.deepEqual(weekOf(started, { percentUsed: 30, resetsAt: after }), { shareBefore: 17, weekAtStart: 30, weekResetsAt: after, weekUsed: 30 });
+  assert.equal(weekShare(started, { percentUsed: 30, resetsAt: after }), 17);
+  // once that is kept, what the run goes on to use in the new account is added
+  const kept = { ...started, ...weekOf(started, { percentUsed: 30, resetsAt: after }) };
+  assert.equal(weekShare(kept, { percentUsed: 42, resetsAt: after }), 29);
+});
+
+test('a limit reset inside the week keeps what the run had used before it', () => {
+  const i = inputsOf('RunningA');
+  const week = i.usage.sevenDay.resetsAt;
+  const run = { shareBefore: 17, weekAtStart: 0, weekUsed: 99, weekResetsAt: week };
+  assert.deepEqual(weekOf(run, { percentUsed: 21, resetsAt: week }), { shareBefore: 116, weekAtStart: 0, weekResetsAt: week, weekUsed: 21 });
+  assert.equal(weekShare(run, { percentUsed: 21, resetsAt: week }), 137);
+  // a point or two lower is another session's slightly older figure, not a reset
+  assert.equal(weekOf(run, { percentUsed: 96, resetsAt: week }).shareBefore, 17);
+  assert.equal(weekShare(run, { percentUsed: 96, resetsAt: week }), 113);
+  // kept, it counts on from the reset and folds nothing twice
+  const kept = { ...run, ...weekOf(run, { percentUsed: 21, resetsAt: week }) };
+  assert.equal(weekShare(kept, { percentUsed: 25, resetsAt: week }), 141);
+});
+
+test('a share past a whole week is said in weeks, and up to it as a share of the week', () => {
+  const i = inputsOf('RunningA');
+  const week = i.usage.sevenDay.resetsAt;
+  const said = (state, used) => strip(toAnsi(renderCard(buildView({ ...i, state: { ...i.state, ...state }, usage: { sevenDay: { percentUsed: used, resetsAt: week } } }), { width: 126 }), 'dark', 126));
+  assert.match(said({ shareBefore: 116, weekAtStart: 0, weekUsed: 21, weekResetsAt: week }, 21), /≈ 1\.4 weeks of usage/);
+  assert.match(said({ shareBefore: 80, weekAtStart: 0, weekUsed: 20, weekResetsAt: week }, 20), /≈ 100% of your week/);
+  assert.match(said({ shareBefore: 81, weekAtStart: 0, weekUsed: 20, weekResetsAt: week }, 20), /≈ 1\.0 weeks of usage/);
+  assert.match(said({ shareBefore: 0, weekAtStart: 0, weekUsed: 38, weekResetsAt: week }, 38), /≈ 38% of your week/);
 });
 
 test('an orchestrator opens, and the more row opens everything', () => {
