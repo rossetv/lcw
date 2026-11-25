@@ -11,10 +11,10 @@ test('the shared paths name the update, check, cleanup and keep-awake files', ()
   assert.equal(runPaths('/r').awake, '/r/awake')
 })
 
-import { sessionFile, spendFile, contextFile, activityFile } from '../../lib/key.mjs'
+import { sessionFile, spendFile, contextFile, activityFile, afterFile } from '../../lib/key.mjs'
 import { toldFile } from '../../lib/mark.mjs'
 
-const byId = { sessionFile, spendFile, contextFile, activityFile, toldFile }
+const byId = { sessionFile, spendFile, contextFile, activityFile, afterFile, toldFile }
 const bad = ['../x', '../../../ESCAPED', 'a/b', '..', '.', '', 'x'.repeat(129), 'a\0b', 'a\nb', '$(id)', '`id`', 'a b', 'é', 'abc\n']
 
 test('a real session id keeps its file name byte for byte', () => {
@@ -23,6 +23,7 @@ test('a real session id keeps its file name byte for byte', () => {
     assert.equal(spendFile('/h', id), `/h/spend/${id}.json`)
     assert.equal(contextFile('/h', id), `/h/cache/context-${id}.json`)
     assert.equal(activityFile('/h', id), `/h/activity/${id}.json`)
+    assert.equal(afterFile('/h', id), `/h/after/${id}`)
     assert.equal(toldFile('/h', id), `/h/told/${id}.json`)
   }
 })

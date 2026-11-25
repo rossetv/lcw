@@ -6,6 +6,9 @@ declare const setTimeout: (fn: (value?: unknown) => void, ms: number) => unknown
 const NOW = Date.parse('2026-11-21T11:29:42Z')
 const MIN = 60 * 1000
 const RUN = '/lcw/repos/r/runs/x'
+// The activity record, under the transcript's name as the hooks keep it, and under the session's id.
+const RECORD = '/lcw/activity/t9.json'
+const BY_ID = '/lcw/activity/s1.json'
 
 // The world beneath the mod: files in memory, the prompt box, the prompts it submits, and a clock that jumps.
 // Each timer fires once per jump, so a wait of many minutes costs one step.
@@ -29,6 +32,7 @@ function engine(on: any, opts: { run?: string; shape?: string; reason?: string |
   on('clock.after', hold)
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
+  on('session.info', () => ({ value: { transcriptPath: '/p/t9.jsonl', platform: 'linux' } }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
   on('fs.read', (_: any, e: any) => {
     if (e.path in files) return { value: files[e.path] }
@@ -41,7 +45,7 @@ function engine(on: any, opts: { run?: string; shape?: string; reason?: string |
   on('prompt.read', () => ({ value: { text: box.draft, cursor: 0 } }))
   on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', (_: any, e: any) => ({ text: e.answer ?? '' }))
-  on('classic.StopFailure', () => ({}))
+  on('session.stop', (_: any, e: any) => ({ isTurnRunning: e.isTurnRunning }))
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
   on('ui.invalidate', () => ({ value: undefined }))
@@ -57,33 +61,40 @@ function engine(on: any, opts: { run?: string; shape?: string; reason?: string |
       await new Promise((r) => setTimeout(r, 20))
     }
   }
-  return { pass, prompts, box, kept }
+  return { pass, prompts, box, kept, files, now: () => now }
 }
 
 const start = ($: any) => $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-const fail = ($: any, error = 'server_error', more: object = {}) => $.classic.StopFailure({ error, ...more })
 const turn = async ($: any, reason: string, more: object = {}) => {
   await $.turn.start({ text: '', turnId: 't', ...more } as any)
   await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, reason, turnId: 't', ...more } as any)
+}
+// What the StopFailure hook writes when a turn ends on an API error of this kind.
+const failed = (w: any, error = 'server_error', file = RECORD, at = w.now()) => { w.files[file] = JSON.stringify({ state: 'failed', at, fails: 0, error }) }
+// A main turn that ends on an API error, the hook's record written while it ran.
+const fail = async ($: any, w: any, error = 'server_error', more: object = {}) => {
+  await $.turn.start({ text: '', turnId: 't', ...more } as any)
+  failed(w, error)
+  await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, reason: 'error', turnId: 't', ...more } as any)
 }
 
 test('a lost connection is carried on after a minute, then after 5 and 15 minutes as each try fails too', async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($)
+  await fail($, w)
   await w.pass(0.9)
   expect(w.prompts.length).toBe(0)
   await w.pass(0.2)
   expect(w.prompts.length).toBe(1)
   expect(w.prompts[0]).toMatch(/connection was lost/)
   expect(w.prompts[0]).toMatch(/try 1\b/)
-  await fail($)
+  await fail($, w)
   await w.pass(4.9)
   expect(w.prompts.length).toBe(1)
   await w.pass(0.2)
   expect(w.prompts.length).toBe(2)
   expect(w.prompts[1]).toMatch(/try 2\b/)
-  await fail($)
+  await fail($, w)
   await w.pass(14.9)
   expect(w.prompts.length).toBe(2)
   await w.pass(0.2)
@@ -93,19 +104,19 @@ test('a lost connection is carried on after a minute, then after 5 and 15 minute
 test('the wait stays at 30 minutes after the third failed try, each measured from that failed try', async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($)
+  await fail($, w)
   await w.pass(1.1)
-  await fail($)
+  await fail($, w)
   await w.pass(5.1)
-  await fail($)
+  await fail($, w)
   await w.pass(15.1)
   expect(w.prompts).toHaveLength(3)
-  await fail($)
+  await fail($, w)
   await w.pass(29.8)
   expect(w.prompts).toHaveLength(3)
   await w.pass(0.4)
   expect(w.prompts).toHaveLength(4)
-  await fail($)
+  await fail($, w)
   await w.pass(29.8)
   expect(w.prompts).toHaveLength(4)
   await w.pass(0.4)
@@ -116,7 +127,7 @@ for (const error of ['authentication_failed', 'billing_error', 'invalid_request'
   test(`an error of kind ${error} is not carried on`, async ($, on) => {
     const w = engine(on)
     await start($)
-    await fail($, error)
+    await fail($, w, error)
     await w.pass(30)
     expect(w.prompts.length).toBe(0)
   })
@@ -126,7 +137,7 @@ for (const shape of ['build', 'sweep']) {
   test(`a running ${shape} is carried on`, async ($, on) => {
     const w = engine(on, { run: 'running', shape })
     await start($)
-    await fail($)
+    await fail($, w)
     await w.pass(1.1)
     expect(w.prompts).toHaveLength(1)
     expect(w.prompts[0]).toMatch(/try 1\b/)
@@ -136,7 +147,7 @@ for (const shape of ['build', 'sweep']) {
 test("a subagent's API error is not carried on", async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($, 'server_error', { agent_id: 'a1', agent_type: 'lcw:worker' })
+  await fail($, w, 'server_error', { agentId: 'a1' })
   await w.pass(30)
   expect(w.prompts.length).toBe(0)
 })
@@ -144,7 +155,7 @@ test("a subagent's API error is not carried on", async ($, on) => {
 test('a try that falls due while the person has typed is skipped, and the next one follows 5 minutes later', async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($)
+  await fail($, w)
   w.box.draft = 'wait'
   await w.pass(1.1)
   expect(w.prompts.length).toBe(0)
@@ -159,7 +170,7 @@ test('a try that falls due while the person has typed is skipped, and the next o
 test("a prompt the person sends takes over: no try follows it", async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($)
+  await fail($, w)
   await $.prompt.submit({ text: 'retry' } as any)
   await w.pass(60)
   expect(w.prompts).toEqual(['retry'])
@@ -168,7 +179,7 @@ test("a prompt the person sends takes over: no try follows it", async ($, on) =>
 test('a turn that ends well, such as one an agent notification started, ends the carry-on', async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($)
+  await fail($, w)
   await turn($, 'answer')
   await w.pass(60)
   expect(w.prompts.length).toBe(0)
@@ -177,10 +188,10 @@ test('a turn that ends well, such as one an agent notification started, ends the
 test('a turn that ends well resets the count: the next error starts again at try 1', async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($)
+  await fail($, w)
   await w.pass(1.1)
   await turn($, 'answer')
-  await fail($, 'overloaded')
+  await fail($, w, 'overloaded')
   await w.pass(1.1)
   expect(w.prompts).toHaveLength(2)
   expect(w.prompts[1]).toMatch(/overloaded/)
@@ -190,7 +201,7 @@ test('a turn that ends well resets the count: the next error starts again at try
 test('nothing is carried on while the session drives a run the person paused', async ($, on) => {
   const w = engine(on, { run: 'paused' })
   await start($)
-  await fail($)
+  await fail($, w)
   await w.pass(60)
   expect(w.prompts.length).toBe(0)
 })
@@ -198,7 +209,7 @@ test('nothing is carried on while the session drives a run the person paused', a
 test('a try that falls due while a turn is running is not sent into it', async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($)
+  await fail($, w)
   await $.turn.start({ text: '', turnId: 't2' } as any)
   await w.pass(1.1)
   expect(w.prompts.length).toBe(0)
@@ -207,9 +218,9 @@ test('a try that falls due while a turn is running is not sent into it', async (
 test('no try is sent more than 3 hours after the first error', async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($)
+  await fail($, w)
   await w.pass(1.1)
-  await fail($)
+  await fail($, w)
   await w.pass(185)
   expect(w.prompts.length).toBe(1)
 })
@@ -217,7 +228,7 @@ test('no try is sent more than 3 hours after the first error', async ($, on) => 
 test('nothing is carried on while a run is paused at its usage mark', async ($, on) => {
   const w = engine(on, { run: 'paused', reason: 'mark' })
   await start($)
-  await fail($)
+  await fail($, w)
   await w.pass(60)
   expect(w.prompts.length).toBe(0)
 })
@@ -225,7 +236,7 @@ test('nothing is carried on while a run is paused at its usage mark', async ($, 
 test('a slash command from the person takes over: no try follows it', async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($)
+  await fail($, w)
   await $.prompt.submit({ text: '/model', command: { name: 'model' } } as any)
   await w.pass(60)
   expect(w.prompts).toEqual(['/model'])
@@ -235,7 +246,7 @@ test('a built-in command the person runs, raising only command.run, takes over: 
   const w = engine(on)
   on('command.run', () => ({ text: '' }))
   await start($)
-  await fail($)
+  await fail($, w)
   await $.command.run({ command: 'model', args: '', origin: { kind: 'composer' } } as any)
   await w.pass(60)
   expect(w.prompts).toEqual([])
@@ -245,7 +256,7 @@ test('a command a plugin runs does not take over from the carry-on', async ($, o
   const w = engine(on)
   on('command.run', () => ({ text: '' }))
   await start($)
-  await fail($)
+  await fail($, w)
   await $.command.run({ command: 'model' } as any)
   await w.pass(1.1)
   expect(w.prompts).toHaveLength(1)
@@ -254,7 +265,7 @@ test('a command a plugin runs does not take over from the carry-on', async ($, o
 test('a try the engine drops is not counted as sent: the next follows 5 minutes later', async ($, on) => {
   const w = engine(on, { drop: 'refused' })
   await start($)
-  await fail($)
+  await fail($, w)
   await w.pass(1.1)
   expect(w.prompts).toHaveLength(1)
   await w.pass(4.8)
@@ -268,17 +279,82 @@ test('the engine order of events, turn start, then the error, then the turn endi
   const w = engine(on)
   await start($)
   await $.turn.start({ text: '', turnId: 't' } as any)
-  await fail($)
+  failed(w)
   await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, reason: 'error', turnId: 't' } as any)
   await w.pass(1.1)
   expect(w.prompts).toHaveLength(1)
   expect(w.prompts[0]).toMatch(/try 1\b/)
 })
 
+test('a record the hook writes seconds after the turn ended is found, and the first try is timed from it', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  await turn($, 'error')
+  await w.pass(5 / 60)
+  failed(w, 'server_error', RECORD, NOW + 2000)
+  await w.pass(1 / 60)
+  await w.pass(0.8)
+  expect(w.prompts).toHaveLength(0)
+  await w.pass(0.15)
+  expect(w.prompts).toHaveLength(1)
+  expect(w.prompts[0]).toMatch(/try 1\b/)
+})
+
+test('a failed record from an earlier turn does not carry on a turn that ended on an error', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  failed(w, 'server_error', RECORD, NOW - 1000)
+  await turn($, 'error')
+  await w.pass(1.1)
+  expect(w.prompts).toHaveLength(0)
+})
+
+test('a record kept under the session id is found', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  await $.turn.start({ text: '', turnId: 't' } as any)
+  failed(w, 'overloaded', BY_ID)
+  await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, reason: 'error', turnId: 't' } as any)
+  await w.pass(1.1)
+  expect(w.prompts).toHaveLength(1)
+  expect(w.prompts[0]).toMatch(/overloaded/)
+})
+
+test('a record that has not come about 10 seconds after the turn ended is no longer looked for', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  await turn($, 'error')
+  await w.pass(11 / 60)
+  failed(w, 'server_error', RECORD, NOW + 1000)
+  await w.pass(1 / 60)
+  expect(w.kept.carry?.value ?? null).toBe(null)
+})
+
+test('a turn that starts before the record comes ends the look for it', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  await turn($, 'error')
+  await $.turn.start({ text: '', turnId: 't2' } as any)
+  failed(w, 'server_error', RECORD, NOW)
+  await w.pass(1 / 60)
+  expect(w.kept.carry?.value ?? null).toBe(null)
+})
+
+test('Stop pressed as a turn ends on an API error leaves the failed record for the carry-on', async ($, on) => {
+  const w = engine(on)
+  await start($)
+  await $.turn.start({ text: '', turnId: 't' } as any)
+  failed(w, 'server_error', BY_ID)
+  await $.session.stop({ isTurnRunning: true } as any)
+  await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, reason: 'error', turnId: 't' } as any)
+  await w.pass(1.1)
+  expect(w.prompts).toHaveLength(1)
+})
+
 test('a carry-on is kept where a reload of the mod finds it', async ($, on) => {
   const w = engine(on)
   await start($)
-  await fail($)
+  await fail($, w)
   await w.pass(0)
   expect(w.kept.carry?.value?.carry?.kind).toBe('server_error')
   expect(w.kept.carry?.value?.session).toBe('s1')
