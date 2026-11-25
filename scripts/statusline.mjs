@@ -172,11 +172,16 @@ function readRecords(inp, now, gitFresh = undefined) {
   // Claude Code hands each session the figure it saw at its own last reply, so two bars can differ. The newest
   // one any session has reported is kept in usage.json, and that is what every bar and mascot shows: nothing
   // once the week it was read in is over.
+  let transcriptAt = 0
+  try { transcriptAt = fs.statSync(inp.transcript_path).mtimeMs } catch {}
   let usage = readJson(usageFile(h))
   if (mapped.usage && !quota) {
     try {
-      const merged = mergeUsage(usage, mapped.usage)
-      if (!isDeepStrictEqual({ ...merged, at: 0 }, { ...usage, at: 0 })) writeJson(usageFile(h), merged)
+      // the figure is as old as this session's last word in its transcript: an idle session's older one must not stand over a newer
+      const merged = mergeUsage(usage, transcriptAt ? { ...mapped.usage, seen: transcriptAt } : mapped.usage)
+      // only a changed figure is written: every session's saved frames are drawn again when this file changes
+      const figure = (u) => ({ ...u, at: 0, seen: 0 })
+      if (!isDeepStrictEqual(figure(merged), figure(usage))) writeJson(usageFile(h), merged)
       usage = merged
     } catch {}
   }
@@ -198,8 +203,6 @@ function readRecords(inp, now, gitFresh = undefined) {
     if (runTree) gits.push(gitOf(runTree, h, now, ['diff'], gitFresh))
     input.diff = gits.at(-1).diff
   } catch {}
-  let transcriptAt = 0
-  try { transcriptAt = fs.statSync(inp.transcript_path).mtimeMs } catch {}
   const f = {
     ids, run, mark, billing, merged: usage, input, transcriptAt, exists,
     gitAt: Math.min(...gits.map((g) => (num(g?.at) ?? Infinity))),

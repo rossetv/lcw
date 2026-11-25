@@ -1349,11 +1349,13 @@ export const register: Register = (on) => {
       const home = await lcwHome($)
       const session = await readSession($, await $.session.id())
       const quota = await readQuota($, session, session?.markPercent ?? TH.usageMarkPercent, now)
-      const reading = quota ? null : usageFrom(e.rateLimits, now)
+      // The weekly figure is as old as this session's last word in its transcript, as the status line takes it.
+      const spoke = quota ? undefined : await $.session.info().then((i) => (i.transcriptPath ? $.fs.stat(i.transcriptPath) : null)).then((f) => f?.mtimeMs).catch(() => undefined)
+      const reading = quota ? null : usageFrom(e.rateLimits, now, spoke)
       // Its own failure must not keep a subscriber's figure and gate from being written below.
       const billing = await measureSpend($, e, reading, now).catch(() => null)
       if (reading) {
-        // Another session's newer and higher figure for this week stands over this session's older one.
+        // Another session's newer figure for this week stands over this session's older one.
         const file = usageFile(await lcwHome($))
         const usage = mergeUsage(await readJson($, file), reading as any)
         await write($, file, JSON.stringify(usage))

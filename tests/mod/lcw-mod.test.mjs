@@ -314,6 +314,7 @@ test('usage.json keeps the weekly figure, and nothing is written without one', (
     at: NOW, source: 'mod',
     sevenDay: { percentUsed: 23, resetsAt: '2026-11-22T14:00:00Z' },
   })
+  assert.equal(usageFrom(limits, NOW, NOW - 5000).seen, NOW - 5000)
   assert.equal(usageFrom([], NOW), null)
   assert.equal(usageFrom([limits[0]], NOW), null)
 })

@@ -126,6 +126,40 @@ test('card shows under the rows when mod-alive is stale, not when fresh', () => 
   assert.equal(beside(stale), beside(none))
 })
 
+test('after the limit is reset, the session that has spoken since lowers the stored figure and lifts the gate, and an idle session still showing the old one does not put it back', () => {
+  const { home, dir, input } = startRun(99)
+  const folder = tmp('transcripts')
+  const spoke = (name, at) => { const p = folder + '/' + name + '.jsonl'; fs.writeFileSync(p, '{}\n'); fs.utimesSync(p, at / 1000, at / 1000); return p }
+  const then = Date.now() - 3600000
+  const first = { ...JSON.parse(input), transcript_path: spoke('s1', then) }
+  line(JSON.stringify(first), { home })
+  assert.equal(readJson(home + '/usage.json').sevenDay.percentUsed, 99)
+  assert.equal(readJson(dir + '/gate').reason, 'mark')
+  spoke('s1', then + 60000)
+  const after = JSON.parse(JSON.stringify(first))
+  after.rate_limits.seven_day.used_percentage = 1
+  line(JSON.stringify(after), { home })
+  assert.equal(readJson(home + '/usage.json').sevenDay.percentUsed, 1)
+  assert.equal(fs.existsSync(dir + '/gate'), false)
+  const idle = { ...JSON.parse(input), session_id: 's2', transcript_path: spoke('s2', then - 60000) }
+  line(JSON.stringify(idle), { home })
+  assert.equal(readJson(home + '/usage.json').sevenDay.percentUsed, 1)
+})
+
+test('a session whose transcript only moved on, with the same figure, writes nothing to the usage record', () => {
+  const { home, input } = startRun(10)
+  const folder = tmp('transcripts')
+  const p = folder + '/s1.jsonl'
+  fs.writeFileSync(p, '{}\n')
+  const first = { ...JSON.parse(input), transcript_path: p }
+  line(JSON.stringify(first), { home })
+  const was = fs.readFileSync(home + '/usage.json', 'utf8')
+  const later = (Date.now() + 60000) / 1000
+  fs.utimesSync(p, later, later)
+  line(JSON.stringify(first), { home })
+  assert.equal(fs.readFileSync(home + '/usage.json', 'utf8'), was)
+})
+
 test('an idle session with a lower, older figure does not lower the stored one or lift the gate', () => {
   const { home, dir, input } = startRun(80)
   line(input, { home })

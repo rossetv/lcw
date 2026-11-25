@@ -361,10 +361,14 @@ export function reopenDue(state, gate, aliveAt, now) {
   return !(now - aliveAt < 15000)
 }
 
-/** usage.json from a session.measure reading; null when it has no weekly figure. */
-export function usageFrom(rateLimits, now) {
+/**
+ * usage.json from a session.measure reading; null when it has no weekly figure. seen is when the session last spoke (its
+ * transcript's time), left out when not known: the event also fires as the five-hour window moves in an idle session,
+ * whose weekly figure is then as old as its last reply.
+ */
+export function usageFrom(rateLimits, now, seen) {
   const r = (rateLimits ?? []).find((x) => x.kind === 'seven_day')
-  return r ? { at: now, sevenDay: { percentUsed: r.percentUsed, resetsAt: r.resetsAt ?? null }, source: 'mod' } : null
+  return r ? { at: now, ...(Number.isFinite(seen) && seen > 0 ? { seen } : {}), sevenDay: { percentUsed: r.percentUsed, resetsAt: r.resetsAt ?? null }, source: 'mod' } : null
 }
 
 /**

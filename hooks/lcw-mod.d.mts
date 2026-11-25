@@ -44,8 +44,8 @@ export function measureStep(session: QuotaSession | null | undefined, rec: Spend
 export function usdWakePrompt(root: string, markUsd: number | null): string
 export function wakeable(state: any): boolean
 export function reopenDue(state: any, gate: unknown, aliveAt: number | null | undefined, now: number): boolean
-export function usageFrom(rateLimits: readonly { kind: string; percentUsed: number; resetsAt?: string }[] | undefined, now: number):
-  { at: number; sevenDay: SevenDay; source: string } | null
+export function usageFrom(rateLimits: readonly { kind: string; percentUsed: number; resetsAt?: string }[] | undefined, now: number, seen?: number):
+  { at: number; seen?: number; sevenDay: SevenDay; source: string } | null
 export function compactInstructions(state: any, runDir: string, step: string): string
 export function resumePrompt(root: string, step: string): string
 export function wakePrompt(root: string): string

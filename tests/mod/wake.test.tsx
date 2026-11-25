@@ -313,6 +313,26 @@ test('a lower figure from an idle session neither lowers usage.json nor keeps th
   expect(JSON.parse(w.files[RUN + '/gate'] ?? '{}').usedPercent).toBe(80)
 })
 
+test('after the limit is reset, a session that has spoken since lowers usage.json, and an idle one still holding the old figure does not put it back', async ($, on) => {
+  const resetsAt = '2026-11-22T14:00:00.000Z'
+  const w = engine(on, {
+    ...BIND, [RUN + '/state.json']: state('running'),
+    '/lcw/usage.json': JSON.stringify({ at: NOW - 60000, seen: NOW - 60000, sevenDay: { percentUsed: 99, resetsAt }, source: 'statusline' }),
+  })
+  let spoke = NOW - 1000
+  on('session.info', () => ({ value: { transcriptPath: '/t/s1.jsonl', platform: 'linux' } }))
+  on('fs.stat', (_: any, e: any) => {
+    if (e.path === '/t/s1.jsonl') return { value: { kind: 'file', size: 10, mtimeMs: spoke, isLink: false } }
+    throw new Error('ENOENT')
+  })
+  await start($)
+  await $.session.measure(limits(2, resetsAt) as any)
+  expect(JSON.parse(w.files['/lcw/usage.json'] ?? '{}').sevenDay.percentUsed).toBe(2)
+  spoke = NOW - 3600000
+  await $.session.measure(limits(99, resetsAt) as any)
+  expect(JSON.parse(w.files['/lcw/usage.json'] ?? '{}').sevenDay.percentUsed).toBe(2)
+})
+
 test('a figure for a new week replaces the old one', async ($, on) => {
   const w = engine(on, {
     ...BIND, [RUN + '/state.json']: state('running'),
