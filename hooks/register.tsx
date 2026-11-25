@@ -17,10 +17,10 @@ import { activeQuota, CLAIM_MS, evaluateQuota, quotaOff, REFRESH_MS } from '../l
 import type { QuotaView } from '../lib/quota.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, completionPrompt, countsTurn, compactInstructions, cardMotion, cardPace, gateFor, isShown, layout, measureStep,
-  longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
+  longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, sittingPrompt, sittingWaves, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
   wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, briefOf,
 } from './lcw-mod.mjs'
-import type { CardAgent, Carry, Nudged, Row, Seen, Span, Told, Totals } from './lcw-mod.mjs'
+import type { CardAgent, Carry, Nudged, Row, Sat, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
   AWAKE_EVERY_MS, RUNS_EVERY_MS, awakeApplies, awakeCheckWanted, claudeCommand, dismissKeys, markSpell, pressPlan, proxyQuotaEndpoint, proxyQuotaHost, runFact, said, sameBox, spendFailingFact,
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue, weeklyIdle,
@@ -43,6 +43,7 @@ const keptReplied = atom({ plugin: 'lcw', key: 'repliedAt' } as const, 0, { shap
 const keptTold = atom({ plugin: 'lcw', key: 'told' } as const, {}, { shape: KEPT })
 const keptNudged = atom({ plugin: 'lcw', key: 'nudged' } as const, {}, { shape: KEPT })
 const keptWaves = atom({ plugin: 'lcw', key: 'waves' } as const, {}, { shape: KEPT })
+const keptSat = atom({ plugin: 'lcw', key: 'sat' } as const, {}, { shape: KEPT })
 const keptCompletion = atom({ plugin: 'lcw', key: 'completion' } as const, {}, { shape: KEPT })
 const keptCarry = atom({ plugin: 'lcw', key: 'carry' } as const, null, { shape: KEPT })
 const keptOwed = atom({ plugin: 'lcw', key: 'owed' } as const, null, { shape: KEPT })
@@ -63,6 +64,8 @@ const S = {
   waveAsked: {} as Record<string, number>,
   agentLogs: '',
   told: {} as Told,
+  // The sweep's waves that have no agent at work, since when, and when the orchestrator was last asked about each.
+  sat: {} as Sat,
   quiet: null as { quiet: number; stalled: number } | null,
   totals: {} as Partial<Totals>,
   totalsChanged: false,
@@ -187,9 +190,10 @@ function keepReplied($: EngineInterface) {
 }
 
 function keepNotices($: EngineInterface) {
-  const { told, nudged } = S
+  const { told, nudged, sat } = S
   if (changed('told', told)) void update($, keptTold, () => told).catch(unkept('told'))
   if (changed('nudged', nudged)) void update($, keptNudged, () => nudged).catch(unkept('nudged'))
+  if (changed('sat', sat)) void update($, keptSat, () => sat).catch(unkept('sat'))
 }
 
 // An agent's brief says which wave it works for, and only its launch shows the brief: the wave is kept from there, by
@@ -259,6 +263,7 @@ async function restore($: EngineInterface) {
       read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(), read($, keptCompletion), read($, keptOwed),
     ])
     S.waves = { ...(await read($, keptWaves)), ...S.waves }
+    if (!S.sat.run) S.sat = await read($, keptSat)
     for (const k of dismissed) S.banner.dismissed.add(k)
     S.repliedAt = Math.max(S.repliedAt, repliedAt)
     S.told = { ...told, ...S.told }
@@ -556,6 +561,15 @@ function unsay($: EngineInterface, stall: { due: { id: string }[]; nudged: Nudge
   keepNotices($)
 }
 
+// The same for a notice about sitting waves: unless a later one has gone out, each wave it named is as it was before.
+function unsit($: EngineInterface, sit: { due: { n: number }[]; sat: Sat }, was: Sat) {
+  if (S.sat.last !== sit.sat.last) return
+  const waves = { ...S.sat.waves }
+  for (const d of sit.due) if (waves[d.n]) waves[d.n] = { ...waves[d.n], told: was.waves?.[d.n]?.told, mark: was.waves?.[d.n]?.mark }
+  S.sat = { ...S.sat, waves, last: was.last, again: was.again }
+  keepNotices($)
+}
+
 // Whether the gate was put right; null when nothing was run: another check is under way, or this one ran under 5 s ago.
 async function reconcileGate($: EngineInterface, run: Run, action: 'sync' | 'retry' | 'ack') {
   const now = await $.clock.now()
@@ -668,6 +682,7 @@ async function refresh($: EngineInterface) {
     S.seen = {}
     S.nudged = {}
     S.told = {}
+    S.sat = {}
     keepNotices($)
     S.hideRows = false
     return
@@ -725,7 +740,18 @@ async function pollAgents($: EngineInterface) {
     const due = [...stall.due, ...long.due]
     // Recorded before it is sent, since the next poll may come first; taken off the record later if it was not sent.
     if (due.length) void submitSoon($, stallPrompt(due, S.agents)).then((sent) => sent || retryLater($, () => unsay($, stall, was, long.due)))
-  } else S.nudged = {}
+    // A wave of a sweep with no agent at work is the orchestrator's to start or to explain. Nothing is judged while an
+    // agent's wave is still being read: after a reload every wave would look empty. Nor while the card shows the run
+    // paused, as at its usage mark, where the state may still say running and no agent may start.
+    const working = S.agents.filter((a) => !a.held)
+    if (S.mode === 'paused') S.sat = {}
+    else if (sweep && !working.some((a) => a.wave == null && S.waves[a.id] === undefined && (S.waveAsked[a.id] ?? 0) < WAVE_TRIES)) {
+      const before = S.sat
+      const sit = sittingWaves(run.state, S.agents, before, now)
+      S.sat = sit.sat
+      if (sit.due.length) void submitSoon($, sittingPrompt(sit.due, working.filter((a) => a.wave == null).length)).then((sent) => sent || retryLater($, () => unsit($, sit, before)))
+    }
+  } else { S.nudged = {}; S.sat = {} }
   keepNotices($)
   const totals = addTotals(S.totals, list, run.state.createdAt ?? 0)
   if (totals.agents !== S.totals.agents || totals.tokens !== S.totals.tokens) S.totalsChanged = true

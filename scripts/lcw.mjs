@@ -54,7 +54,7 @@ const USAGE = `lcw commands: ${COMMANDS}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
 In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked, charter.md written, no wave queued and every open wave built (in Review, back in Build from it, or in Ship); a round entered with a wave short of Ship is an early one, which status shows and which cannot end the sweep; with waves open it makes .claude/worktrees/<name>-latest, detached, holding every open wave's work (the newest wave's tip alone if they conflict), which status prints as latest work while the round runs. worktree makes only the branch lcw/<name>; the session stays in the main checkout and each wave gets its own worktree.
 hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>); beside a wave still being planned or built it is cut from where that wave was cut, holds none of its work, and takes it in once it is built; any number of waves may be open at once; it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, leaving out a wave at merging, whose head is settled; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first, once the wave before it is built; stage Review, stage Ship and the final checks need all of them, and stage Ship, from any stage, needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round, and wave round <r> sets it. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged; merge <wave> --wait <minutes> first waits, up to that many minutes (at most 60), for the pull request's GitHub checks, and merges only once every one has passed or been skipped, with at least one passed; it ends, merging nothing, at the first failed check, and when the run is paused, stopped or finished. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
---wave <n> names the wave that stage Plan|Build|Review|Ship, task, req, set plan.* or milestone, ledger, ask and wave round|step|take|defer|shipped act on. Without it they act on the open wave whose worktree lcw runs in, else the only open wave; with several open they refuse, but ledger writes the run's ledger only and ask is the run's own, as they are during a hunt. ask --wave marks the wave waiting until its asks are answered. ledger --wave may name a shipped wave, and set takes --wave with any key. A flag and its value may be one word, --wave=<n>.
+--wave <n> names the wave that stage Plan|Build|Review|Ship, task, req, set plan.*, milestone or waits, ledger, ask and wave round|step|take|defer|shipped act on. Without it they act on the open wave whose worktree lcw runs in, else the only open wave; with several open they refuse, but ledger writes the run's ledger only and ask is the run's own, as they are during a hunt. ask --wave marks the wave waiting until its asks are answered. ledger --wave may name a shipped wave, and set takes --wave with any key. set waits="<why>" --wave <n> records, in a few words the person would understand, why an open wave has no agent at work: the card shows it under the wave, the wave's ledger keeps it, and it goes when the wave moves or one of its tasks starts; waits= with nothing after it takes it away. A flag and its value may be one word, --wave=<n>.
 req <id> rename "<name>" and req <id> drop change a requirement when what is built changes; in a sweep's running wave req <id> park takes a fix out of the wave for the person, and req <id> partial marks a fix that was built but leaves the charter's done line unmet: it is not counted as fixed. req <id> drop --wave <n> drops a fix a shipped wave parked.
 approval ["<Go label>" ...] [--meaning "<what Go builds>"] [--recommend <n>] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. With several Go labels, --recommend <n> is needed: the one Claude recommends, which the box draws in pink. Asked again, it replaces the last; a new stage clears it.
 take <runId> makes this session take over a run of this repository that no session has shown for 15 minutes; abandon <runId> stops such a run for good and removes its worktree when nothing in it is uncommitted, keeping its branch.
@@ -502,13 +502,21 @@ const commands = {
       if (top === 'sweep') checkSweepSetting(run.state, key, value)
       return [key, value]
     })
-    // a wave keeps its own plan and milestone
-    const ofWave = (k) => ['plan', 'milestone'].includes(k.split('.')[0])
+    // a wave keeps its own plan and milestone, and what it waits for while it has no agent
+    const ofWave = (k) => ['plan', 'milestone', 'waits'].includes(k.split('.')[0])
     const wave = pairs.some(([k]) => ofWave(k)) ? waveOf(run.state) : null
     if (wave) mustRun(wave)
+    const waits = pairs.find(([k]) => k === 'waits')
+    if (waits) {
+      if (!wave) fail('waits is a wave\'s own: it says why an open wave of a sweep has no agent at work. Nothing was changed.')
+      waits[1] = String(waits[1] ?? '').replace(/\s+/g, ' ').trim()
+    }
+    const waited = wave?.waits
     // no ledger line: set is called often and would drown the ledger
-    pairs.forEach(([k, v]) => setDotted(wave && ofWave(k) ? wave : run.state, k, v))
+    pairs.forEach(([k, v]) => { if (k === 'waits' && !v) delete wave.waits; else setDotted(wave && ofWave(k) ? wave : run.state, k, v) })
     save(run.paths, run.state)
+    // but why a wave sat is set seldom, and is worth keeping once the wave has moved and the reason is gone; the same reason given again is not a new line
+    if (waits?.[1] && waits[1] !== waited) appendLedger(run.paths, `wave ${wave.n} waits: ${waits[1]}`, wave)
     out(`set ${pairs.map(([k]) => k).join(', ')}`)
     const health = pairs.find(([k]) => k === 'health')?.[1]
     if (health !== undefined) {
@@ -1043,7 +1051,7 @@ const commands = {
       if (to < 1) fail('A review round is 1 or more. Nothing was changed.')
       // a number at or under the round it is at puts a mistaken raise right, and starts no round
       if (to > (wave.round ?? 0)) mustHoldRange(s, wave, 'another review round')
-      change(run, `wave ${wave.n}: review round ${to}`, () => { wave.round = to }, wave)
+      change(run, `wave ${wave.n}: review round ${to}`, () => { wave.round = to; delete wave.waits }, wave)
       return out(`wave ${wave.n}: round ${wave.round}`)
     }
     if (sub === 'step') {
@@ -1084,6 +1092,7 @@ const commands = {
       change(run, `wave ${wave.n} step: ${step}${checked ? ` at ${checked}` : ''}`, (st) => {
         if (step !== 'merging' && (wave.step === 'final checks' || wave.step === 'merging')) clearLater(st, wave)
         Object.assign(wave, { step: step === 'none' ? null : step, checked })
+        delete wave.waits
       }, wave)
       return out(`wave ${wave.n} step ${step}${checked ? ` at ${checked}` : ''}`)
     }
@@ -1411,6 +1420,7 @@ function waveStage(run, wave, stage) {
     // its final checks no longer count, and nor do those of the waves after it, which ran on top of it
     if (wave.step === 'final checks' || wave.step === 'merging') clearLater(s, wave)
     Object.assign(wave, { stage, stageSince: now(), step: null, milestone: null, checked: null })
+    delete wave.waits
     const { stage: was, stageSince: since } = s
     enterStage(s, stage)
     if (was === 'Hunt') Object.assign(s, { stage: was, stageSince: since })
@@ -1472,7 +1482,7 @@ function sweepStatus(run) {
 
 /** One open wave in lcw status: where it stands, where its work is, what its review reads, and its own lists. */
 function waveStatus(run, x) {
-  const where = [x.stage, x.step, x.round ? `round ${x.round}` : '', x.waiting ? 'waits on an answer' : ''].filter(Boolean).join(', ')
+  const where = [x.stage, x.step, x.round ? `round ${x.round}` : '', x.waiting ? 'waits on an answer' : '', x.waits ? `waits: ${x.waits}` : ''].filter(Boolean).join(', ')
   const dir = waveDir(run.dir, x.n)
   return [
     `wave ${x.n}: ${where}  branch: ${x.branch}  worktree: ${x.worktree ?? 'none'}${x.checked ? `  final checks on: ${x.checked}` : ''}`,
@@ -1671,7 +1681,8 @@ function listItem(cmd, field, statuses, make) {
   if (!statuses.includes(status)) fail(`Usage: lcw ${cmd} <id> <${statuses.join('|')}>`)
   const item = find(list, 'id', id)
   if (cmd === 'req' && item.status === 'parked') fail(`${id} is parked for the person and stays parked; it can only be dropped. Nothing was changed.`)
-  change(run, `${cmd} ${id}: ${status}`, () => { item.status = status }, of)
+  // work has started for the wave, so what it was waiting for is over
+  change(run, `${cmd} ${id}: ${status}`, () => { item.status = status; if (cmd === 'task' && status === 'running' && wave) delete wave.waits }, of)
   out(`${id} ${status}`)
 }
 

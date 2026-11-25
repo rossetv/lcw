@@ -179,6 +179,67 @@ export function stallPrompt(due, all) {
   }).join('\n\n')
 }
 
+// A wave in one of these stages has work to hand out; one in Ship holds for its turn.
+const SIT_STAGES = ['Plan', 'Build', 'Review']
+
+// What moves when a task ends or a wave gets further: what a sitting wave waits for may have happened once this has.
+const sweepMark = (state) => (state?.sweep?.waves ?? [])
+  .map((w) => [w.n, w.status, w.stage ?? '', w.step ?? '', w.round ?? 0, (w.tasks ?? []).filter((t) => t.status === 'done').length].join(':')).join(' ')
+
+/**
+ * Which of a sweep's waves the orchestrator is asked about now. A wave sits when it is being planned, built or
+ * reviewed, does not wait on the person, and no agent has been at work for it for sitMs (a held agent is not at work);
+ * the front queued wave sits once it has been queued that long. A wave is named when it gets there. While it goes on
+ * sitting it is named again only once a task has ended or a wave has moved since, and no sooner than againMs after;
+ * such repeats share one clock, so one notice in againMs carries them all. No two notices come within apartMs, so
+ * waves that come to sit close together are asked about together.
+ * agents: the live agents, each with the wave it works for where that is known.
+ * sat: {run, waves: {n: {since, queued, told, mark}}, last, again} from the previous poll; the returned one holds only
+ * the waves still sitting, so a wave that gets an agent starts over.
+ */
+export function sittingWaves(state, agents, sat, now, sitMs = TH.waveSitsAfterMinutes * 6e4, againMs = TH.waveAskedAgainAfterMinutes * 6e4, apartMs = TH.waveNoticesApartMinutes * 6e4) {
+  const waves = state?.sweep?.waves ?? []
+  const before = sat?.run === state?.id ? sat : {}
+  const mark = sweepMark(state)
+  const busy = new Set((agents ?? []).filter((a) => !a.held && a.wave != null).map((a) => a.wave))
+  const front = waves.find((w) => w.status === 'queued')
+  const next = {}
+  const sitting = []
+  for (const w of waves) {
+    const queued = w === front
+    if (busy.has(w.n) || !(queued || (w.status === 'running' && SIT_STAGES.includes(w.stage) && !w.waiting))) continue
+    const was = before.waves?.[w.n]
+    const rec = was && !!was.queued === queued ? was : { since: now, queued }
+    next[w.n] = rec
+    if (now - rec.since >= sitMs) sitting.push({ n: w.n, queued, stage: w.stage ?? '', waits: typeof w.waits === 'string' ? w.waits : '', ms: now - rec.since, rec })
+  }
+  const first = sitting.filter((x) => x.rec.told == null)
+  const again = now - (before.again ?? -Infinity) >= againMs ? sitting.filter((x) => x.rec.told != null && x.rec.mark !== mark && now - x.rec.told >= againMs) : []
+  const due = now - (before.last ?? -Infinity) >= apartMs ? [...first, ...again] : []
+  for (const x of due) next[x.n] = { ...x.rec, told: now, mark }
+  return {
+    due: due.map(({ rec, ...x }) => ({ ...x, again: rec.told != null })),
+    sat: { run: state?.id, waves: next, last: due.length ? now : before.last, again: due.some((x) => x.rec.told != null) ? now : before.again },
+  }
+}
+
+/**
+ * The prompt that asks the orchestrator about the waves due. It says what to do and how to record a reason, since
+ * the session's skill text may be older than this. unplaced: agents at work whose wave could not be read.
+ */
+export function sittingPrompt(due, unplaced = 0) {
+  const mins = (ms) => Math.floor(ms / 6e4)
+  const list = (items) => (items.length > 1 ? items.slice(0, -1).join(', ') + ' and ' + items.at(-1) : items[0])
+  const open = due.filter((x) => !x.queued), queued = due.filter((x) => x.queued)
+  const one = (x) => `wave ${x.n} (in ${x.stage}, ${mins(x.ms)} minutes${x.again ? ', as when you were last asked' : ''}${x.waits ? `; you recorded "${x.waits}", so see whether that still holds` : ''})`
+  return [
+    'LCW: work is sitting in this sweep.',
+    open.length && `No agent is at work for ${list(open.map(one))}. Look at what each is waiting for and whether that has happened, and start now whatever can run, beside the work already running: the person should never have to ask why a wave has no agent. Where a wave cannot move yet, record why in a few words the person would understand, lcw set waits="<why>" --wave <n>: the card shows it under that wave, and you are asked about the wave again only once a task has ended or a wave has moved.`,
+    ...queued.map((x) => `Wave ${x.n} has been queued for ${mins(x.ms)} minutes: see whether it can start now, as stages/plan.md says under "In a sweep".`),
+    unplaced > 0 && `${unplaced === 1 ? 'One agent is' : unplaced + ' agents are'} at work whose wave LCW could not read; ${unplaced === 1 ? 'it' : 'one of them'} may be working for a wave named here.`,
+  ].filter(Boolean).join(' ')
+}
+
 // The API errors that clear on their own; a lost connection is a server_error. Every other kind, and one not known, is left alone.
 const CARRY_KINDS = ['server_error', 'overloaded']
 const CARRY_WAITS = [1, 5, 15, 30].map((m) => m * 6e4)

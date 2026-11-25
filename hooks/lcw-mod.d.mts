@@ -63,6 +63,11 @@ export type Told = Record<string, 1>
 export function longNudges(agents: readonly CardAgent[] | undefined, told: Told | undefined, longMs?: number, stalledMs?: number):
   { due: (CardAgent & { why: 'long' })[]; told: Told }
 export function stallPrompt(due: readonly (CardAgent & { times?: number; why?: 'still' | 'held' | 'long' })[], all: readonly CardAgent[] | undefined): string
+export type Sat = { run?: string; waves?: Record<string, { since: number; queued: boolean; told?: number; mark?: string }>; last?: number; again?: number }
+export type SittingWave = { n: number; queued: boolean; stage: string; waits: string; ms: number; again: boolean }
+export function sittingWaves(state: any, agents: readonly { held?: boolean; wave?: number | null }[] | undefined, sat: Sat | undefined, now: number, sitMs?: number, againMs?: number, apartMs?: number):
+  { due: SittingWave[]; sat: Sat }
+export function sittingPrompt(due: readonly SittingWave[], unplaced?: number): string
 export type Carry = { firstAt: number; kind: string; tries: number; dueAt: number | null }
 export function carryFailed(carry: Carry | null | undefined, kind: string, now: number): Carry | null
 export function carryDue(carry: Carry | null | undefined, now: number, blocked: boolean): { carry: Carry | null | undefined; send: number }

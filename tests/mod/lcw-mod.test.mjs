@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import {
   addTotals, addUsage, agentTokens, buttons, cardMotion, cardPace, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
-  longNudges, quietCounts, replacesGate, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt, waveOfBrief, briefOf,
+  longNudges, quietCounts, replacesGate, sittingPrompt, sittingWaves, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt, waveOfBrief, briefOf,
   measureStep, retryGate, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
@@ -435,6 +435,98 @@ test('the stall prompt names the agent, how long, who launched it, and where to 
   for (const fact of ['Build the w1', 'id w1', 'Drive the API milestone', 'id o1', '16 minutes', 'When an agent stalls']) assert.ok(one.includes(fact), fact)
   const two = stallPrompt([{ ...stalling('w1', 21), times: 2 }, { ...stalling('w2', 15), times: 1 }], [])
   for (const fact of ['2 agents', 'Build the w1', '21 minutes', 'second time', 'Build the w2', '15 minutes']) assert.ok(two.includes(fact), fact)
+})
+
+// A sweep with wave 1 in Review, wave 2 in Build and wave 3 queued; over changes a wave by its number.
+const sweepOf = (over = {}) => ({
+  id: 'run-1',
+  sweep: { waves: [
+    { n: 1, status: 'running', stage: 'Review', tasks: [{ status: 'done' }], ...over[1] },
+    { n: 2, status: 'running', stage: 'Build', tasks: [{ status: 'running' }], ...over[2] },
+    { n: 3, status: 'queued', ...over[3] },
+  ] },
+})
+const on = (...waves) => waves.map((wave) => ({ wave, held: false }))
+// Looks at the sweep at each of the given minutes in turn, and gives what was due at each.
+function looks(steps, sat = {}) {
+  const due = []
+  for (const [minute, state, agents] of steps) {
+    const r = sittingWaves(state, agents, sat, NOW + minute * MIN)
+    sat = r.sat
+    due.push(r.due.map((d) => (d.queued ? 'queued ' : '') + d.n + (d.again ? ' again' : '')))
+  }
+  return { due, sat }
+}
+
+test('a wave with no agent at work for ten minutes is named, once; a wave with an agent is not, nor one that got one meanwhile', () => {
+  const s = sweepOf({ 3: { status: 'shipped' } })
+  assert.deepEqual(looks([[0, s, on(2)], [9, s, on(2)], [10, s, on(2)], [11, s, on(2)], [40, s, on(2)]]).due, [[], [], ['1'], [], []])
+  // wave 2 loses its agent at minute 5 and gets one back at minute 12: it never sat for ten
+  assert.deepEqual(looks([[0, s, on(1, 2)], [5, s, on(1)], [12, s, on(1, 2)], [20, s, on(1, 2)]]).due, [[], [], [], []])
+  // and a wave that sat, was named and got an agent is named afresh when it sits again
+  assert.deepEqual(looks([[0, s, on(2)], [10, s, on(2)], [20, s, on(1, 2)], [21, s, on(2)], [30, s, on(2)], [31, s, on(2)]]).due, [[], ['1'], [], [], [], ['1']])
+})
+
+test('a wave in Ship, one that waits on the person and one that has shipped are never named, and a held agent is not at work', () => {
+  const s = sweepOf({ 1: { stage: 'Ship' }, 2: { waiting: true }, 3: { status: 'shipped', stage: 'Ship' } })
+  assert.deepEqual(looks([[0, s, []], [30, s, []]]).due, [[], []])
+  const built = sweepOf({ 3: { status: 'shipped' } })
+  assert.deepEqual(looks([[0, built, [{ wave: 1, held: true }, { wave: 2, held: false }]], [10, built, [{ wave: 1, held: true }, { wave: 2, held: false }]]]).due, [[], ['1']])
+})
+
+test('a sitting wave is named again only once a task has ended or a wave has moved, and no sooner than thirty minutes on', () => {
+  const s = sweepOf({ 3: { status: 'shipped' } })
+  const moved = sweepOf({ 2: { tasks: [{ status: 'done' }] }, 3: { status: 'shipped' } })
+  // nothing has changed: never again
+  assert.deepEqual(looks([[0, s, on(2)], [10, s, on(2)], [45, s, on(2)], [120, s, on(2)]]).due, [[], ['1'], [], []])
+  // a task ended at minute 20: named again at minute 40, thirty after the first time, and then not until more has changed
+  assert.deepEqual(looks([[0, s, on(2)], [10, s, on(2)], [20, moved, on(2)], [39, moved, on(2)], [40, moved, on(2)], [80, moved, on(2)]]).due, [[], ['1'], [], [], ['1 again'], []])
+})
+
+test('waves that come to sit close together are asked about in one notice, and repeats share one clock', () => {
+  const s = sweepOf({ 3: { status: 'shipped' } })
+  // wave 1 sits from minute 0 and wave 2 from minute 5: wave 2 is ten minutes in at 15, but a notice went at 10, so it waits for 25
+  assert.deepEqual(looks([[0, s, on(2)], [5, s, []], [10, s, []], [15, s, []], [24, s, []], [25, s, []]]).due, [[], [], ['1'], [], [], ['2']])
+  // a task ends: wave 1 is named again at 40. Wave 2's own thirty minutes are up at 55 and a wave has moved by then, but
+  // repeats are thirty apart, so it waits for 70, and wave 1 goes with it
+  const moved = sweepOf({ 1: { tasks: [{ status: 'done' }, { status: 'done' }] }, 3: { status: 'shipped' } })
+  const round2 = sweepOf({ 1: { tasks: [{ status: 'done' }, { status: 'done' }], round: 2 }, 3: { status: 'shipped' } })
+  const first = looks([[0, s, on(2)], [5, s, []], [10, s, []], [25, s, []]])
+  assert.deepEqual(looks([[40, moved, []], [55, round2, []], [69, round2, []], [70, round2, []]], first.sat).due, [['1 again'], [], [], ['1 again', '2 again']])
+})
+
+test('the front queued wave is named once it has been queued ten minutes, not while an agent already works for it, and starts over once it starts', () => {
+  const s = sweepOf()
+  assert.deepEqual(looks([[0, s, on(1, 2)], [10, s, on(1, 2)], [11, s, on(1, 2)]]).due, [[], ['queued 3'], []])
+  assert.deepEqual(looks([[0, s, on(1, 2, 3)], [10, s, on(1, 2, 3)]]).due, [[], []])
+  // only the front one: a second queued wave waits its turn
+  const two = { id: 'run-1', sweep: { waves: [...s.sweep.waves, { n: 4, status: 'queued' }] } }
+  assert.deepEqual(looks([[0, two, on(1, 2)], [10, two, on(1, 2)]]).due, [[], ['queued 3']])
+  // started at minute 12 with no agent yet: its ten minutes run from there
+  const started = sweepOf({ 3: { status: 'running', stage: 'Plan' } })
+  assert.deepEqual(looks([[0, s, on(1, 2)], [10, s, on(1, 2)], [12, started, on(1, 2)], [21, started, on(1, 2)], [26, started, on(1, 2)]]).due, [[], ['queued 3'], [], [], ['3']])
+})
+
+test('what was kept for another run is not used, and a record holds only the waves still sitting', () => {
+  const s = sweepOf({ 3: { status: 'shipped' } })
+  const { sat } = looks([[0, s, on(2)], [10, s, on(2)]])
+  assert.deepEqual(Object.keys(sat.waves), ['1'])
+  assert.equal(sat.run, 'run-1')
+  // the same waves under another run's id start their ten minutes again
+  assert.deepEqual(looks([[11, { ...s, id: 'run-2' }, on(2)], [20, { ...s, id: 'run-2' }, on(2)], [21, { ...s, id: 'run-2' }, on(2)]], sat).due, [[], [], ['1']])
+  assert.deepEqual(sittingWaves({ id: 'a-build' }, [], {}, NOW).due, [])
+})
+
+test('the notice names each wave, how long, what was recorded for it, and how to record why; a queued wave and an unplaced agent have words of their own', () => {
+  const p = sittingPrompt([
+    { n: 18, queued: false, stage: 'Build', waits: '', ms: 12 * MIN, again: false },
+    { n: 19, queued: false, stage: 'Review', waits: 'its screens need the player files', ms: 58 * MIN, again: true },
+    { n: 24, queued: true, stage: '', waits: '', ms: 135 * MIN, again: false },
+  ], 2)
+  for (const fact of [/^LCW: work is sitting in this sweep\./, /wave 18 \(in Build, 12 minutes\) and wave 19 \(in Review, 58 minutes, as when you were last asked; you recorded "its screens need the player files", so see whether that still holds\)/,
+    /start now whatever can run/, /lcw set waits="<why>" --wave <n>/, /Wave 24 has been queued for 135 minutes: see whether it can start now/, /2 agents are at work whose wave LCW could not read/]) assert.match(p, fact)
+  const one = sittingPrompt([{ n: 24, queued: true, stage: '', waits: '', ms: 10 * MIN, again: false }])
+  assert.doesNotMatch(one, /No agent is at work|lcw set waits|could not read/)
 })
 
 test('agents are counted quiet after five still minutes and stalled after fifteen, as the card marks them', () => {

@@ -1235,6 +1235,9 @@ const underLanes = (agents, opts = {}) => {
   i.agents = agents.map(([id, description, wave, more = {}]) => ({ id, description, model: 'claude-opus-5-5', effort: 'high', tokens: 1000, startTime: i.now - 60000, status: 'running', ...(wave == null ? {} : { wave }), ...more }));
   // folded: the waves the person folded, each by the run it was folded in (this one unless named)
   if (opts.folded) i.ui = { folded: Object.fromEntries(opts.folded.map(f => [foldKey(f.run ?? i.state.id, f.wave ?? f), true])) };
+  // waits: why a wave has no agent at work, by its number; edit: any other change to the sweep's state
+  for (const [n, why] of Object.entries(opts.waits ?? {})) i.state.sweep.waves.find(w => w.n === Number(n)).waits = why;
+  opts.edit?.(i.state);
   if (opts.spans) return renderCard(buildView(i), { width: opts.width ?? 115 });
   const width = opts.width ?? 115;
   return strip(toAnsi(renderCard(buildView(i), { width, ...opts }), 'dark', width)).split('\n').map(l => l.trimEnd());
@@ -1296,6 +1299,40 @@ test('a folded wave lists none of its agents and its lane says how many it holds
   assert.deepEqual(startsOf(rows), ['waves', 'wave 1', 'wave 2', '  → Review the export fix', 'wave 3']);
   assert.match(rows.at(-1), /^▸ wave 3 .* 3 agents +\S+$/);
   assert.doesNotMatch(rows.join('\n'), /more agent/, 'folded agents are not counted as out of sight');
+});
+
+test('a wave with no agent at work says why under its lane, where its agents would stand, whether or not any other wave has agents', () => {
+  const waits = { 2: "the TV parts need casting's screens", 3: 'its screens need the player files' };
+  const rows = underLanes([['a', 'Build the importer', 3]], { waits });
+  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', 'wave 2', "  waits: the TV parts need casting's screens", 'wave 3', '  → Build the importer']);
+  assert.deepEqual(startsOf(underLanes([], { waits })), ['waves', 'wave 1', 'wave 2', "  waits: the TV parts need casting's screens", 'wave 3', '  waits: its screens need the player files']);
+  // an agent that has given its report is listed, and is not at work: the reason stays beneath it
+  const held = underLanes([['a', 'Build the importer', 3, { held: true }]], { waits });
+  assert.deepEqual(startsOf(held).slice(4), ['wave 3', '  → Build the importer', '  waits: its screens need the player files']);
+});
+
+test('the reason is not drawn for a folded wave or one that waits on the person, nor on the narrow lanes, and a long one is cut to the card', () => {
+  const waits = { 2: 'the TV parts need the screens', 3: 'its screens need the player files that the casting work is still changing, and then the thumbs' };
+  const quiet = underLanes([], { waits, folded: [2], edit: s => { s.sweep.waves.find(w => w.n === 3).waiting = true; } });
+  assert.doesNotMatch(quiet.join('\n'), /waits:/);
+  assert.doesNotMatch(underLanes([], { waits, width: 58 }).join('\n'), /waits:/);
+  for (const frame of [true, false]) {
+    const cut = underLanes([], { waits, width: 80, frame });
+    assert.ok(cut.some(l => /waits: its screens need.*…/.test(l)), cut.join('\n'));
+    assert.ok(cut.every(l => cols(l) <= 80), cut.join('\n'));
+  }
+});
+
+test('the rows that say why a wave waits come out of the rows the agents may take, so the card keeps to its height', () => {
+  const waits = { 2: 'the TV parts need the screens' };
+  const agents = ['a', 'b', 'c', 'd', 'e', 'f'].map(id => [id, 'Build part ' + id, 3]);
+  const free = underLanes(agents, {}), kept = underLanes(agents, { maxRows: free.length });
+  assert.equal(kept.length, free.length);
+  const tight = underLanes(agents, { waits, maxRows: free.length });
+  assert.equal(tight.length, free.length);
+  assert.ok(tight.some(l => /waits: the TV parts/.test(l)));
+  // one row went to the reason and one to the row that says agents are out of sight
+  assert.match(tight.join('\n'), /2 more agents/);
 });
 
 test("every wave's lane starts with an arrow that is a button: down while its agents are listed, to the side once folded", () => {

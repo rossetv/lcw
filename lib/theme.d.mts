@@ -6,6 +6,7 @@ export const thresholds: {
   contextYellowFrom: number; contextRedFrom: number;
   runShareYellowFrom: number; runShareRedFrom: number;
   agentQuietAfterMinutes: number; agentStalledAfterMinutes: number; agentLongAfterMinutes: number;
+  waveSitsAfterMinutes: number; waveAskedAgainAfterMinutes: number; waveNoticesApartMinutes: number;
   narrowBelowColumns: number;
 };
 /**

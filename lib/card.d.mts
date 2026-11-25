@@ -12,6 +12,7 @@ export interface AgentInput {
   tokensWas?: number;           // the figure its tokens moved from, at movedAt: the card rolls up from it
   movedAt?: number | null;
   wave?: number | null;         // the wave of a sweep it works for, where known: it is listed under that wave's lane
+  held?: boolean;               // its turn has ended and it is still listed: not at work
 }
 export interface AgentNode {
   id: string; desc: string; model: string; effort: string; tokens: number | null; spark: number[] | null; elapsed: string;
@@ -26,6 +27,8 @@ export interface OpenWave {
   waiting: boolean; round: number;
   /** True while the person has folded the wave's agents away. */
   folded?: boolean;
+  /** Why the wave has no agent at work, as the orchestrator recorded it, else ''; and whether none is at work for it now. */
+  waits?: string; sits?: boolean;
   /** Its figure while at work: tasks in Build, fixes in Review, the plan in Plan; null otherwise. */
   d: { k: 'tasks' | 'reqs' | 'plan'; [key: string]: unknown } | null;
   /** How long it has stood at its stage. */

@@ -2045,3 +2045,60 @@ test('status counts the fixes a wave holds once more have joined it than were qu
   assert.match(out, /^ {2}1 \[running\] 3 fixes /m)
   assert.match(out, /^ {2}2 \[queued\] 2 fixes /m)
 })
+
+test('set waits records why a wave has no agent at work: on the wave named, in its ledger and in status, as text', () => {
+  const t = twoOpen()
+  const none = t.cli('set', 'waits=the screens need the player files')
+  assert.equal(none.code, 1)
+  assert.match(none.out, /1 and 2.*--wave/)
+  assert.equal(t.cli('set', 'waits=the  screens need\nthe player files', '--wave', '2').code, 0)
+  assert.equal(t.wave(2).waits, 'the screens need the player files')
+  assert.equal(t.wave(1).waits, undefined)
+  assert.match(t.cli('status').out, /^wave 2: Build, waits: the screens need the player files {2}branch/m)
+  for (const ledger of [`${t.dir}/ledger.md`, `${t.dir}/waves/2/ledger.md`]) assert.match(fs.readFileSync(ledger, 'utf8'), /wave 2 waits: the screens need the player files/)
+  // the same reason given again, as an answer to being asked again, is one line still; a new reason is a new line
+  t.cli('set', 'waits=the screens need the player files', '--wave', '2')
+  t.cli('set', 'waits=the player files are in, the thumbs are not', '--wave', '2')
+  assert.equal(fs.readFileSync(`${t.dir}/waves/2/ledger.md`, 'utf8').match(/wave 2 waits:/g).length, 2)
+  // a figure is still words, and nothing after the = takes the reason away without a ledger line
+  t.cli('set', 'waits=16', '--wave', '1')
+  assert.equal(t.wave(1).waits, '16')
+  const lines = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8').split('\n').length
+  assert.equal(t.cli('set', 'waits=', '--wave', '1').code, 0)
+  assert.equal('waits' in t.wave(1), false)
+  assert.equal(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8').split('\n').length, lines)
+})
+
+test('what a wave waited for is over once work starts for it: a task that starts, a stage, a step or a review round takes the reason away', () => {
+  const two = twoOpen()
+  two.cli('set', 'waits=the screens need the player files', '--wave', '2')
+  two.cli('set', 'waits=ships after the first', '--wave', '1')
+  two.cli('task', 'add', 'T1', 'the screens', '--wave', '2')
+  assert.equal(two.wave(2).waits, 'the screens need the player files', 'a task added has not started')
+  two.cli('task', 'T1', 'running', '--wave', '2')
+  assert.equal('waits' in two.wave(2), false)
+  assert.equal(two.wave(1).waits, 'ships after the first', 'another wave keeps its own')
+
+  const t = hunting()
+  t.cli('wave', 'add', '2')
+  t.start()
+  const waits = () => t.state().sweep.waves[0].waits
+  const set = () => { assert.equal(t.cli('set', 'waits=held for the first wave').code, 0); assert.equal(waits(), 'held for the first wave') }
+  for (const moves of [['stage', 'Build'], ['stage', 'Review'], ['wave', 'round'], ['wave', 'step', 'closures']]) {
+    set()
+    assert.equal(t.cli(...moves).code, 0, moves.join(' '))
+    assert.equal(waits(), undefined, moves.join(' '))
+  }
+})
+
+test('set waits is refused where no wave is open: in a build, and in a sweep that is hunting', () => {
+  const home = tmp('home')
+  const o = { home, cwd: makeRepo(), session: 's1' }
+  lcw(['start', 'b', '--title', 'A build'], o)
+  const build = lcw(['set', 'waits=nothing to do'], o)
+  assert.equal(build.code, 1)
+  assert.match(build.out, /waits is a wave's own/)
+  const t = hunting()
+  assert.equal(t.cli('set', 'waits=nothing to do').code, 1)
+  assert.equal('waits' in t.state(), false)
+})
