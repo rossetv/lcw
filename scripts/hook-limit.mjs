@@ -47,7 +47,7 @@ try {
     const file = sessionFile(home(), ids[0])
     const session = readJson(file)
     let cli = null
-    if (money && !lcwCall && !ids.some((id) => readJson(sessionFile(home(), id))?.toldPayg || readJson(toldFile(home(), id))?.payg)) {
+    if (money && !ids.some((id) => readJson(sessionFile(home(), id))?.toldPayg || readJson(toldFile(home(), id))?.payg)) {
       const told = toldFile(home(), ids[0])
       fs.mkdirSync(path.dirname(told), { recursive: true })
       let won = false

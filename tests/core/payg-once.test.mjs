@@ -59,10 +59,11 @@ test('a told record already there means the note was given', () => {
   assert.doesNotMatch(run(LIMIT_HOOK, [], { home: f.home, cwd: f.repo, env: { LCW_NOW: String(NOW) }, input: tool(f.repo) }).out, NOTE)
 })
 
-test('a call that is one of the LCW commands neither gives the note nor claims it', () => {
+test('a call that is one of the LCW commands carries the note once, and a later call does not', () => {
   const f = setup()
-  const r = run(LIMIT_HOOK, [], { home: f.home, cwd: f.repo, env: { LCW_NOW: String(NOW) }, input: tool(f.repo, 'node /p/scripts/lcw.mjs status') })
-  assert.doesNotMatch(r.out, NOTE)
-  assert.equal(fs.existsSync(toldFile(f.home, 's1')), false)
-  assert.match(run(LIMIT_HOOK, [], { home: f.home, cwd: f.repo, env: { LCW_NOW: String(NOW) }, input: tool(f.repo) }).out, NOTE)
+  const go = (command) => run(LIMIT_HOOK, [], { home: f.home, cwd: f.repo, env: { LCW_NOW: String(NOW) }, input: tool(f.repo, command) }).out
+  assert.match(go('node /p/scripts/lcw.mjs status'), NOTE)
+  assert.equal(readJson(toldFile(f.home, 's1')).payg, true)
+  assert.doesNotMatch(go('node /p/scripts/lcw.mjs status'), NOTE)
+  assert.doesNotMatch(go('npm test'), NOTE)
 })
