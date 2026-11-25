@@ -42,8 +42,8 @@ function filesFor(row: any) {
 
 // A file system in memory whose times move with every change, as a real one's do.
 // process answers a command the mod runs, as the script would; id and transcript are the session's, which a /clear changes.
-// ps finds the processes in running.
-function engine(on: any, initial: Record<string, string>, opts: { process?: (argv: string[]) => void | Promise<void>; transcript?: string; running?: number[] } = {}) {
+// ps finds the processes in running. pid is the CLAUDE_PID the engine gives as the command hooks', inherited the one in its own environment.
+function engine(on: any, initial: Record<string, string>, opts: { process?: (argv: string[]) => void | Promise<void>; transcript?: string; running?: number[]; pid?: number; inherited?: number } = {}) {
   const now = (instant += STEP)
   const clock = mock.clock(on, { now })
   const times: Record<string, number> = {}
@@ -53,7 +53,8 @@ function engine(on: any, initial: Record<string, string>, opts: { process?: (arg
   const kids = (dir: string) => Object.keys(files).filter((p) => p.startsWith(dir + '/'))
   on('session.id', () => ({ value: w.id }))
   on('session.info', () => ({ value: { transcriptPath: opts.transcript ?? '', platform: 'linux' } }))
-  on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
+  on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : e.name === 'CLAUDE_PID' && opts.inherited ? String(opts.inherited) : undefined }))
+  on('process.hookEnv', () => ({ value: opts.pid ? { CLAUDE_PID: String(opts.pid) } : {} }))
   on('fs.read', (_: any, e: any) => {
     if (e.path in files) return { value: files[e.path] }
     throw new Error('ENOENT')
@@ -84,6 +85,7 @@ function engine(on: any, initial: Record<string, string>, opts: { process?: (arg
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
   on('session.end', (_: any, e: any) => ({ sessionId: e.sessionId }))
+  on('session.measure', (_: any, e: any) => ({ changed: e.changed }))
   return w
 }
 
@@ -97,10 +99,35 @@ for (const row of cases.filter((c) => 'tool' in c.expect) as any[]) {
   const raised = row.marker ?? said
   test(`the marker is ${raised ? 'up' : 'down'} where the check after a tool call says ${said ? 'something' : 'nothing'}: ${row.name}`, async ($, on) => {
     expect(said && !raised).toBe(false)
+    const w = engine(on, filesFor(row), { transcript: row.transcript ? `/t/${row.transcript}.jsonl` : '', running: row.running, pid: row.pid })
+    await $.session.start(START)
+    await w.clock.advance(1000)
+    expect(up(w)).toBe(raised)
+  })
+}
+
+// Where the engine gives no CLAUDE_PID, the mod takes each one the hook may be started with.
+for (const row of cases.filter((c) => 'tool' in c.expect && c.pid) as any[]) {
+  const raised = row.guessed ?? row.marker ?? row.expect.tool !== null
+  test(`without this Claude Code's pid, the marker is ${raised ? 'up' : 'down'}: ${row.name}`, async ($, on) => {
     const w = engine(on, filesFor(row), { transcript: row.transcript ? `/t/${row.transcript}.jsonl` : '', running: row.running })
     await $.session.start(START)
     await w.clock.advance(1000)
     expect(up(w)).toBe(raised)
+  })
+}
+
+// The engine's own CLAUDE_PID is that of whatever launched it, so only the command hooks' says which Claude Code this is.
+for (const { hooks, inherited, lent } of [{ hooks: 400, inherited: 300, lent: false }, { hooks: 300, inherited: undefined, lent: true }]) {
+  test(`billing a reading settles reaches the anchor only where the command hooks' CLAUDE_PID names its running owner: ${lent ? 'it does' : 'an inherited one does not'}`, async ($, on) => {
+    const w = engine(on, {
+      '/lcw/sessions/p1.json': JSON.stringify({ sessionCanonicalId: 'a1', billing: 'unclear' }),
+      '/lcw/sessions/a1.json': JSON.stringify({ sessionCanonicalId: 'a1', claudePid: 300, billing: 'unclear' }),
+    }, { running: [300], pid: hooks, inherited })
+    await $.session.start(START)
+    await $.session.measure({ context: { window: 200000 }, changed: ['rateLimits'], rateLimits: [{ kind: 'seven_day', percentUsed: 50, resetsAt: '2026-06-12T12:00:00Z' }], cost: { usd: 10 } } as any)
+    expect(JSON.parse(w.files['/lcw/sessions/p1.json']!).billing).toBe('subscription')
+    expect(JSON.parse(w.files['/lcw/sessions/a1.json']!).billing).toBe(lent ? 'subscription' : 'unclear')
   })
 }
 

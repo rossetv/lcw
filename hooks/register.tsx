@@ -85,6 +85,8 @@ const S = {
   quotaSynced: '' as string | null,
   // Whether the Claude Code owning a canonical session row was running, by row and owner, and until when that holds.
   owners: new Map<string, { until: number; open: boolean }>(),
+  // This Claude Code's pid, as its command hooks get it in CLAUDE_PID: 0 when the engine gives none, null until asked.
+  claudePid: null as number | null,
   startedAt: 0,
   reopenChecked: false,
   // The id of the run a Resume press on the unfinished-run box takes over: no reopened session's, so no reopen prompt.
@@ -298,6 +300,16 @@ async function lcwHome($: EngineInterface) {
   return S.home
 }
 
+// The engine's own CLAUDE_PID is inherited from whatever launched it; the command hooks' is this Claude Code's.
+async function claudePid($: EngineInterface) {
+  if (S.claudePid === null) {
+    const env = await $.process.hookEnv().catch(() => null)
+    const pid = Number(env?.CLAUDE_PID)
+    if (env) S.claudePid = Number.isInteger(pid) && pid > 1 ? pid : 0
+  }
+  return S.claudePid ?? 0
+}
+
 // The canonical row a session's own row points at, when it may be used: not a stranger's, and not one whose owner is
 // another Claude Code still running. Null otherwise.
 async function lentAnchor($: EngineInterface, id: string, session: any) {
@@ -306,7 +318,7 @@ async function lentAnchor($: EngineInterface, id: string, session: any) {
   if (typeof canonical !== 'string' || !/^[\w.-]{1,256}$/.test(canonical) || /^\.+$/.test(canonical) || canonical === id) return null
   const anchor = await readJson($, sessionFile(home, canonical))
   if (anchor?.sessionCanonicalId !== canonical) return null
-  const pid = Number(session?.claudePid) || Number(await $.env.get('CLAUDE_PID'))
+  const pid = Number(session?.claudePid) || await claudePid($)
   if (Number.isInteger(anchor.claudePid) && anchor.claudePid > 1 && anchor.claudePid !== pid) {
     const key = id + ':' + canonical + ':' + anchor.claudePid
     const now = await $.clock.now()
@@ -1170,11 +1182,12 @@ function noteStopped($: EngineInterface) {
 
 // Whether the limit hook would tell Claude anything after one of the session's own tool calls now: the stop at the
 // mark or the once-only note on pay-per-token billing, with the rows read and rewritten as the hook reads and rewrites
-// them. What the hook reads turns on two facts the mod cannot know fresh: which Claude Code each row records still
-// runs, and the CLAUDE_PID the hook is started with (none, one a row records, or another). Every answer to both is
-// judged, and the hook speaks if it would under any: with k processes recorded, 2^k * (k + 2) answers, each worked
-// out in memory, and only the ones that differ in what the hook would read are judged against the quota and the spend.
-// One Claude Code's rows record one process; past six (at most 512 answers) the marker is kept up unjudged.
+// them. What the hook reads turns on which Claude Code each row records still runs, which the mod cannot know fresh,
+// and on the CLAUDE_PID the hook is started with: this Claude Code's, when the engine gives it, else any (none, one a
+// row records, or another). Every answer is judged, and the hook speaks if it would under any: with k other processes
+// recorded, 2^k answers, or 2^k * (k + 2) without the pid, each worked out in memory, and only the ones that differ in
+// what the hook would read are judged against the quota and the spend. One Claude Code's rows record one process;
+// past six others the marker is kept up unjudged.
 async function afterDue($: EngineInterface, transcript: string | null, id: string) {
   const home = await lcwHome($)
   const now = await $.clock.now()
@@ -1205,7 +1218,8 @@ async function afterDue($: EngineInterface, transcript: string | null, id: strin
   const usage = await readJson($, usageFile(home))
   const marks = (row: any) => row && { markUsd: row.markUsd, markPercent: row.markPercent }
 
-  const pids = [...new Set([...rows.values()].map((row) => row?.claudePid).filter((pid) => Number.isInteger(pid) && pid > 1))]
+  const self = await claudePid($)
+  const pids = [...new Set([...rows.values()].map((row) => row?.claudePid).filter((pid) => Number.isInteger(pid) && pid > 1 && pid !== self))]
   if (pids.length > 6) return true
   const judged = new Set<string>()
   let spend: Promise<Awaited<ReturnType<typeof spendFacts>>> | null = null
@@ -1215,9 +1229,9 @@ async function afterDue($: EngineInterface, transcript: string | null, id: strin
     return moneyFrom({ records: records.filter(Boolean), cap, reading, session: pick.money, state, now })
   }
   for (let running = 0; running < 1 << pids.length; running++) {
-    const alive = (pid: unknown) => pids.includes(pid as number) && ((running >> pids.indexOf(pid as number)) & 1) === 1
+    const alive = (pid: unknown) => (!!self && pid === self) || (pids.includes(pid as number) && ((running >> pids.indexOf(pid as number)) & 1) === 1)
     // -1 stands for a CLAUDE_PID that no row records.
-    for (const pid of [0, -1, ...pids]) {
+    for (const pid of self ? [self] : [0, -1, ...pids]) {
       const names = sessionNames(transcript, id, (name) => rows.get(name), alive, pid)
       const rewritten = aliasRows(names, (name) => rows.get(name), alive, pid)
       const row = (name: string) => (Object.prototype.hasOwnProperty.call(rewritten, name) ? rewritten[name] : rows.get(name))
