@@ -76,3 +76,14 @@ test('a lock that stays held never makes the hook fail or hang, and is left to i
   assert.equal(record(dir).fails, 1)
   assert.equal(fs.existsSync(lockOf(dir)), true)
 })
+
+test('a session that ends removes its record and a lock left beside it, and no other session\'s', () => {
+  const dir = home()
+  const other = `${activityFile(dir, 'p2')}.lock`
+  fs.writeFileSync(lockOf(dir), '')
+  fs.writeFileSync(other, '')
+  fire(dir, JSON.stringify({ session_id: 'p1', hook_event_name: 'SessionEnd' }))
+  assert.equal(fs.existsSync(activityFile(dir, 'p1')), false)
+  assert.equal(fs.existsSync(lockOf(dir)), false)
+  assert.equal(fs.existsSync(other), true)
+})

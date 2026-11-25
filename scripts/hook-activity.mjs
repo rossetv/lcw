@@ -42,7 +42,8 @@ try {
         if (record) writeJson(file, record)
         if (input.hook_event_name === 'SessionEnd') fs.rmSync(file, { force: true }) // a session that comes back starts a new one
       } finally {
-        if (held) fs.rmSync(lockFile, { force: true })
+        // at the end the lock goes with the record, also one a killed hook left behind
+        if (held || input.hook_event_name === 'SessionEnd') fs.rmSync(lockFile, { force: true })
       }
     }
   }
