@@ -1482,6 +1482,20 @@ test('a ledger line about one wave goes to its own ledger too, and one with seve
   assert.ok(!read(`${t.dir}/waves/1/ledger.md`).includes('about wave 2'))
 })
 
+test('ask --no-wait holds no wave, is told apart in status, and leaves a wave waiting only on the asks that hold it', () => {
+  const t = twoOpen()
+  assert.match(t.cli('ask', 'look at the mock', '--no-wait', '--wave', '1').out, /nothing waits/)
+  assert.equal(t.wave(1).waiting, false)
+  assert.equal(t.state().asks[0].nowait, true)
+  assert.match(t.cli('status').out, /^ {2}1\. look at the mock \(wave 1\) \(nothing waits on it\)$/m)
+  t.cli('ask', 'push needs your token', '--wave', '1')
+  t.cli('answer', '2', 'here')
+  assert.equal(t.wave(1).waiting, false, 'the ask left open holds nothing')
+  const refused = t.cli('ask', 'and this?', '--no-wait', '--waiting', '2')
+  assert.equal(refused.code, 1)
+  assert.equal(t.state().asks.length, 1)
+})
+
 test('ask --wave marks that wave waiting until its last ask is answered', () => {
   const t = twoOpen()
   t.cli('ask', 'push needs your token', '--wave', '1')

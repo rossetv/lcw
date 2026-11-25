@@ -59,7 +59,7 @@ const optionOf = (o) => ({ key: String(o.key), label: String(o.label ?? ''), mea
 
 /** An open ask as the answer box reads it; one asked with options (lcw ask --a --b) carries them and the pick. */
 const askOf = (a) => ({
-  n: a.n, text: String(a.text ?? ''), waiting: a.waiting, at: a.at,
+  n: a.n, text: String(a.text ?? ''), waiting: a.waiting, at: a.at, ...(a.nowait ? { nowait: true } : {}),
   ...(Array.isArray(a.options) && a.options.length ? { options: a.options.map(optionOf), ...(a.recommend == null ? {} : { recommend: String(a.recommend) }) } : {}),
 })
 
@@ -303,7 +303,8 @@ export function pressPlan(banner, option, facts, ctx) {
     case 'approve':
       return { fillText: approveText(banner, option), dismiss: true }
     case 'answer': {
-      const a = run?.asks?.[0]
+      // the box holds the asks of one kind: those that hold the run, or those that hold nothing
+      const a = run?.asks?.find((x) => !!x.nowait === !!banner.forYou)
       const o = a?.options?.find((x) => x.key === option)
       if (!o) return { fill: a?.n, dismiss: true }
       if (a.n !== banner.askN) return null

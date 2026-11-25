@@ -260,6 +260,7 @@ test('the run as the boxes read it: its name, its open asks oldest first, none o
   assert.deepEqual([fact.done, fact.left], [1, 2])
   assert.deepEqual(runFact({ ...state, status: 'finished' }).asks, [])
   assert.equal(runFact({ ...state, tasks: [] }).done, undefined)
+  assert.deepEqual(runFact({ ...state, asks: [{ n: 1, text: 'a' }, { n: 2, text: 'look', nowait: true }] }).asks.map((a) => !!a.nowait), [false, true])
 })
 
 test('the prompts a button submits name the commands in full, for a session that never loaded lcw:lcw', () => {
@@ -453,4 +454,17 @@ test("Later on a question shown before an ask brings up the ask's buttons, and t
   assert.equal(box.kind, 'answer')
   assert.deepEqual(argvs(plan), ['answer 2 fork: push to your fork --session s1'])
   assert.equal(bannerFor({ ...sweep([]), dismissed })?.kind, 'question')
+})
+
+test("a press on the box of asks that hold nothing answers its own ask, not the first one open", () => {
+  const options = [{ key: 'a', label: 'Ship it', meaning: 'as drawn' }, { key: 'b', label: 'Change it', meaning: 'say what' }]
+  const run = runFact({ id: 'r1', name: 'export-csv', status: 'running', stage: 'Build', tasks: [],
+    asks: [{ n: 1, text: 'Which format?', at: 1, options, recommend: 'a' }, { n: 2, text: 'Look at the mock', at: 2, nowait: true, options, recommend: 'a' }] })
+  const facts = { now: NOW, advisorModel: 'fable', run }
+  const holds = bannerFor(facts)
+  const offered = bannerFor({ ...facts, dismissed: new Set(['answer:' + holds.key]) })
+  assert.deepEqual(pressPlan(offered, 'a', facts, CTX).steps[0].argv.slice(2, 4), ['answer', '2'])
+  assert.deepEqual(pressPlan(holds, 'a', facts, CTX).steps[0].argv.slice(2, 4), ['answer', '1'])
+  const plain = { ...facts, run: { ...run, asks: run.asks.map(({ options: _, recommend: __, ...a }) => a) } }
+  assert.equal(pressPlan(bannerFor({ ...plain, dismissed: new Set(['answer:' + holds.key]) }), 'now', plain, CTX).fill, 2)
 })

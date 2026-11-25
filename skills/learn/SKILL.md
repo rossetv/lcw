@@ -15,7 +15,7 @@ Teach LCW as it really works. From this skill's base directory, read `../lcw/SKI
 ## The steps, in order
 
 1. **The two shapes.** LCW has two: a Build for a defined large change, a Sweep for an open goal such as "fix all the backlog items". Claude picks from what the person asks; naming a shape wins. Draw both flows, with the part done with the person and the part LCW does on its own.
-2. **The card and the status rows.** What each shows and what the person can do with them, such as clicking an agent to talk to it.
+2. **The card and the status rows.** What each shows and what the person can do with them, such as clicking an agent to talk to it, or a wave to fold its agents away.
 3. **Build.** Workers, milestones and reviewers: draw who does what.
 4. **Review and Ship.** How the work is checked against what was agreed, and what the draft pull request holds.
 5. **Charter (a Sweep).** The rules agreed line by line with the person, and the one approval, typed as a reply: goals, non-goals, anti-goals, no-go zones, kinds of change, proof, what to park, when to stop, wave size, pull requests.

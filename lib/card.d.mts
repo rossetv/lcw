@@ -24,6 +24,8 @@ export interface OpenWave {
   step: string;
   /** True while the wave waits on the person's answer. */
   waiting: boolean; round: number;
+  /** True while the person has folded the wave's agents away. */
+  folded?: boolean;
   /** Its figure while at work: tasks in Build, fixes in Review, the plan in Plan; null otherwise. */
   d: { k: 'tasks' | 'reqs' | 'plan'; [key: string]: unknown } | null;
   /** How long it has stood at its stage. */
@@ -57,7 +59,9 @@ export interface View {
   money: { mark: string; hint: string; retryAt: string; retried: boolean } | null;
   quota: import('./quota.mjs').QuotaView | null;
   pausedBy: 'mark' | 'human'; resumesIn: string;   // 'human': paused by the human, no countdown
+  /** The open asks that hold the run; forYou counts those that hold nothing (lcw ask --no-wait). */
   asks: { n: number; text: string; age: string }[];
+  forYou: number;
   stages: { name: string; st: 'done' | 'now' | 'next' }[];
   detail: { k: string; [key: string]: unknown } | null;
   /** A sweep's waves and totals; null for a build. */
@@ -76,10 +80,13 @@ export interface BuildInput {
   quota?: import('./quota.mjs').QuotaView | null;
   money?: Money | null;
   now?: number;
-  ui?: { expanded?: Record<string, boolean>; moreOpen?: boolean };
+  /** folded: the waves whose agents the person folded away, by foldKey. */
+  ui?: { expanded?: Record<string, boolean>; moreOpen?: boolean; folded?: Record<string, boolean> };
 }
 
 export function buildView(input?: BuildInput): View;
+/** The name a folded wave is kept under in ui.folded. */
+export function foldKey(runId: string | undefined, wave: number): string;
 export interface WeekFigures { shareBefore: number; weekAtStart: number | null; weekResetsAt: string | null; weekUsed: number | null }
 /** The run's week figures for this reading: a week that has ended since weekResetsAt is folded into shareBefore. */
 export function weekOf(state: Record<string, any>, week?: { percentUsed?: number; resetsAt?: string | null } | null): WeekFigures;

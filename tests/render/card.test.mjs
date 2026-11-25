@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildView, renderCard, weekOf, weekShare } from '../../lib/card.mjs';
+import { buildView, foldKey, renderCard, weekOf, weekShare } from '../../lib/card.mjs';
 import { renderStatusRows } from '../../lib/status.mjs';
 import { toPlain, toAnsi } from '../../lib/paint.mjs';
 import { glyphs as G, hex } from '../../lib/theme.mjs';
@@ -1231,6 +1231,9 @@ test('a cut inside a span ahead of a separator drops the separator too', () => {
 const underLanes = (agents, opts = {}) => {
   const i = inputsOf('26-lanes-three-open');
   i.agents = agents.map(([id, description, wave, more = {}]) => ({ id, description, model: 'claude-opus-5-5', effort: 'high', tokens: 1000, startTime: i.now - 60000, status: 'running', ...(wave == null ? {} : { wave }), ...more }));
+  // folded: the waves the person folded, each by the run it was folded in (this one unless named)
+  if (opts.folded) i.ui = { folded: Object.fromEntries(opts.folded.map(f => [foldKey(f.run ?? i.state.id, f.wave ?? f), true])) };
+  if (opts.spans) return renderCard(buildView(i), { width: opts.width ?? 115 });
   const width = opts.width ?? 115;
   return strip(toAnsi(renderCard(buildView(i), { width, ...opts }), 'dark', width)).split('\n').map(l => l.trimEnd());
 };
@@ -1281,4 +1284,50 @@ test('the narrow card keeps its one agent and its count beneath the lanes', () =
   assert.deepEqual(rows.slice(2, 5).map(l => l.slice(0, 6)), ['wave 1', 'wave 2', 'wave 3']);
   assert.match(rows[5], /^→ Build the importer/);
   assert.match(rows.at(-1), /1 more/);
+});
+
+// ---------------------------------------------------------------- folding a wave, and what waits on the person
+
+test('a folded wave lists none of its agents and its lane says how many it holds, their workers too; the other waves keep theirs', () => {
+  const agents = [['o', 'Drive the backend work', 3], ['k', 'Build the queue', null, { parentId: 'o' }], ['c', 'Build the settings page', 3], ['b', 'Review the export fix', 2]];
+  const rows = underLanes(agents, { folded: [3] });
+  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', 'wave 2', '  → Review the export fix', 'wave 3']);
+  assert.match(rows.at(-1), /▸ 3 agents +\S+$/);
+  assert.doesNotMatch(rows.join('\n'), /more agent/, 'folded agents are not counted as out of sight');
+});
+
+test('a wave is a button only while it has agents to fold, and the count of a folded one opens it again', () => {
+  const ids = (rows, n) => rows.find(r => r.some(s => s.t === 'wave ') && r.some(s => s.t.trim() === String(n))).filter(s => s.id).map(s => s.id);
+  const open = underLanes([['a', 'Build the importer', 3]], { spans: true });
+  assert.deepEqual([...new Set(ids(open, 3))], ['wave:3']);
+  assert.deepEqual(ids(open, 1), []);
+  const folded = underLanes([['a', 'Build the importer', 3]], { spans: true, folded: [3] });
+  assert.ok(folded.flat().some(s => s.id === 'wave:3' && /1 agent$/.test(s.t)));
+});
+
+test("a fold belongs to its run: another run's wave of the same number stays open", () => {
+  const rows = underLanes([['a', 'Build the importer', 3]], { folded: [{ run: 'an-earlier-run', wave: 3 }] });
+  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', 'wave 2', 'wave 3', '  → Build the importer']);
+});
+
+test("the run's own words after its state are drawn in the insight colour, which both themes have", () => {
+  const i = inputsOf('RunningA');
+  const row = renderCard(buildView(i), { width: 100 }).find(r => r.some(s => s.t === 'running'));
+  assert.deepEqual(row.filter(s => s.c === 'insight').map(s => s.t), [i.state.health]);
+  for (const theme of ['dark', 'light']) assert.match(hex(theme, 'insight'), /^#[0-9a-f]{6}$/);
+});
+
+test('an ask that holds nothing leaves the frame alone and marks the state row; one that holds the run still turns it red', () => {
+  const i = inputsOf('RunningA');
+  const look = n => ({ n, text: 'Look at the mock', at: NOW - 6e4, nowait: true });
+  const one = buildView({ ...i, state: { ...i.state, asks: [look(1)] } });
+  assert.deepEqual([one.frame, one.asks.length, one.forYou], ['hairline', 0, 1]);
+  const drawn = toPlain(renderCard(one, { width: 100 }));
+  assert.match(drawn, /running · ⚑ 1 thing for you · /);
+  assert.doesNotMatch(drawn, /needs you/);
+  const both = buildView({ ...i, state: { ...i.state, asks: [look(1), look(2), { n: 3, text: 'Which format?', at: NOW - 6e4 }] } });
+  assert.deepEqual([both.frame, both.asks.map(a => a.n), both.forYou], ['needsYou', [3], 2]);
+  assert.match(toPlain(renderCard(both, { width: 100 })), /⚑ 2 things for you/);
+  const p = inputsOf('Paused');
+  assert.match(toPlain(renderCard(buildView({ ...p, state: { ...p.state, asks: [look(1)] } }), { width: 100 })), /paused at your .* mark · ⚑ 1 thing for you/);
 });

@@ -5,10 +5,10 @@ import type { LcwCompletion } from '../types'
 import {
   activityFile, afterFile, capFile, cleanupFile, noticesFile, proxyQuotaNoticeFile, quotaFile, runPaths, runsDir, sessionFile, sessionNames, spendCommandFile, spendDir, spendFile, spendReadingFile, updateFile, usageFile,
 } from '../lib/key.mjs'
-import { answerKey, bannerFor, bannerRows, limitsShort } from '../lib/banner.mjs'
+import { bannerFor, bannerRows, limitsShort } from '../lib/banner.mjs'
 import type { Banner, BannerFacts } from '../lib/banner.mjs'
 import { moneyFrom, readingOf, spendFileCounts } from '../lib/spend.mjs'
-import { buildView, renderCard } from '../lib/card.mjs'
+import { buildView, foldKey, renderCard } from '../lib/card.mjs'
 import { hex, thresholds as TH } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import { atMark, stopTexts, toldFile } from '../lib/mark.mjs'
@@ -68,7 +68,7 @@ const S = {
   totalsChanged: false,
   totalsAt: 0,
   theme: 'dark' as 'dark' | 'light',
-  ui: { expanded: {} as Record<string, true>, moreOpen: false },
+  ui: { expanded: {} as Record<string, true>, moreOpen: false, folded: {} as Record<string, true> },
   hideRows: false,
   collapsed: false,
   // The box's last answer held the run's card; the status line draws the card itself while mod-alive is stale.
@@ -811,7 +811,6 @@ async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
   const session = own.session
   const money = run ? run.money : own.money
   const runF = runFact(run?.state, S.sleep?.kept)
-  const asked = runF?.asks?.length ? answerKey(runF) : ''
   const quota = run ? run.quota : own.quota
   const week = usageFact({ state: run?.state, session: run?.session ?? session, usage: run ? run.usage : own.usage, money, quota, now })
   const endpoint = proxyQuotaEndpoint(await $.env.get('ANTHROPIC_BASE_URL'), await readJson($, quotaFile(home)), session, run?.session)
@@ -841,7 +840,7 @@ async function gather($: EngineInterface, now: number): Promise<BannerFacts> {
     statusLine: statusLineFact(statusLine, home),
     cleanup: cleanup?.at && cleanup?.title ? cleanup : null,
     limits: await limitsFact($),
-    answerFill: asked && S.banner.answerFill === asked ? 'failed' : undefined,
+    answerFill: S.banner.answerFill || undefined,
     repliedAt: S.repliedAt,
   }
 }
@@ -1629,7 +1628,7 @@ export const register: Register = (on) => {
         // The mark box offers the raises and the answer box shows asks (an ask with options alone), so the card does not say them again,
         // unless the box waits for room.
         const draw = (maxRows: number, boxed: boolean) => {
-          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, beat, hideMarkHint: boxed && shown?.kind === 'mark', asksInBox: boxed && shown?.kind === 'answer' ? (shown.askN === undefined ? view.asks.map((a: any) => a.n) : [shown.askN]) : undefined }
+          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, beat, hideMarkHint: boxed && shown?.kind === 'mark', asksInBox: boxed && shown?.kind === 'answer' && !shown.forYou ? (shown.askN === undefined ? view.asks.map((a: any) => a.n) : [shown.askN]) : undefined }
           return renderCard(view, opts)
         }
         const boxed = drawn.length > 0 && (shown?.kind === 'mark' || shown?.kind === 'answer')
@@ -1639,12 +1638,12 @@ export const register: Register = (on) => {
         // A question, and an ask with options, has a short form too: the question and its buttons in a row, without what each one means.
         const choosing = shown?.kind === 'question' || (shown?.kind === 'answer' && !!shown.choices)
         if (choosing && drawn.length && room - drawn.length - 1 < Math.min(CARD_ROOM, card.length)) banner = drawn = bannerRows({ ...shown, choices: undefined, lines: [] }, cols, true)
-        // Where both do not fit, the approval or the question box (or an ask's options) stays and the card takes what
-        // is left, or goes: only the box asks it. Any other box waits and the card keeps the rows it needs (up to
+        // Where both do not fit, the approval or the question box (or an ask's options, or an ask that holds nothing) stays
+        // and the card takes what is left, or goes: only the box asks it. Any other box waits and the card keeps the rows it needs (up to
         // CARD_ROOM), since the card carries what that box says.
         const left = room - drawn.length - 1
         if (drawn.length && left < Math.min(CARD_ROOM, card.length)) {
-          if (shown?.kind === 'approve' || choosing) {
+          if (shown?.kind === 'approve' || choosing || shown?.forYou) {
             card = draw(left, boxed)
             if (card.length > left) card = []
           } else {
@@ -1667,7 +1666,7 @@ export const register: Register = (on) => {
       if (unfocus) S.dirty = true
       const below: Row[] = viewing ? [...card, [{ t: '← back to the main conversation', c: 'accent', id: 'main' }]] : card
       const rows: Row[] = banner.length && below.length ? [...banner, [{ t: ' ' }], ...below] : [...banner, ...below]
-      const hide = !S.collapsed && rows.some((row) => row.some((s) => /^(view|toggle):/.test(s.id ?? '')))
+      const hide = !S.collapsed && rows.some((row) => row.some((s) => /^(view|toggle|wave):/.test(s.id ?? '')))
       if (hide !== S.hideRows) { S.hideRows = hide; S.dirty = true }
       // Claimed even when the approval or question box, or an ask's options, leave the card no room: else the status line draws it.
       S.holdsCard = !!run
@@ -1681,6 +1680,10 @@ export const register: Register = (on) => {
           const agent = id.slice(7)
           if (S.ui.expanded[agent]) delete S.ui.expanded[agent]
           else S.ui.expanded[agent] = true
+        } else if (id.startsWith('wave:')) {
+          const wave = foldKey(run?.state.id, Number(id.slice(5)))
+          if (S.ui.folded[wave]) delete S.ui.folded[wave]
+          else S.ui.folded[wave] = true
         } else if (id === 'more') S.ui.moreOpen = !S.ui.moreOpen
         S.dirty = true
       }

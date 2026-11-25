@@ -40,6 +40,10 @@ const defs = [
   { name: 'activity-failed', setup: activity('failed') },
   { name: 'activity-needs', setup: activity('needs') },
   { name: 'run-open-question', sameAs: 'activity-needs', beat: true, setup: withRun((c) => { c.cli(['ask', 'Which database?']); heartbeat(0)(c) }) },
+  // An ask that holds nothing leaves the mascot as it was: it shouts only for what holds the run.
+  { name: 'run-ask-that-holds-nothing', sameAs: 'run-fresh-heartbeat', beat: true, setup: withRun((c) => {
+    c.cli(['ask', 'Look at the mock', '--no-wait'])
+    fs.writeFileSync(c.runDir() + '/quiet-agents.json', JSON.stringify({ quiet: 2, stalled: 0 })); heartbeat(0)(c) }) },
   { name: 'activity-needs-answered', sameAs: 'activity-working', transcript: true, setup: (c) => {
     activity('needs')(c); const t = (c.now + 60000) / 1000; fs.utimesSync(c.transcript, t, t) } },
   { name: 'activity-asleep', setup: (c) => activity('rest')({ ...c, now: c.now - 10 * 60000 }) },

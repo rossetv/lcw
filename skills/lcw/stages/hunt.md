@@ -2,7 +2,7 @@
 
 Each round of a sweep starts here: probes look for problems in the areas the charter names, and you sort what they find. Entering Hunt adds one to the round. A later round starts with `lcw stage Hunt` once the round before has sorted its fixes into waves, no wave is queued and every open wave is built: in Review, back in Build for its review's fixes, or holding in Ship. It does not wait for their reviews, final checks or merges, which go on alongside it (stages/review.md, stages/ship.md). A round that starts while a wave is short of Ship is an early one: it reads code that wave's review may still change, so it cannot end the sweep (Waves, below). `lcw stage Hunt` says so when it starts one, and `lcw status` shows it. You do not read code: probes do, and they report.
 
-`lcw set health="hunting, area by area"` in round 1, `health="hunting again, round <n>; <each open wave and what it does>"` in a later one, such as `health="hunting again, round 2; wave 3 in its final checks"` (SKILL.md). Read charter.md and, in a later round, findings.md, both in the run folder.
+`lcw set health="hunting, area by area"` in round 1, `health="hunting again, round <n>; <what the open waves come to, in a few words>"` in a later one, such as `health="hunting again, round 2; wave 3 in its final checks"` (SKILL.md: one sentence, never a list of the waves). Read charter.md and, in a later round, findings.md, both in the run folder.
 
 ## Which areas
 
@@ -54,7 +54,7 @@ findings.md holds every finding with its recipe and its sort, round by round, an
 lcw hunt --fix 151 --park 14 --drop 21
 ```
 
-Then `lcw set health="sorted against the charter; <each open wave and what it does>"`, naming the open waves as above.
+Then `lcw set health="sorted against the charter; <what comes next>"`, one sentence as above.
 
 Then put to the human, in LCW's box, each parked item that a short answer would settle and that would be small to fix once answered: a yes or no, or a choice between two or three ways. Not every parked item: one that needs a long discussion, a schema or a no-go zone stays in parked.md only. For each:
 

@@ -32,12 +32,14 @@ const COMMAND_FLAGS = {
   hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr', 'wave'], checkpoint: ['keep'], question: ['text', 'why', 'a', 'b', 'c', 'recommend'], merge: ['wait'],
 }
 // flags that take no value
-const SWITCHES = { where: ['json'], awake: ['check'], checkpoint: ['compact'] }
+const SWITCHES = { where: ['json'], awake: ['check'], checkpoint: ['compact'], ask: ['no-wait'] }
 const MUTATING = ['stage', 'set', 'task', 'req', 'ask', 'answer', 'question', 'approval', 'mark', 'pause', 'resume', 'stop', 'finish', 'worktree', 'take', 'abandon', 'hunt', 'wave', 'merge']
 // commands that name their run by its id, rather than acting on the run this session drives
 const BY_ID = ['take', 'abandon']
 // a run no session has shown for this long is no longer open anywhere
 const SHOWN_WITHIN_MS = 15 * 60000
+// What the card has room for after "running" at the usual widths.
+const HEALTH_CELLS = 80
 const STAGES = ['Brainstorm', 'Spec', 'Plan', 'Build', 'Review', 'Ship']
 const SWEEP_STAGES = ['Charter', 'Hunt', 'Plan', 'Build', 'Review', 'Ship']
 const PROTECTED = ['id', 'version', 'tasks', 'asks', 'requirements', 'driver', 'approval', 'shape', 'questions']
@@ -57,10 +59,10 @@ req <id> rename "<name>" and req <id> drop change a requirement when what is bui
 approval ["<Go label>" ...] [--meaning "<what Go builds>"] [--recommend <n>] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. With several Go labels, --recommend <n> is needed: the one Claude recommends, which the box draws in pink. Asked again, it replaces the last; a new stage clears it.
 take <runId> makes this session take over a run of this repository that no session has shown for 15 minutes; abandon <runId> stops such a run for good and removes its worktree when nothing in it is uncommitted, keeping its branch.
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
-flags: --session <id> (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --wave --a --b --c --recommend; approval --meaning --recommend; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; merge --wait; where --json; awake --check
+flags: --session <id> (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --no-wait --wave --a --b --c --recommend; approval --meaning --recommend; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; merge --wait; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
 quota-command <endpoint> <command line> sets an external weekly subscription source for sessions whose ANTHROPIC_BASE_URL matches that endpoint; quota-command alone inspects it, quota-command off disables it. Quote the command as one argument for shell syntax; a final --session <id> is not part of it. Keep credentials out of command text. Setup requires a successful v:1 quota JSON reading within 30 seconds; failed setup leaves the prior setting intact. Refreshes are shared every 5 minutes; failed, refused or expired readings hold new work, never supply dollar estimates. The source is account-wide, not this machine's spend.
-ask "<question>" [--waiting N] [--wave N] puts a question to the person in LCW's box, answered by number in plain words; with --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> its options are buttons too, the recommended one drawn in pink, and a press records the answer as answer <n> "<label>: <meaning>" does.
+ask "<question>" [--waiting N] [--wave N] puts a question to the person in LCW's box, answered by number in plain words; ask "<what you want from them>" --no-wait does the same for something nothing waits on (a look at a mock, a try on their own device): no wave or task is held, and the card marks it until answer <n>; with --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> its options are buttons too, the recommended one drawn in pink, and a press records the answer as answer <n> "<label>: <meaning>" does.
 question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> puts a short question to the person in LCW's box, in a sweep, the recommended option drawn in pink; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
 checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
@@ -84,10 +86,10 @@ for (let i = 0; i < (spendWords || quotaWords ? 0 : argv.length); i++) {
   const a = argv[i]
   if (!a.startsWith('-')) { args.push(a); continue }
   // a flag may come with its value in the same word, as --wave=2, or as "--wave 2" from a shell variable that was not split
-  const [, name, joined] = /^--([a-z]+)(?:[=\s]\s*([\s\S]*))?$/.exec(a) ?? []
+  const [, name, joined] = /^--([a-z]+(?:-[a-z]+)*)(?:[=\s]\s*([\s\S]*))?$/.exec(a) ?? []
   if (name && switches.includes(name) && joined === undefined) flags[name] = true
   else if (name && (name === 'session' || allowed.includes(name))) {
-    const next = /^--([a-z]+)(?:=|$)/.exec(argv[i + 1] ?? '')?.[1]
+    const next = /^--([a-z]+(?:-[a-z]+)*)(?:=|$)/.exec(argv[i + 1] ?? '')?.[1]
     if (joined === undefined && (i + 1 >= argv.length || (next && (next === 'session' || allowed.includes(next) || switches.includes(next))))) refuse(`${a} needs a value`)
     flags[name] = joined === undefined ? argv[++i] : joined.trim()
   } else if (a === '-h' || a === '--help') help()
@@ -422,7 +424,7 @@ const commands = {
       `mark: ${money ? moneyMark(money) : `${driverMark(s)}%`}${s.worktree ? `  worktree: ${s.worktree}  branch: ${s.branch}` : ''}${s.base ? `  base: ${s.base}` : ''}`,
       ...(quota ? [quotaLine(quota), ...(quota.hold ? ['new work held'] : [])] : []),
       'tasks:', ...(s.tasks.length ? s.tasks.map((t) => `  ${t.id} [${t.status}] ${t.title}`) : ['  none']),
-      'asks:', ...(s.asks.length ? s.asks.map((a) => `  ${a.n}. ${a.text}${a.wave ? ` (wave ${a.wave})` : ''}`) : ['  none']),
+      'asks:', ...(s.asks.length ? s.asks.map((a) => `  ${a.n}. ${a.text}${a.wave ? ` (wave ${a.wave})` : ''}${a.nowait ? ' (nothing waits on it)' : ''}`) : ['  none']),
       ...((s.questions ?? []).length ? ['questions (lcw question):', ...s.questions.map(questionLine)] : []),
       ...unusedAnswers(s),
       ...(isSweep(s) ? sweepStatus(run) : [`folder: ${run.dir}`, `brainstorm: ${p.brainstorm}`, `spec: ${p.spec}`, `plan: ${p.plan}`, `ledger: ${p.ledger}`]),
@@ -508,6 +510,8 @@ const commands = {
     pairs.forEach(([k, v]) => setDotted(wave && ofWave(k) ? wave : run.state, k, v))
     save(run.paths, run.state)
     out(`set ${pairs.map(([k]) => k).join(', ')}`)
+    const health = pairs.find(([k]) => k === 'health')?.[1]
+    if ([...String(health ?? '')].length > HEALTH_CELLS) out(`health is ${[...String(health)].length} characters and the card cuts it at about ${HEALTH_CELLS}. Say it again as one short sentence: where the run stands and what comes next. The card already shows each wave's stage and tasks.`)
   },
 
   task() { listItem('task', 'tasks', ['todo', 'running', 'done', 'parked', ...(isSweep(need().state) ? ['dropped'] : [])],(id, title) => ({ id, title, status: 'todo', model: flags.model ?? null, effort: flags.effort ?? null })) },
@@ -516,18 +520,21 @@ const commands = {
   ask() {
     const run = need()
     const text = rest.join(' ')
-    const usage = 'Usage: lcw ask "<question>" [--waiting N] [--wave N] [--a "<label>: <what it means>" --b "<label>: <what it means>" [--c ...] --recommend <a|b|c>]'
+    const usage = 'Usage: lcw ask "<question>" [--waiting N | --no-wait] [--wave N] [--a "<label>: <what it means>" --b "<label>: <what it means>" [--c ...] --recommend <a|b|c>]'
     if (!text) fail(usage)
+    // nothing waits on the answer: the box puts it to the person, and no wave and no task is held for it
+    const nowait = flags['no-wait'] === true
+    if (nowait && Number(flags.waiting) > 0) fail('--no-wait says nothing waits on the answer, so it takes no --waiting. Nothing was changed.')
     const choice = [...QUESTION_KEYS, 'recommend'].some((k) => flags[k] !== undefined) ? { options: optionsOf(usage, 'lcw ask with options'), recommend: flags.recommend } : {}
     const wave = flags.wave === undefined ? ownWave(run.state) : waveOf(run.state)
     let n
-    change(run, `ask: ${text}`, (s) => {
+    change(run, `${nowait ? 'ask, nothing waits' : 'ask'}: ${text}`, (s) => {
       // an ask keeps its number until it is answered, so the numbers the human sees never shift under them
       n = Math.max(0, ...s.asks.map((a) => a.n)) + 1
-      s.asks.push({ n, text, at: now(), waiting: Number(flags.waiting) || 0, ...(wave ? { wave: wave.n } : {}), ...choice })
-      if (wave) wave.waiting = true
+      s.asks.push({ n, text, at: now(), waiting: Number(flags.waiting) || 0, ...(wave ? { wave: wave.n } : {}), ...(nowait ? { nowait: true } : {}), ...choice })
+      if (wave && !nowait) wave.waiting = true
     }, wave)
-    out(`ask ${n}`)
+    out(nowait ? `ask ${n}: nothing waits on it` : `ask ${n}`)
   },
 
   answer() {
@@ -538,7 +545,7 @@ const commands = {
     const wave = run.state.sweep?.waves.find((w) => w.n === ask.wave) ?? null
     change(run, `answered: Q: ${ask.text} A: ${rest.slice(1).join(' ')}`, (s) => {
       s.asks = s.asks.filter((a) => a.n !== n)
-      if (wave) wave.waiting = s.asks.some((a) => a.wave === wave.n)
+      if (wave) wave.waiting = s.asks.some((a) => a.wave === wave.n && !a.nowait)
     }, wave ?? undefined)
     out(`answered ${n}; ${run.state.asks.length} open`)
   },

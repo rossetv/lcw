@@ -192,3 +192,11 @@ test('awake holds only for a Claude Code process on record, not any live process
     assert.equal(ok.out.trim(), 'kept awake')
   } finally { other.kill(); claude.kill() }
 })
+
+test('health longer than the card shows is saved, and the reply says to say it shorter', () => {
+  const t = started()
+  const long = 'wave 1 in its final checks; wave 2 fixing the export tests; wave 3 planning the importer; wave 4 queued'
+  assert.match(t.cli('set', `health=${long}`).out, /cuts it at about 80/)
+  assert.equal(t.state().health, long)
+  assert.doesNotMatch(t.cli('set', 'health=on track').out, /cuts it/)
+})

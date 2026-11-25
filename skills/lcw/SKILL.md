@@ -91,7 +91,7 @@ The run folder lives outside the repository (under ~/.lcw), so nothing in it is 
 
 The ledger is how a later you knows what was done and what is left. Every command that changes state adds a line; add your own with `lcw ledger "<text>"` for each decision you make on the human's behalf, with its reason.
 
-Keep `health` current with a few plain words of what is happening, such as `lcw set health="on track"` or `lcw set health="2 tasks wait on your answer, the rest carry on"`. Leave times out of it; the bar shows those. In a sweep, health names each open wave and what it is doing, such as `lcw set health="wave 1 in its final checks, wave 2 in review, wave 3 building"`; a stage file's words are its own wave's part. While an ask about a wave is open, that wave comes first, with what the others do: `health="wave 1 waits on your answer; wave 2 carries on"`. After `lcw answer`, set the words again without it.
+Keep `health` current: one short sentence, at most 80 characters, on where the run stands and what comes next, such as `lcw set health="on track, milestone 2 of 3 building"` or `lcw set health="2 tasks wait on your answer, the rest carry on"`. It is the one line the human reads to know what is going on. The card cuts what does not fit, and `lcw set` tells you when it is too long. Leave times out of it; the bar shows those. In a sweep it speaks of the sweep as a whole, what lands next and what stands behind it, such as `lcw set health="waves 4 to 6 go live once 6's review passes; 7 to 9 building"`. It is never a list of what each wave does: the card's lanes already show every wave's stage and tasks. Where a stage file gives words for one wave, they are that sentence's start. When something is coming the human's way, say so there: `health="waves 3 and 4 land next; then a try on your phone"`. While an ask about a wave is open, that comes first: `health="wave 1 waits on your answer; the others carry on"`. After `lcw answer`, set the words again without it.
 
 ## Compaction
 
@@ -145,6 +145,14 @@ Then use `lcw ask "<the question, why it is theirs, and the ways out you see wit
 ```
 lcw ask "GitHub refuses the push to origin: the token cannot write. I recommend the fork, which needs nothing from you." --a "origin: I push once you give the token write access" --b "fork: I push to your fork and open the pull request from it" --recommend b --waiting 3
 ```
+
+**What you want from the human is raised, never left in the conversation alone.** During a run they watch the card, not the conversation, so a request they would have to scroll back for is one they never see. Whenever you want something from them that holds nothing up (a look at a mock or a prototype, a try on a device or an account only they have, a choice you will otherwise make yourself), raise it before you end the turn:
+
+```
+lcw ask "Two mocks of the export screen are open in your browser. Tell me what you would change; I build the first as drawn unless you say." --no-wait
+```
+
+Say what you want and what you do if they say nothing. LCW's box puts it to them and the card marks it until you record their answer with `lcw answer <n> "<their words>"`. No wave and no task waits on it, so carry on as you said you would, and take it back the same way once it no longer matters: `lcw answer <n> "withdrawn: <why>"`. If work does wait on the answer, it is an ask with `--waiting`, as above. What you only tell them, such as a result or a decision you made, is not an ask.
 
 Several asks are numbered, oldest first, and the human answers by number in plain words; record each with `lcw answer <n> "<answer>"`. A press on an option is recorded by LCW, which then tells you the answer: act on it without recording it again. If the answer changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements as above.
 

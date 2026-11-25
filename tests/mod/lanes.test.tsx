@@ -176,3 +176,44 @@ test('a transcript that is not there is asked for three times and no more', asyn
   expect(await viewed(band)).toEqual(['view:a1'])
   await band.unmount()
 })
+
+test('a press on a wave folds its agents away and says how many it holds; a second press brings them back', async ($, on) => {
+  const w = engine(on, [agent('a1', 'Build the importer'), agent('a2', 'Review the export fix')])
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await launch($, 'a1', 'Build the importer', 'Work only in /repo/.claude/worktrees/tidy-wave-2')
+  await launch($, 'a2', 'Review the export fix', 'Check the fix, then record it: lcw req F1 pass --wave 1')
+  await w.advance(2100)
+  expect(await viewed(band)).toEqual(['view:a2', 'view:a1'])
+  await band.press({ key: 'wave:2' })
+  await w.advance(1100)
+  expect(await viewed(band)).toEqual(['view:a2'])
+  expect(await band.find({ type: 'Text', text: /1 agent$/ })).toBeDefined()
+  await band.press({ key: 'wave:2' })
+  await w.advance(1100)
+  expect(await viewed(band)).toEqual(['view:a2', 'view:a1'])
+  await band.unmount()
+})
+
+test("with every wave folded the card still holds the agents, so Claude Code's own rows stay hidden", async ($, on) => {
+  const w = engine(on, [agent('a1', 'Build the importer')])
+  let hidden: unknown = 'not asked'
+  on('ui.render', ($: any, e: any) => {
+    if (e.component === 'AgentRow') hidden = e.props.isHidden
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await launch($, 'a1', 'Build the importer', 'Work only in /repo/.claude/worktrees/tidy-wave-2')
+  await w.advance(2100)
+  await band.press({ key: 'wave:2' })
+  await w.advance(1100)
+  expect(await viewed(band)).toEqual([])
+  await band.unmount()
+  const row = await $.ui.mount({ plugin: 'lcw', surface: 'terminal', component: 'AgentRow', requestId: 'a1', props: {
+    id: 'a1', description: 'Build the importer', type: 'lcw:worker', status: 'running', kind: 'local_agent', taskStatus: 'running', label: 'Build the importer',
+    startTime: 0, cwd: '/', tokenCount: 10, tokenSamples: [10], hasRow: true, rowIds: ['a1'], isHidden: false } } as any)
+  expect(hidden).toBe(true)
+  await row.unmount()
+})

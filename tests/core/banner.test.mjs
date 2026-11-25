@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { bannerFor, bannerRows, openWaves } from '../../lib/banner.mjs'
+import { answerKey, bannerFor, bannerRows, openWaves } from '../../lib/banner.mjs'
 import { len } from '../../lib/format.mjs'
 import { toAnsi } from '../../lib/paint.mjs'
 import * as S from './banner-samples.mjs'
@@ -139,7 +139,7 @@ test('the answer box numbers several questions and says to type the answer when 
   assert.deepEqual(one.bullets, [S.J.run.asks[0].text])
   assert.match(one.lines.join(' '), /^2 tasks wait for this; the rest carry on\.$/)
   const asks = [{ n: 2, text: 'First?', waiting: 1, at: 2 }, { n: 3, text: 'Second?', waiting: 2, at: 3 }]
-  const many = bannerFor({ ...S.J, run: { ...S.J.run, asks }, answerFill: 'failed' })
+  const many = bannerFor({ ...S.J, run: { ...S.J.run, asks }, answerFill: answerKey({ ...S.J.run, asks }) })
   assert.deepEqual(many.bullets, ['2: First?', '3: Second?'])
   assert.match(many.lines.join(' '), /3 tasks wait for this/)
   assert.match(many.lines.join(' '), /Type your answer there, starting with 2:/)
@@ -506,4 +506,31 @@ test("the top row of an ask's options box is never wider than the box, whatever 
       }
     }
   }
+})
+
+// An ask that holds nothing (lcw ask --no-wait), beside the one S.J holds the run with.
+const LOOK = { n: 2, at: S.J.run.asks[0].at + 60000, nowait: true, text: 'Two mocks of the export screen are open in your browser. Tell me what you would change.' }
+
+test('an ask that holds nothing has its own box, which says so and stands below the asks that hold the run and the mark box', () => {
+  const alone = bannerFor({ ...S.J, run: { ...S.J.run, asks: [LOOK] } })
+  assert.deepEqual([alone.kind, alone.forYou], ['answer', true])
+  assert.match(alone.title, /has something for you/)
+  assert.match(alone.lines.join(' '), /Nothing waits on this/)
+  assert.deepEqual(alone.bullets, [LOOK.text])
+  const both = bannerFor({ ...S.J, run: { ...S.J.run, asks: [...S.J.run.asks, LOOK] } })
+  assert.ok(!both.forYou)
+  assert.deepEqual(both.bullets, [S.J.run.asks[0].text], 'the box of what holds the run names only that')
+  assert.equal(bannerFor({ ...S.K, run: { ...S.J.run, status: 'paused', pausedReason: 'mark', asks: [LOOK] } }).kind, 'mark')
+})
+
+test('Later on one answer box leaves the other: each is put off by itself', () => {
+  const facts = { ...S.J, run: { ...S.J.run, asks: [...S.J.run.asks, LOOK] } }
+  const holds = bannerFor(facts)
+  const offered = bannerFor({ ...facts, dismissed: new Set(['answer:' + holds.key]) })
+  assert.equal(offered.forYou, true, 'putting off the ask that holds the run brings up the other')
+  assert.ok(!bannerFor({ ...facts, dismissed: new Set(['answer:' + offered.key]) }).forYou, 'and the other way round')
+  assert.notEqual(bannerFor({ ...facts, dismissed: new Set(['answer:' + holds.key, 'answer:' + offered.key]) })?.kind, 'answer')
+  // a newer ask of its kind brings its box back
+  const newer = { ...LOOK, n: 3, at: LOOK.at + 60000, text: 'And the empty state?' }
+  assert.equal(bannerFor({ ...facts, run: { ...facts.run, asks: [LOOK, newer] }, dismissed: new Set(['answer:' + offered.key]) })?.forYou, true)
 })

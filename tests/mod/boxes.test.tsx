@@ -253,6 +253,24 @@ test('Later hides the question for the session; a new question brings the box ba
   await band.unmount()
 })
 
+test('an ask that holds nothing has the answer box and a mark on the card, with no needs-you; Later leaves the mark', async ($, on) => {
+  const w = engine(on, asking([{ n: 1, text: 'Two mocks of the export screen are open in your browser.', nowait: true }]))
+  await start($)
+  // where both do not fit the box stays: the card says only that something waits, not what
+  const short = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 10 } })
+  expect(await short.find({ type: 'Text', text: /export-csv has something for you\./ })).toBeDefined()
+  await short.unmount()
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /export-csv has something for you\./ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /1 thing for you/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /needs you/ })).toBeUndefined()
+  await band.press({ key: 'banner:answer:later' })
+  await w.clock.advance(2000)
+  expect(await band.find({ type: 'Text', text: /has something for you/ })).toBeUndefined()
+  expect(await band.find({ type: 'Text', text: /1 thing for you/ })).toBeDefined()
+  await band.unmount()
+})
+
 test('a box that replaces another is drawn first with no buttons, so the focus left on the old one lets go', async ($, on) => {
   const w = engine(on, bound({ ...paused, asks: [{ n: 1, text: 'Which format?', waiting: 2 }] }))
   await start($)

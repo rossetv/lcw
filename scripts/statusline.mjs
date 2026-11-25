@@ -80,7 +80,7 @@ function runFacts(f, now, share) {
   // The mod's count of quiet and stalled agents stands only while the mod is alive to keep it.
   const agents = modRunning(f, now) ? f.quiet : null
   return {
-    asks: run.state.asks?.length ?? 0,
+    asks: (run.state.asks ?? []).filter((a) => !a?.nowait).length,
     // Paused by the person: it sleeps. Paused at the usage mark it cries instead, as any session at its mark does.
     paused: run.state.status === 'paused' && run.state.pausedReason === 'human',
     quiet: agents?.quiet ?? 0,

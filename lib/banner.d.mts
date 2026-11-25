@@ -22,6 +22,8 @@ export interface Banner {
   questionId?: string
   /** The answer box drawing an ask's options: that ask's number. */
   askN?: number
+  /** True on the answer box of asks that hold nothing (lcw ask --no-wait). */
+  forYou?: boolean
   /** The option drawn filled as the one recommended: its id, or null for none. Absent on a box whose first option is the one filled. */
   recommended?: string | null
 }
@@ -32,7 +34,7 @@ type Time = number | string
 export interface BannerRun {
   id: string; title: string; stage?: string; status?: string; pausedReason?: string; pausedAt?: Time; runningSince?: Time
   /** at: when the question was asked; numbers come back once their question is answered, times do not. */
-  done?: number; left?: number; asks?: { n: number; text: string; waiting?: number; at?: Time }[]
+  done?: number; left?: number; asks?: { n: number; text: string; waiting?: number; at?: Time; nowait?: boolean }[]
   awake?: boolean; guide?: boolean; firstOnMachine?: boolean
   /** 'sweep' asks for the charter's approval; anything else is a build. */
   shape?: 'build' | 'sweep'
@@ -74,8 +76,8 @@ export interface BannerFacts {
   limits?: { concurrent?: number; depth?: number; env?: Record<string, unknown> | null } | null
   /** When the person last sent a prompt in this session: one sent after the approval asked ends that box. */
   repliedAt?: number
-  /** 'failed' after Answer now could not fill the prompt. */
-  answerFill?: 'failed'
+  /** The key of the answer box whose Answer now could not fill the prompt. */
+  answerFill?: string
 }
 
 export const BANNERS: Record<'advisor' | 'cap' | 'spend', { title: string; body: string; options: [string, string][] }>
