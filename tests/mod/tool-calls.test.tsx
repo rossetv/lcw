@@ -122,6 +122,16 @@ test('a mark raised on the row under the transcript\'s name keeps the marker dow
   expect(up(w)).toBe(false)
 })
 
+test('the marker of a session with a backslash transcript path comes up at the mark on the row under its name', async ($, on) => {
+  const files = filesFor({ week: 80, sessions: { p1: { markPercent: 90 } } })
+  files['/lcw/sessions/t1.json'] = JSON.stringify({ markPercent: 70 })
+  const w = engine(on, files, { transcript: 'C:\\Users\\me\\.claude\\projects\\x\\t1.jsonl' })
+  await $.session.start(START)
+  await w.clock.advance(1000)
+  expect(up(w)).toBe(true)
+  expect(JSON.parse(w.files[MARKER]!)).toMatchObject({ transcript: 't1' })
+})
+
 // The mod cannot tell whether the recorded Claude Code still runs, and the hook reads the id's row alone while it does.
 test('a transcript row that records another Claude Code does not keep the marker down for the id\'s own row', async ($, on) => {
   const files = filesFor({ week: 80, sessions: { p1: { markPercent: 70 } } })

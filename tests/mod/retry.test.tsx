@@ -12,7 +12,7 @@ const BY_ID = '/lcw/activity/s1.json'
 
 // The world beneath the mod: files in memory, the prompt box, the prompts it submits, and a clock that jumps.
 // Each timer fires once per jump, so a wait of many minutes costs one step.
-function engine(on: any, opts: { run?: string; shape?: string; reason?: string | null; drop?: string; kept?: Record<string, any> } = {}) {
+function engine(on: any, opts: { run?: string; shape?: string; reason?: string | null; drop?: string; kept?: Record<string, any>; transcript?: string } = {}) {
   const kept = opts.kept ?? {}
   const files: Record<string, string> = {}
   if (opts.run) {
@@ -32,7 +32,7 @@ function engine(on: any, opts: { run?: string; shape?: string; reason?: string |
   on('clock.after', hold)
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
-  on('session.info', () => ({ value: { transcriptPath: '/p/t9.jsonl', platform: 'linux' } }))
+  on('session.info', () => ({ value: { transcriptPath: opts.transcript ?? '/p/t9.jsonl', platform: 'linux' } }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
   on('fs.read', (_: any, e: any) => {
     if (e.path in files) return { value: files[e.path] }
@@ -121,6 +121,14 @@ test('the wait stays at 30 minutes after the third failed try, each measured fro
   expect(w.prompts).toHaveLength(4)
   await w.pass(0.4)
   expect(w.prompts).toHaveLength(5)
+})
+
+test('a resumed session whose transcript path has backslashes is carried on from the record under the transcript\'s name', async ($, on) => {
+  const w = engine(on, { transcript: 'C:\\Users\\me\\.claude\\projects\\x\\t9.jsonl' })
+  await start($)
+  await fail($, w)
+  await w.pass(1.1)
+  expect(w.prompts).toHaveLength(1)
 })
 
 for (const error of ['authentication_failed', 'billing_error', 'invalid_request', 'model_not_found', 'rate_limit', 'unknown']) {

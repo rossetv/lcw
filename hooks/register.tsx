@@ -391,7 +391,7 @@ async function spendName($: EngineInterface) {
 // timers that fire together share one answer.
 async function transcriptName($: EngineInterface) {
   const path = await look($, 'info', () => $.session.info().then((i) => i.transcriptPath).catch(() => ''))
-  return path ? path.split('/').pop()!.replace(/\.jsonl$/, '') : null
+  return path ? path.split(/[\\/]/).pop()!.replace(/\.jsonl$/, '') : null
 }
 
 // The money view for a session billed per token, else null: the machine's spend from every session's record, the
