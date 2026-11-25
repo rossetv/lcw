@@ -1,6 +1,7 @@
-// While a session is at its usage mark, tells Claude to stop: on each prompt and after every tool call (as the
-// PostToolUse command hook). It only adds a line for Claude to read. It never blocks a prompt or a tool, and
-// whatever goes wrong it exits 0. On a prompt it also records that the session is working, for the mascot.
+// While a session is at its usage mark, tells Claude to stop: on each prompt and after a tool call (as the
+// PostToolUse command hook, which the shell gate in hooks/hooks.json starts only while some session's after-call
+// marker is up, and always on native Windows). It only adds a line for Claude to read. It never blocks a prompt
+// or a tool, and whatever goes wrong it exits 0. On a prompt it also records that the session is working, for the mascot.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
