@@ -590,13 +590,13 @@ test('a limit reset inside the week keeps what the run had used before it', () =
   assert.equal(weekShare(kept, { percentUsed: 25, resetsAt: week }), 141);
 });
 
-test('a share past a whole week is said in weeks, and up to it as a share of the week', () => {
+test('a share past a whole week is still said as a share of the week', () => {
   const i = inputsOf('RunningA');
   const week = i.usage.sevenDay.resetsAt;
   const said = (state, used) => strip(toAnsi(renderCard(buildView({ ...i, state: { ...i.state, ...state }, usage: { sevenDay: { percentUsed: used, resetsAt: week } } }), { width: 126 }), 'dark', 126));
-  assert.match(said({ shareBefore: 116, weekAtStart: 0, weekUsed: 21, weekResetsAt: week }, 21), /≈ 1\.4 weeks of usage/);
+  assert.match(said({ shareBefore: 116, weekAtStart: 0, weekUsed: 21, weekResetsAt: week }, 21), /≈ 137% of your week/);
   assert.match(said({ shareBefore: 80, weekAtStart: 0, weekUsed: 20, weekResetsAt: week }, 20), /≈ 100% of your week/);
-  assert.match(said({ shareBefore: 81, weekAtStart: 0, weekUsed: 20, weekResetsAt: week }, 20), /≈ 1\.0 weeks of usage/);
+  assert.match(said({ shareBefore: 81, weekAtStart: 0, weekUsed: 20, weekResetsAt: week }, 20), /≈ 101% of your week/);
   assert.match(said({ shareBefore: 0, weekAtStart: 0, weekUsed: 38, weekResetsAt: week }, 38), /≈ 38% of your week/);
 });
 
