@@ -387,9 +387,10 @@ async function spendName($: EngineInterface) {
   return (await transcriptName($)) ?? await $.session.id()
 }
 
-// The base name of the session's transcript, null when it has none.
+// The base name of the session's transcript, null when it has none. Asked as a look, so the money views and the
+// timers that fire together share one answer.
 async function transcriptName($: EngineInterface) {
-  const path = await $.session.info().then((i) => i.transcriptPath).catch(() => '')
+  const path = await look($, 'info', () => $.session.info().then((i) => i.transcriptPath).catch(() => ''))
   return path ? path.split('/').pop()!.replace(/\.jsonl$/, '') : null
 }
 
@@ -1205,7 +1206,7 @@ let marking: Promise<unknown> = Promise.resolve()
 const inTurn = (fn: () => Promise<void>) => (marking = marking.then(fn).catch(() => {}))
 
 // The marker (afterFile) is the one fact the command hook after a tool call reads before it starts the limit check:
-// up while the check would say something. It is looked at without the cache, since a session's start may clear it.
+// up while the check would say something. Its folder's look, fresh each tick, sees a session's start clear it.
 async function markAfter($: EngineInterface) {
   const id = await $.session.id()
   const file = afterFile(await lcwHome($), id)
@@ -1217,7 +1218,7 @@ async function markAfter($: EngineInterface) {
   const transcript = await transcriptName($)
   const due = await afterDue($, [...new Set([transcript ?? id, id])])
   if (!due && S.after.up === false) return
-  const up = !!(await $.fs.read(file).then(String, () => ''))
+  const up = !!(await readText($, file))
   if (due && !up) await write($, file, JSON.stringify({ session: id, transcript, at: await $.clock.now() }))
   if (!due && up) await write($, file, '')
   S.after.up = due
@@ -1227,7 +1228,7 @@ async function markAfter($: EngineInterface) {
 async function lowerAfter($: EngineInterface) {
   const file = S.after.file
   if (!file || S.after.up === false) return
-  if (await $.fs.read(file).then(String, () => '')) await write($, file, '')
+  if (await readText($, file)) await write($, file, '')
   S.after.up = false
 }
 
@@ -1414,7 +1415,7 @@ export const register: Register = (on) => {
     await inTurn(async () => {
       const file = afterFile(await lcwHome($), e.sessionId ?? await $.session.id())
       S.after.ended = file
-      if (await $.fs.read(file).then(String, () => '')) await write($, file, '')
+      if (await readText($, file)) await write($, file, '')
       if (file === S.after.file) S.after.up = false
     })
     return result
