@@ -25,3 +25,7 @@ export function runPaths(runDir: string): {
   dir: string; state: string; ledger: string; brainstorm: string; spec: string; plan: string; artifacts: string
   checkpoint: string; gate: string; modAlive: string; quiet: string; awake: string
 }
+export function sessionNames(
+  transcript: string | null | undefined, id: string | null | undefined,
+  row: (name: string) => { claudePid?: unknown } | null | undefined, alive: (pid: unknown) => boolean, pid: number,
+): string[]

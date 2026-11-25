@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { usageFile, sessionFile } from '../../lib/key.mjs'
+import { usageFile, sessionFile, sessionNames } from '../../lib/key.mjs'
 import { gateExpired } from '../../lib/usage.mjs'
 import { thresholds } from '../../lib/theme.mjs'
 import { next0800 } from '../../lib/spend.mjs'
@@ -17,17 +17,10 @@ export { atMark, lcwOnly }
 export const DEFAULT_MARK = thresholds.usageMarkPercent
 export const readUsage = () => readJson(usageFile(home()))
 
-/** The ids a session is known by: its transcript's name first, which a resumed session keeps, then the id it was given. */
+/** The ids a session is known by, as sessionNames chooses them from the hook's input and the session files. */
 export function sessionIds(input) {
   const fromPath = input?.transcript_path ? path.basename(String(input.transcript_path), '.jsonl') : null
-  if (fromPath && input?.session_id && fromPath !== input.session_id) {
-    const transcript = readJson(sessionFile(home(), fromPath))
-    const current = readJson(sessionFile(home(), input.session_id))
-    const pid = Number(process.env.CLAUDE_PID) || current?.claudePid
-    if (alive(transcript?.claudePid) && transcript.claudePid !== pid) return [input.session_id]
-    if (Number(process.env.CLAUDE_PID) && alive(current?.claudePid) && current.claudePid !== Number(process.env.CLAUDE_PID)) return [fromPath]
-  }
-  return [...new Set([fromPath, input?.session_id].filter(Boolean))]
+  return sessionNames(fromPath, input?.session_id, (id) => readJson(sessionFile(home(), id)), alive, Number(process.env.CLAUDE_PID))
 }
 
 /** The usage mark the human set for a session ("run up to N%"), else the default. It belongs to the session, run or no run. */

@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { LcwCompletion } from '../types'
 
 import {
-  activityFile, afterFile, capFile, cleanupFile, noticesFile, proxyQuotaNoticeFile, quotaFile, runPaths, runsDir, sessionFile, spendCommandFile, spendDir, spendFile, spendReadingFile, updateFile, usageFile,
+  activityFile, afterFile, capFile, cleanupFile, noticesFile, proxyQuotaNoticeFile, quotaFile, runPaths, runsDir, sessionFile, sessionNames, spendCommandFile, spendDir, spendFile, spendReadingFile, updateFile, usageFile,
 } from '../lib/key.mjs'
 import { answerKey, bannerFor, bannerRows, limitsShort } from '../lib/banner.mjs'
 import type { Banner, BannerFacts } from '../lib/banner.mjs'
@@ -1168,20 +1168,26 @@ function noteStopped($: EngineInterface) {
 
 // Whether the limit hook would tell Claude anything after one of the session's own tool calls now: the stop at the
 // mark or the once-only note on pay-per-token billing. It reads the session's rows under its names in the hook's order,
-// the first that has a field giving it; while a row records another Claude Code, the hook may read one name alone, so
-// then each name is judged alone too.
-async function afterDue($: EngineInterface, names: string[]) {
+// the first that has a field giving it. Which names the hook reads turns on whether a Claude Code a row records still
+// runs, which the mod does not ask each second, so the names for every answer to that are judged.
+async function afterDue($: EngineInterface, transcript: string | null, id: string) {
   const home = await lcwHome($)
-  const rows = await Promise.all(names.map((name) => readSession($, name)))
-  const raw = await Promise.all(names.map((name) => readJson($, sessionFile(home, name))))
-  const merged = Object.assign({}, ...rows.filter(Boolean).reverse())
-  // The hook's money view takes both mark fields from the first row that has either.
-  if (rows.find((r) => typeof r?.markUsd === 'number' || typeof r?.markPercent === 'number')?.markUsd === undefined) delete merged.markUsd
-  const views = [{ session: names.length > 1 ? (rows.some(Boolean) ? merged : null) : rows[0], names }]
-  const envPid = names.length > 1 ? Number(await $.env.get('CLAUDE_PID')) : 0
-  const pid = envPid || raw[1]?.claudePid
-  if (names.length > 1 && ((raw[0]?.claudePid && raw[0].claudePid !== pid) || (envPid && raw[1]?.claudePid && raw[1].claudePid !== envPid))) {
-    views.push(...names.map((name, i) => ({ session: rows[i], names: [name] })))
+  const raw = new Map<string, any>()
+  for (const name of new Set([transcript ?? id, id])) raw.set(name, await readJson($, sessionFile(home, name)))
+  const envPid = raw.size > 1 ? Number(await $.env.get('CLAUDE_PID')) : 0
+  const pids = [...new Set([...raw.values()].map((r) => r?.claudePid).filter(Boolean))]
+  const choices = new Map<string, string[]>()
+  for (let running = 0; running < 1 << pids.length; running++) {
+    const names = sessionNames(transcript, id, (name) => raw.get(name), (pid) => pids.includes(pid) && ((running >> pids.indexOf(pid)) & 1) === 1, envPid)
+    choices.set(names.join('/'), names)
+  }
+  const views = []
+  for (const names of choices.values()) {
+    const rows = await Promise.all(names.map((name) => readSession($, name)))
+    const merged = Object.assign({}, ...rows.filter(Boolean).reverse())
+    // The hook's money view takes both mark fields from the first row that has either.
+    if (rows.find((r) => typeof r?.markUsd === 'number' || typeof r?.markPercent === 'number')?.markUsd === undefined) delete merged.markUsd
+    views.push({ session: names.length > 1 ? (rows.some(Boolean) ? merged : null) : rows[0], names })
   }
   for (const view of views) {
     const f = await markFacts($, view)
@@ -1216,7 +1222,7 @@ async function markAfter($: EngineInterface) {
     S.after = { ...S.after, file, up: undefined }
   }
   const transcript = await transcriptName($)
-  const due = await afterDue($, [...new Set([transcript ?? id, id])])
+  const due = await afterDue($, transcript, id)
   if (!due && S.after.up === false) return
   const up = !!(await readText($, file))
   if (due && !up) await write($, file, JSON.stringify({ session: id, transcript, at: await $.clock.now() }))

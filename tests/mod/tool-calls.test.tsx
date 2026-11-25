@@ -122,6 +122,16 @@ test('a mark raised on the row under the transcript\'s name keeps the marker dow
   expect(up(w)).toBe(false)
 })
 
+// The mod cannot tell whether the recorded Claude Code still runs, and the hook reads the id's row alone while it does.
+test('a transcript row that records another Claude Code does not keep the marker down for the id\'s own row', async ($, on) => {
+  const files = filesFor({ week: 80, sessions: { p1: { markPercent: 70 } } })
+  files['/lcw/sessions/t1.json'] = JSON.stringify({ markPercent: 90, claudePid: 4242 })
+  const w = engine(on, files, { transcript: '/t/t1.jsonl' })
+  await $.session.start(START)
+  await w.clock.advance(1000)
+  expect(up(w)).toBe(true)
+})
+
 test('the marker is lowered once the session is under its mark, and written only when that changes', async ($, on) => {
   const w = engine(on, filesFor(atMark))
   const writes = () => w.written.filter((p) => p === MARKER).length
