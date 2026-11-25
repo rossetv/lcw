@@ -198,8 +198,7 @@ test('the mod hooks no classic event, which managed settings can send past it', 
   expect(names.filter((n) => n.startsWith('classic.'))).toEqual([])
 })
 
-// The note that the run is held at its mark, its gate, is no longer written at the tool call: the mod writes it itself
-// when an outside quota's reading comes to hold the run.
+// The run's gate, when an outside quota's reading comes to hold it, the mod also writes itself within a second, not waiting for the next tool call or prompt.
 const held = { name: 'an outside quota under the mark, then over it', sessions: { p1: { billing: 'subscription' } }, quota: { p1: 'under' }, run: 'p1' }
 const syncs = (runs: string[][]) => runs.filter((a) => a[1]?.endsWith('/scripts/gate-reconcile.mjs') && JSON.parse(a[2] ?? '{}').action === 'sync')
 const over = (files: Record<string, string>, requestId = 'q2') => {
