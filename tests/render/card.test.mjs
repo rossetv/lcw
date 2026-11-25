@@ -1237,19 +1237,18 @@ const underLanes = (agents, opts = {}) => {
 // Each row below the title and the state, by how it starts: a lane's name, or an agent's mark and words.
 const startsOf = rows => rows.slice(2).map(l => (/^waves?\b/.test(l) ? l.match(/^waves?( \d+)?/)[0] : l.match(/^( *\S.*?)(?: {2,}|$)/)[1]));
 
-test('each wave\'s agents are listed under its lane, in the lanes\' order, their marks under the wave\'s number', () => {
+test('each wave\'s agents are listed under its lane, in the lanes\' order, stood in by two', () => {
   const rows = underLanes([['a', 'Build the importer', 3], ['b', 'Review the export fix', 2], ['c', 'Build the settings page', 3], ['d', 'Run the final checks', 1]]);
-  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', '     → Run the final checks', 'wave 2', '     → Review the export fix', 'wave 3', '     → Build the importer', '     → Build the settings page']);
-  // the mark stands under the wave's number, and every agent's figures stand in the same columns
-  const lane = rows.find(l => l.startsWith('wave 3')), under = rows.filter(l => l.startsWith('     → '));
-  assert.equal(under[0].indexOf('→'), lane.indexOf('3'));
+  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', '  → Run the final checks', 'wave 2', '  → Review the export fix', 'wave 3', '  → Build the importer', '  → Build the settings page']);
+  // each stands in by two, and every agent's figures stand in the same columns
+  const under = rows.filter(l => l.startsWith('  → '));
   assert.equal(new Set(under.map(l => l.indexOf('Opus'))).size, 1);
   assert.equal(new Set(under.map(cols)).size, 1);
 });
 
 test('an agent with no wave, or of a wave that is not open, stays in the list beneath the lanes, lined up with the rest', () => {
   const rows = underLanes([['a', 'Build the importer', 3], ['h', 'Hunt the settings pages', null], ['z', 'Deploy the last wave', 9]]);
-  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', 'wave 2', 'wave 3', '     → Build the importer', '→ Hunt the settings pages', '→ Deploy the last wave']);
+  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', 'wave 2', 'wave 3', '  → Build the importer', '→ Hunt the settings pages', '→ Deploy the last wave']);
   const agents = rows.filter(l => /^ *→ /.test(l));
   assert.equal(new Set(agents.map(l => l.indexOf('Opus'))).size, 1);
   const framed = underLanes([['a', 'Build the importer', 3], ['h', 'Hunt the settings pages', null]], { frame: true });
@@ -1266,15 +1265,15 @@ test('where the rows run out, the wave with the most agents gives one up first, 
   // title, state, heading and three lanes are six rows: four more hold three agents and the row that counts the rest
   const rows = underLanes(many, { maxRows: 10 });
   assert.equal(rows.length, 10);
-  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', '     → Check it', 'wave 2', '     → Review it', 'wave 3', '     → One', '▸ 3 more agents']);
+  assert.deepEqual(startsOf(rows), ['waves', 'wave 1', '  → Check it', 'wave 2', '  → Review it', 'wave 3', '  → One', '▸ 3 more agents']);
 });
 
 test('an orchestrator under a lane keeps its caret, and its workers stand in under it', () => {
   const rows = underLanes([['o', 'Drive the backend work', 3], ['k', 'Build the queue', null, { parentId: 'o' }]], { });
   const open = (() => { const i = inputsOf('26-lanes-three-open'); i.agents = [{ id: 'o', description: 'Drive the backend work', model: 'claude-opus-5-5', effort: 'high', tokens: 10, startTime: i.now, status: 'running', wave: 3 }, { id: 'k', description: 'Build the queue', model: 'claude-sonnet-5-5', effort: 'medium', tokens: 10, startTime: i.now, status: 'running', parentId: 'o' }]; i.ui = { expanded: { o: true } }; return strip(toAnsi(renderCard(buildView(i), { width: 115 }), 'dark', 115)).split('\n').map(l => l.trimEnd()); })();
-  assert.match(rows.find(l => l.includes('Drive the backend work')), /^ {5}▸ ◈ Drive the backend work/);
-  assert.match(open.find(l => l.includes('Drive the backend work')), /^ {5}▾ ◈ Drive the backend work/);
-  assert.match(open.find(l => l.includes('Build the queue')), /^ {9}→ Build the queue/);
+  assert.match(rows.find(l => l.includes('Drive the backend work')), /^ {2}▸ ◈ Drive the backend work/);
+  assert.match(open.find(l => l.includes('Drive the backend work')), /^ {2}▾ ◈ Drive the backend work/);
+  assert.match(open.find(l => l.includes('Build the queue')), /^ {6}→ Build the queue/);
 });
 
 test('the narrow card keeps its one agent and its count beneath the lanes', () => {
