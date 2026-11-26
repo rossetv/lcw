@@ -1184,7 +1184,7 @@ test('a cut that drops whole spans always shows "…", even where what is left e
 });
 
 test('a cut leaves no dangling "›" before its "…"', () => {
-  for (const [width, frame] of [[80, true], [76, false]]) {
+  for (const [width, frame] of [[94, true], [90, false]]) {
     const row = strip(toAnsi(card('StageSpec', { width, frame }), 'dark', width)).split('\n').find(l => l.includes('blind review  '));
     assert.ok(row.includes('…') && !/[›·]\s*…/.test(row), row);
   }
@@ -1232,7 +1232,7 @@ test('a totals group that drops a part ends in "…", and one that fits whole ha
 test('a cut never leaves a separator before its "…"', () => {
   const at = (board, width, start) => strip(toAnsi(card(board, { width, frame: false }), 'dark', width)).split('\n').find(l => l.startsWith(start));
   assert.match(at('RunningA', 55, 'tasks'), /3 running…$/);
-  assert.match(at('StageSpec', 59, 'blind review'), /reviewer 1…/);
+  assert.match(at('StageSpec', 90, 'blind review'), /reviewer 1 · row…/);
 });
 
 test('a cut inside a span ahead of a separator drops the separator too', () => {
@@ -1660,5 +1660,12 @@ test('agent rows on a framed card 44 to 47 columns wide keep a word of their des
       const desc = r.filter(s => (s.id ?? '').startsWith('view:')).map(s => s.t).join('');
       assert.match(desc, /\p{L}{2,}/u, `${name} at ${width}: ${toPlain([r])}`);
     }
+  }
+});
+
+test('a short blind review row keeps its label and both reviewers, giving up their words before them', () => {
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+    const row = toPlain(card('StageSpec', { width, frame })).split('\n').find(l => l.includes('requirements'));
+    assert.match(row, /^(│ )?blind review  ✓ (reviewer )?1\b.*› (reviewer )?2\b.*9 requirements/, `${width}${frame ? ', framed' : ''}: ${row}`);
   }
 });
