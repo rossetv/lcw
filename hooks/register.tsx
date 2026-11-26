@@ -589,7 +589,7 @@ function unsay($: EngineInterface, stall: { due: { id: string }[]; nudged: Nudge
 function unsit($: EngineInterface, sit: { due: { n: number }[]; sat: Sat }, was: Sat) {
   if (S.sat.last !== sit.sat.last) return
   const waves = { ...S.sat.waves }
-  for (const d of sit.due) if (waves[d.n]) waves[d.n] = { ...waves[d.n], told: was.waves?.[d.n]?.told, mark: was.waves?.[d.n]?.mark }
+  for (const d of sit.due) { const now = waves[d.n]; if (now) waves[d.n] = { ...now, told: was.waves?.[d.n]?.told, mark: was.waves?.[d.n]?.mark } }
   S.sat = { ...S.sat, waves, last: was.last, again: was.again }
   keepNotices($)
 }

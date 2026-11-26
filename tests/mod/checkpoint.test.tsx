@@ -151,5 +151,5 @@ test('two agents that finish at the same moment both count in the run\'s totals'
   await w.clock.advance(1000)
   const usage = { input_tokens: 100, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'm' }
   await Promise.all([turnEnds($, { agentId: 'a1', turnId: 't1', usage }), turnEnds($, { agentId: 'a2', turnId: 't2', usage })])
-  expect(JSON.parse(w.files[RUN + '/totals.json']).used.agents).toBe(200)
+  expect(JSON.parse(w.files[RUN + '/totals.json']!).used.agents).toBe(200)
 })

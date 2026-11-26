@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import path from 'node:path'
 import { spawn, execFileSync } from 'node:child_process'
 import { tmp, makeRepo, git, lcw, readJson, CLI } from './helpers.mjs'
 
@@ -2321,4 +2322,28 @@ test('merge --wait on a pull request GitHub closed unmerged says so at once and 
   assert.equal(r.code, 1)
   assert.match(r.out, /closed without being merged/)
   assert.doesNotMatch(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /waiting up to/)
+})
+
+test('re-recording a hunt round\'s park and drop counts after the totals were settled down never takes them below zero', () => {
+  const t = hunting()
+  t.cli('hunt', '--park', '2', '--drop', '3')
+  assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped], [2, 3])
+  t.edit((s) => { s.sweep.parked = 0; s.sweep.dropped = 0 }) // answered questions and dropped fixes took them off
+  t.cli('hunt', '--park', '0', '--drop', '0')
+  assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped], [0, 0])
+})
+
+test('awake on WSL says WSL cannot keep Windows awake', () => {
+  const t = hunting()
+  const env = { PATH: tmp('bin') + ':' + path.dirname(process.execPath) } // node only: no caffeinate or systemd-inhibit
+  const wsl = lcw(['awake'], { ...t.o, env: { ...env, WSL_DISTRO_NAME: 'Ubuntu' } })
+  assert.equal(wsl.code, 1)
+  assert.match(wsl.err + wsl.out, /WSL/)
+})
+
+test('awake outside WSL names the programs', { skip: (() => { try { return /microsoft/i.test(fs.readFileSync('/proc/version', 'utf8')) && 'this machine is WSL: /proc/version says so whatever the environment' } catch { return false } })() }, () => {
+  const t = hunting()
+  const env = { PATH: tmp('bin') + ':' + path.dirname(process.execPath) }
+  const plain = lcw(['awake'], { ...t.o, env: { ...env, WSL_DISTRO_NAME: '' } })
+  assert.match(plain.err + plain.out, /caffeinate.*systemd-inhibit/)
 })

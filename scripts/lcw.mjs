@@ -7,7 +7,7 @@ import { compactChoice, tokensText, KEEP_UNDER } from '../lib/checkpoint.mjs'
 import { home, readJson, writeJson, writeAtomic, git, mainCheckout, saveState, appendLedger as appendRunLedger, loadState } from './lib/store.mjs'
 import { findRun, bindSession, unbindSession, listRuns, open, runOf, lastShown, machineRunCount } from './lib/runs.mjs'
 import { sessionFolders, hiddenEdit } from './lib/cleanup.mjs'
-import { canHold, heldByOther, keptHold, startHold, releaseHold, alive, claudeAlive } from './lib/awake.mjs'
+import { canHold, inWsl, heldByOther, keptHold, startHold, releaseHold, alive, claudeAlive } from './lib/awake.mjs'
 import { readUsage, applyGate, atMark, sessionMark, setSessionMark, DEFAULT_MARK, driverMark } from './lib/gate.mjs'
 import { readMoney, readCap, writeCap, spendRecords } from './lib/money.mjs'
 import { gateExpired } from '../lib/usage.mjs'
@@ -1003,7 +1003,7 @@ const commands = {
     withLock(run.dir, () => {
       const s = loadState(run.paths)
       if (s.status !== 'running') fail(`Run ${s.id} is ${s.status}, not running; nothing was kept awake.`)
-      if (!canHold()) fail('LCW cannot keep this computer awake: it needs caffeinate on macOS, or systemd-inhibit on Linux.')
+      if (!canHold()) fail(inWsl(process.env) ? 'LCW cannot keep this computer awake from WSL: it can hold only the Linux side, and Windows would still sleep.' : 'LCW cannot keep this computer awake: it needs caffeinate on macOS, or systemd-inhibit on Linux.')
       if (keptHold(run.dir)) return out('already kept awake')
       const pid = Number(sessionId ? readJson(sessionFile(home(), sessionId))?.claudePid : NaN)
       if (!claudeAlive(pid)) fail('This session has no Claude Code process on record (claudePid in its session file), so a hold could not end with it. Nothing was kept awake.')
@@ -1025,8 +1025,8 @@ const commands = {
     const apply = (s) => {
       const w = s.sweep
       for (const [k, n] of given) {
-        if (k === 'park') w.parked += n - w.hunt.park
-        if (k === 'drop') w.dropped += n - w.hunt.drop
+        if (k === 'park') w.parked = Math.max(0, w.parked + n - w.hunt.park)
+        if (k === 'drop') w.dropped = Math.max(0, w.dropped + n - w.hunt.drop)
         w.hunt[k] = n
       }
       if (sorted) w.sorted = true
