@@ -83,10 +83,11 @@ function reapGateLock(lock, owner = null) {
   } catch {}
 }
 
-function withGateLock(paths, fn, fallback = true) {
+function withGateLock(paths, fn, fallback = true, waitMs = 1000) {
   const lock = `${paths.gate}.lock`
   const marker = `${process.pid}-${randomUUID()}`
   const prepared = `${lock}.${marker}`
+  const until = Date.now() + waitMs
   try {
     for (const entry of fs.readdirSync(path.dirname(lock), { withFileTypes: true })) {
       const prefix = `${path.basename(lock)}.`
@@ -95,10 +96,13 @@ function withGateLock(paths, fn, fallback = true) {
     }
     fs.mkdirSync(prepared, { mode: 0o700 })
     fs.writeFileSync(`${prepared}/${marker}`, '', { flag: 'wx', mode: 0o600 })
-    try { fs.renameSync(prepared, lock) } catch (e) {
-      if (!['EEXIST', 'ENOTEMPTY'].includes(e.code)) throw e
-      reapGateLock(lock)
-      fs.renameSync(prepared, lock)
+    for (;;) {
+      try { fs.renameSync(prepared, lock); break } catch (e) {
+        if (!['EEXIST', 'ENOTEMPTY'].includes(e.code)) throw e
+        reapGateLock(lock)
+        if (Date.now() >= until) { fs.renameSync(prepared, lock); break }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)
+      }
     }
     forgetReads()
     try { return fn() } finally { fs.renameSync(lock, prepared) }
@@ -132,9 +136,9 @@ function updateGate(paths, state, usage, now, money, intent, io = live) {
   return quota.hold
 }
 
-export function applyGate(paths, state, usage, now = Date.now(), money = null, intent = null) {
+export function applyGate(paths, state, usage, now = Date.now(), money = null, intent = null, waitMs) {
   // Source and state are re-read only after acquisition; a display's older snapshot cannot retire a newer hold.
-  return withGateLock(paths, () => updateGate(paths, readJson(paths.state) ?? state, usage, now, money, intent))
+  return withGateLock(paths, () => updateGate(paths, readJson(paths.state) ?? state, usage, now, money, intent), true, waitMs)
 }
 
 const CHANGES = Symbol('the gate would change')
@@ -146,7 +150,7 @@ const judging = { write: () => { throw CHANGES }, remove: (file) => { if (fs.exi
  */
 export function settleGate(paths, state, usage, now, money) {
   try { updateGate(paths, readJson(paths.state) ?? state, usage, now, money, null, judging); return } catch (e) { if (e !== CHANGES) throw e }
-  applyGate(paths, state, usage, now, money)
+  applyGate(paths, state, usage, now, money, null, 0) // a busy lock is left to the next draw rather than stall this one
 }
 
 /** Whether settleGate at now would leave the gate as it is. It writes nothing and starts nothing. */

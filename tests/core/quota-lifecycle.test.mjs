@@ -2,9 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { spawn } from 'node:child_process'
 import { tmp, makeRepo, run, lcw, START_HOOK, GATE_HOOK, LIMIT_HOOK, readJson } from './helpers.mjs'
 import { quotaFile, sessionFile, usageFile, spendFile } from '../../lib/key.mjs'
-import { applyGate, reconcileGate, setSessionMark, sessionMark, sessionIds } from '../../scripts/lib/gate.mjs'
+import { applyGate, settleGate, reconcileGate, setSessionMark, sessionMark, sessionIds } from '../../scripts/lib/gate.mjs'
 import { noteQuotaSession } from '../../scripts/lib/quota-session.mjs'
 import { readMoney, recordSpend, spendRecords } from '../../scripts/lib/money.mjs'
 
@@ -44,6 +45,33 @@ test('empty and dead gate locks recover while a live contender fails closed with
       assert.equal(fs.existsSync(lock), false)
     }
   }
+})
+
+function heldLock(f) {
+  const lock = `${f.paths.gate}.lock`
+  const owner = `${process.pid}-33333333-3333-4333-8333-333333333333`
+  fs.mkdirSync(lock)
+  fs.writeFileSync(`${lock}/${owner}`, '')
+  return { lock, owner }
+}
+
+test('a gate lock released by its writer a moment later is waited for instead of reading as held', () => {
+  const f = gatedFixture()
+  const { lock, owner } = heldLock(f)
+  f.runState.markPercent = 80
+  const release = `setTimeout(() => { require('fs').unlinkSync(${JSON.stringify(`${lock}/${owner}`)}); require('fs').rmdirSync(${JSON.stringify(lock)}) }, 150)`
+  spawn(process.execPath, ['-e', release], { stdio: 'ignore' })
+  assert.equal(f.apply(), false)
+  assert.equal(fs.existsSync(f.paths.gate), false)
+})
+
+test('the status line does not wait on a busy gate lock', () => {
+  const f = gatedFixture()
+  heldLock(f)
+  const started = Date.now()
+  withHome(f.home, () => settleGate(f.paths, f.runState, null, now, null))
+  assert.ok(Date.now() - started < 500)
+  assert.equal(fs.existsSync(f.paths.gate), false)
 })
 
 test('dead private gate locks are reclaimed at crash boundaries without touching live or unrelated directories', () => {
