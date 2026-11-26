@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { fnv1a32hex, repoKey } from '../../lib/key.mjs'
+import { inWsl } from '../../scripts/lib/awake.mjs'
 import { spawn } from 'node:child_process'
 import { tmp, makeRepo, git, lcw, readJson, started, fakeClaude, CLI } from './helpers.mjs'
 
@@ -176,16 +177,16 @@ test('finish stores no dollars for a session that is not billed per token', () =
   assert.ok(!('usd' in t.state().totals))
 })
 
-test('awake holds only for a Claude Code process on record, not any live process with that pid', { skip: process.platform === 'darwin' || process.platform === 'linux' ? false : 'LCW holds off sleep only on macOS and Linux' }, () => {
-  // stand-ins that end at once, so no test holds off this computer's sleep
+test('awake holds only for a Claude Code process on record, not any live process with that pid', { skip: process.platform !== 'darwin' && process.platform !== 'linux' ? 'LCW holds off sleep only on macOS and Linux' : inWsl(process.env) ? 'WSL cannot hold off the computer\'s sleep' : false }, () => {
+  // stand-ins that stay alive while STUB_WAIT_PID does, as the real ones do for Claude Code, so no test holds off this computer's sleep
   const stubs = tmp('stubs')
-  for (const f of ['caffeinate', 'systemd-inhibit']) fs.writeFileSync(`${stubs}/${f}`, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
-  const env = { PATH: `${stubs}:${process.env.PATH}` }
+  for (const f of ['caffeinate', 'systemd-inhibit']) fs.writeFileSync(`${stubs}/${f}`, '#!/bin/sh\nwhile kill -0 "$STUB_WAIT_PID" 2>/dev/null; do sleep 0.1; done\n', { mode: 0o755 })
   const t = started()
   t.cli('stage', 'Build')
   const pidOnRecord = (pid) => fs.writeFileSync(`${t.home}/sessions/s1.json`, JSON.stringify({ runDir: t.dir, claudePid: pid }))
   const other = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 20000)'], { stdio: 'ignore' })
   const claude = fakeClaude()
+  const env = { PATH: `${stubs}:${process.env.PATH}`, STUB_WAIT_PID: String(claude.pid) }
   try {
     pidOnRecord(other.pid)
     const r = lcw(['awake'], { ...t.o, env })

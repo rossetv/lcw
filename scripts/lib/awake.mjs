@@ -14,8 +14,21 @@ const onPath = (name) => (process.env.PATH || '').split(path.delimiter).some((di
   try { fs.accessSync(path.join(dir, name), fs.constants.X_OK); return true } catch { return false }
 })
 
-/** Whether this computer can hold off sleep: macOS with caffeinate, or Linux with systemd-inhibit. */
-export const canHold = (platform = process.platform) => !!PROGRAM[platform] && onPath(PROGRAM[platform])
+// WSL: systemd-inhibit there holds only the Linux VM, so Windows would still sleep
+export function inWsl(env) {
+  if (env.WSL_DISTRO_NAME) return true
+  try { return /microsoft/i.test(fs.readFileSync('/proc/version', 'utf8')) } catch { return false }
+}
+
+/** Whether this computer can hold off sleep: macOS with caffeinate, or Linux (not WSL) with systemd-inhibit. */
+export const canHold = (platform = process.platform, env = process.env) =>
+  !!PROGRAM[platform] && onPath(PROGRAM[platform]) && !(platform === 'linux' && inWsl(env))
+
+// ps shows a child that died and is not yet reaped as Z; exit status 1 is no such process. Any other ps failure
+// leaves it unknown, and an unknown hold counts as running: calling a live one dead would lose track of it.
+const running = (pid) => {
+  try { return !/^Z/.test(execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || 'Z') } catch (e) { return e.status !== 1 }
+}
 
 /** The hold for a run, as [program, args]: it holds off idle sleep until the process claudePid exits. */
 export function holdCommand(platform, claudePid, why) {
@@ -60,6 +73,9 @@ export function startHold(runDir, claudePid, why, at, platform = process.platfor
   child.on('error', () => {})
   child.unref()
   if (!child.pid) return null
+  // a hold that cannot start (systemd-inhibit with no bus) exits at once
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300)
+  if (!running(child.pid)) return null
   const hold = { pid: child.pid, at, how: [program, ...args].join(' ') }
   writeJson(awakeFile(runDir), hold)
   return hold
