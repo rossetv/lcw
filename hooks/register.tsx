@@ -442,7 +442,7 @@ async function readQuota($: EngineInterface, session: any, mark: number, now: nu
     const due = !Number.isFinite(state.lastAttemptAt) || now - state.lastAttemptAt >= REFRESH_MS
     const claimed = state.claim?.revision === state.revision && now - state.claim.startedAt < CLAIM_MS
     if (due && !claimed && (last.revision !== state.revision || !last.busy && now - last.at >= REFRESH_MS)) {
-      // One quick retry after a failure; a second failure in a row waits the full interval.
+      // A runner that fails before it makes its claim is tried again in 5 seconds, once; a second failure in a row waits the full interval.
       const quick = last.revision !== state.revision || !last.failed
       const request = { revision: state.revision, at: now, busy: true, failed: false }
       S.quotaRefresh = request
@@ -1649,11 +1649,10 @@ export const register: Register = (on) => {
       S.collapsed = e.props.isCollapsed
       const viewing = e.props.view.agentId
       let card: Row[] = []
-      // Agents a folded wave holds are the card's too, though it lists none of them.
-      let holdsFolded = false
+      let hasAgents = false
       if (run) {
         const view = cardView(run, now)
-        holdsFolded = (view.sweep?.open ?? []).some((w: any) => w.folded && view.agents.some((a: any) => a.wave === w.n))
+        hasAgents = view.agents.length > 0
         S.shows = JSON.stringify(view)
         S.mode = view.mode
         const pace = S.collapsed ? 0 : cardPace(view.mode, working())
@@ -1700,7 +1699,8 @@ export const register: Register = (on) => {
       if (unfocus) S.dirty = true
       const below: Row[] = viewing ? [...card, [{ t: '← back to the main conversation', c: 'accent', id: 'main' }]] : card
       const rows: Row[] = banner.length && below.length ? [...banner, [{ t: ' ' }], ...below] : [...banner, ...below]
-      const hide = !S.collapsed && (holdsFolded || rows.some((row) => row.some((s) => /^(view|toggle):/.test(s.id ?? ''))))
+      // Not by whether the card's rows list the agents: hiding Claude Code's rows gives the band more rows, which changes that.
+      const hide = !S.collapsed && hasAgents && card.length > 0
       if (hide !== S.hideRows) { S.hideRows = hide; S.dirty = true }
       // Claimed even when the approval or question box, or an ask's options, leave the card no room: else the status line draws it.
       S.holdsCard = !!run
