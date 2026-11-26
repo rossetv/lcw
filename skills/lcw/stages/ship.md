@@ -26,7 +26,7 @@ lcw finish --pr <url>
 
 Write the title in the run's commit convention too: a repository that squashes its pull requests makes the title the commit message.
 
-The run is finished when the draft pull request is open. Tell the human in the conversation: the link, the lines of Check in a sentence or two, and each BYPASS line in the ledger, its reason and the rule it went past.
+The run is finished when the draft pull request is open. Tell the human in the conversation: the link, and the lines of Check in a sentence or two.
 
 ## With no remote, or no way to push
 
