@@ -305,9 +305,10 @@ test('a wave starts beside one still being built, cut from where that wave was c
   const early = at(2, 'wave', 'take')
   assert.equal(early.code, 1)
   assert.match(early.out, /Wave 1 is still being built/)
-  assert.match(early.out, /nothing to take in yet.*go on to Review/)
+  assert.match(early.out, /nothing to take in yet.*review may go ahead/)
   assert.equal(at(2, 'stage', 'Build').code, 0)
   assert.equal(at(2, 'stage', 'Review').code, 0, 'its review range is its own while wave 1 is unbuilt')
+  assert.doesNotMatch(at(2, 'wave', 'take').out, /go on to Review/, 'wave 2 is in Review already')
   assert.match(t.cli('status').out, /review range: git diff lcw\/tidy-wave-1\.\.\.lcw\/tidy-wave-2/)
   assert.equal(git(t.repo, 'diff', '--name-only', 'lcw/tidy-wave-1...lcw/tidy-wave-2'), 'e.txt')
   const built = commit(wt1, 'c.txt', 'the rest\n')
@@ -2051,6 +2052,21 @@ test('wave files leaves out the newest open wave once it is at merging, as the n
   assert.match(t.cli('wave', 'files').out, /^ {2}b\.txt \(wave 1\)$/m)
   t.cli('wave', 'step', 'merging')
   assert.equal(t.cli('wave', 'files').out.trim(), 'files the open waves have changed: none')
+})
+
+test('wave files and wave start leave out an older wave at merging that the later wave the next is cut from already holds', () => {
+  const t = overlapping()
+  commit(t.wt2, 'e.txt', 'wave 2 fix\n')
+  t.at(2, 'stage', 'Review')
+  t.at(1, 'stage', 'Ship')
+  t.at(1, 'wave', 'step', 'final checks')
+  assert.match(t.cli('wave', 'files').out, /^ {2}b\.txt \(wave 1\)$/m)
+  t.at(1, 'wave', 'step', 'merging')
+  assert.deepEqual(t.cli('wave', 'files').out.trim().split('\n').slice(1), ['  e.txt (wave 2)'])
+  t.cli('wave', 'add', '1')
+  const r = t.start()
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual(r.out.split('\n').filter((l) => /^ {2}\S+ \(wave /.test(l)), ['  e.txt (wave 2)'])
 })
 
 test('wave files lists a wave at merging whose review fix the next wave, cut beside a later wave, does not hold', () => {
