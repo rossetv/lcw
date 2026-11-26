@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tokens, duration, modelName, family, len, clip, wrap, resetsIn, ageText } from '../../lib/format.mjs';
+import { tokens, duration, modelName, family, len, clip, clipWord, wrap, resetsIn, ageText } from '../../lib/format.mjs';
 import { glyphs } from '../../lib/theme.mjs';
 
 test('token counts are shortened to k and M, rounding up into the next unit', () => {
@@ -85,4 +85,10 @@ test('length is in terminal cells, and a cut falls between whole characters as a
   // Text with no spaces between its words wraps between its wide characters; a long word of one-cell characters stays whole.
   assert.deepEqual(wrap('アップロードの再試行 ok', 9), ['アップロ', 'ードの再', '試行 ok']);
   assert.deepEqual(wrap('see https://example.com/a/long/path', 9), ['see', 'https://example.com/a/long/path']);
+});
+
+test('a clip of text never ends on a dot or a slash before its "…"', () => {
+  assert.equal(clipWord('probe lib/card.mjs', 16), 'probe lib/card…');
+  assert.equal(clipWord('~/dev/lcw/skills', 11), '~/dev/lcw…');
+  assert.equal(clipWord('see lib/', 20), 'see lib/');
 });

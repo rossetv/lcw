@@ -1707,6 +1707,37 @@ test('a row cut short leaves no comma or full stop before its "…"', () => {
   }
 });
 
+test('a cut inside a path ends on a letter before its "…", never on a dot or a slash', () => {
+  const i = inputsOf('RunningA');
+  i.agents = i.agents.map((a, k) => ({ ...a, description: ['probe lib/card.mjs at widths 44-130', 'read skills/lcw/agents/worker/brief.md'][k % 2] }));
+  const v = buildView(i);
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+    const hit = toPlain(renderCard(v, { width, frame })).split('\n').find(l => /[./]…/.test(l));
+    assert.equal(hit, undefined, `${width}${frame ? ', framed' : ''}`);
+  }
+});
+
+test('a slash dropped before the "…" counts against no word the cut would give up', () => {
+  const i = inputsOf('SeveralAsks');
+  i.state.asks[0].text = 'explain README, then CHANGELOG, then docs/ Include archived rows?';
+  const v = buildView(i);
+  for (let width = 57; width <= 63; width++) for (const frame of [false, true]) {
+    const row = toPlain(renderCard(v, { width, frame })).split('\n').find(l => l.includes('README'));
+    assert.match(row, /then (docs|docs\/ Include)… /, `${width}${frame ? ', framed' : ''}`);
+  }
+});
+
+test('a question on rows of its own leaves no word alone on its last row', () => {
+  const i = inputsOf('RunningA');
+  i.state.asks = [{ n: 1, text: 'Wave 7 found the mark is shown twice; keep the dim one or the gate one?', at: NOW - 5 * 6e4 }];
+  const v = buildView(i);
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+    const rows = toPlain(renderCard(v, { width, frame })).split('\n').map(l => l.replace(/^│ | *│$/g, '').trim());
+    const asked = rows.slice(rows.findIndex(l => l.includes('needs you')) + 1, rows.findIndex(l => l.startsWith('answer in plain words')));
+    assert.ok(asked.length === 1 || asked.at(-1).includes(' '), `${width}${frame ? ', framed' : ''}\n` + asked.join('\n'));
+  }
+});
+
 test('a short row keeps a word of what the person must act on: the pause, the decisions to check, the line being asked', () => {
   const rowOf = (board, width, frame, has) => toPlain(card(board, { width, frame })).split('\n').find(l => l.includes(has));
   for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
@@ -1825,18 +1856,20 @@ const stateRow = (used, state = {}, width = 100) => {
   return laneRows(i, width)[1];
 };
 
-test('the state row shows the usage mark once the week comes within ten points of it', () => {
-  assert.match(stateRow(65), /on track · last commit 3m ago +week 65% · 75% mark · ≈ 9% of your week$/);
-  assert.doesNotMatch(stateRow(64), /mark/);
-  // Short of room the mark goes, and the run's own words keep their one row.
-  assert.equal(stateRow(65, {}, 55), stateRow(50, {}, 55));
+test('the state row leaves the week and its mark to the status line, near the mark or not', () => {
+  for (const used of [50, 65, 74]) assert.match(stateRow(used, { bypasses: 3 }), /on track · last commit 3m ago +3 bypasses · ≈ 9% of your week$/);
 });
 
-test('the state row counts the bypasses of standard LCW, giving way before the mark', () => {
+test('the state row counts the bypasses of standard LCW', () => {
   assert.match(stateRow(50, { bypasses: 1 }), / {2}1 bypass · ≈ 9% of your week$/);
-  assert.match(stateRow(65, { bypasses: 3 }), / {2}3 bypasses · week 65% · 75% mark · ≈ 9% of your week$/);
-  assert.match(stateRow(65, { bypasses: 3 }, 80), /last commit 3m ago +week 65% · 75% mark · ≈ 9% of your week$/);
-  assert.equal(stateRow(50, { bypasses: 3 }, 55), stateRow(50, {}, 55));
+});
+
+test("the bypasses take a row the run's sentence leaves room on, and never a row of their own", () => {
+  const i = inputsOf('06-build-wave-2-fixes-in-parallel');
+  const rows = (bypasses, width, frame) => strip(toAnsi(renderCard(buildView({ ...i, state: { ...i.state, bypasses } }), { width, frame }), 'dark', width)).split('\n');
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) assert.equal(rows(3, width, frame).length, rows(0, width, frame).length, width + ' ' + frame);
+  // Where the sentence splits, its second row has the room.
+  for (const [width, frame] of [[52, false], [56, true]]) assert.ok(rows(3, width, frame).some(l => /side by side +3 bypasses/.test(l)), rows(3, width, frame).join('\n'));
 });
 
 test('an agent that waits, or has reported and not ended, says so and holds still; one long reported is not called stalled', () => {
