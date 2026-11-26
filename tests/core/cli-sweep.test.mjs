@@ -2333,12 +2333,17 @@ test('re-recording a hunt round\'s park and drop counts after the totals were se
   assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped], [0, 0])
 })
 
-test('awake on WSL says WSL cannot keep Windows awake, and elsewhere names the programs', () => {
+test('awake on WSL says WSL cannot keep Windows awake', () => {
   const t = hunting()
   const env = { PATH: tmp('bin') + ':' + path.dirname(process.execPath) } // node only: no caffeinate or systemd-inhibit
   const wsl = lcw(['awake'], { ...t.o, env: { ...env, WSL_DISTRO_NAME: 'Ubuntu' } })
   assert.equal(wsl.code, 1)
   assert.match(wsl.err + wsl.out, /WSL/)
+})
+
+test('awake outside WSL names the programs', { skip: (() => { try { return /microsoft/i.test(fs.readFileSync('/proc/version', 'utf8')) && 'this machine is WSL: /proc/version says so whatever the environment' } catch { return false } })() }, () => {
+  const t = hunting()
+  const env = { PATH: tmp('bin') + ':' + path.dirname(process.execPath) }
   const plain = lcw(['awake'], { ...t.o, env: { ...env, WSL_DISTRO_NAME: '' } })
   assert.match(plain.err + plain.out, /caffeinate.*systemd-inhibit/)
 })
