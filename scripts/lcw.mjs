@@ -53,7 +53,7 @@ const COMMANDS = 'start status stage set task req ask answer question approval l
 const USAGE = `lcw commands: ${COMMANDS}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
 In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked, charter.md written, no wave queued and every open wave built (in Review, back in Build from it, or in Ship); a round entered with a wave short of Ship is an early one, which status shows and which cannot end the sweep; with waves open it makes .claude/worktrees/<name>-latest, detached, holding every open wave's work (the newest wave's tip alone if they conflict), which status prints as latest work while the round runs. worktree makes only the branch lcw/<name>; the session stays in the main checkout and each wave gets its own worktree.
-hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>); beside a wave still being planned or built it is cut from where that wave was cut, holds none of its work, and takes it in once it is built; any number of waves may be open at once; it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, leaving out a wave at merging, whose head is settled; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first, once the wave before it is built; stage Review, stage Ship and the final checks need all of them, and stage Ship, from any stage, needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round, and wave round <r> sets it. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one, or one opened again in place of a pull request GitHub closed unmerged. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged; merge <wave> --wait <minutes> first waits, up to that many minutes (at most 60), for the pull request's GitHub checks, and merges only once every one has passed or been skipped, with at least one passed; it ends, merging nothing, at the first failed check, and when the run is paused, stopped or finished. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
+hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>); beside a wave still being planned or built it is cut from where that wave was cut, holds none of its work, and takes it in once it is built; any number of waves may be open at once; it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, leaving out a wave at merging, whose head is settled, once the point the next wave would be cut from holds all of it; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first, once the wave before it is built; stage Review, stage Ship and the final checks need all of them, and stage Ship, from any stage, needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round, and wave round <r> sets it. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one, or one opened again in place of a pull request GitHub closed unmerged. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged; merge <wave> --wait <minutes> first waits, up to that many minutes (at most 60), for the pull request's GitHub checks, and merges only once every one has passed or been skipped, with at least one passed; it ends, merging nothing, at the first failed check, and when the run is paused, stopped or finished. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
 --wave <n> names the wave that stage Plan|Build|Review|Ship, task, req, set plan.*, milestone or waits, ledger, ask and wave round|step|take|defer|shipped act on. Without it they act on the open wave whose worktree lcw runs in, else the only open wave; with several open they refuse, but ledger writes the run's ledger only and ask is the run's own, as they are during a hunt. ask --wave marks the wave waiting until its asks are answered. ledger --wave may name a shipped wave, and set takes --wave with any key. set waits="<why>" --wave <n> records, in a few words the person would understand, why an open wave has no agent at work: the card shows it under the wave, the wave's ledger keeps it, and it goes when the wave moves or one of its tasks starts; waits= with nothing after it takes it away. A flag and its value may be one word, --wave=<n>.
 req <id> rename "<name>" and req <id> drop change a requirement when what is built changes; in a sweep's running wave req <id> park takes a fix out of the wave for the person, and req <id> partial marks a fix that was built but leaves the charter's done line unmet: it is not counted as fixed. req <id> drop --wave <n> drops a fix a shipped wave parked.
 approval ["<Go label>" ...] [--meaning "<what Go builds>"] [--recommend <n>] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. With several Go labels, --recommend <n> is needed: the one Claude recommends, which the box draws in pink. Asked again, it replaces the last; a new stage clears it.
@@ -64,7 +64,7 @@ spend-command <command line> sets the command that prints your 7-day spend in do
 quota-command <endpoint> <command line> sets an external weekly subscription source for sessions whose ANTHROPIC_BASE_URL matches that endpoint; quota-command alone inspects it, quota-command off disables it. Quote the command as one argument for shell syntax; a final --session <id> is not part of it. Keep credentials out of command text. Setup requires a successful v:1 quota JSON reading within 30 seconds; failed setup leaves the prior setting intact. Refreshes are shared every 5 minutes; failed, refused or expired readings hold new work, never supply dollar estimates. The source is account-wide, not this machine's spend.
 ask "<question>" [--waiting N] [--wave N] puts a question to the person in LCW's box, answered by number in plain words; ask "<what you want from them>" --no-wait does the same for something nothing waits on (a look at a mock, a try on their own device): no wave or task is held, and the card marks it until answer <n>; with --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> its options are buttons too, the recommended one drawn in pink, and a press records the answer as answer <n> "<label>: <meaning>" does.
 question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> puts a short question to the person in LCW's box, in a sweep, the recommended option drawn in pink; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
-checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
+checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>" ["<next step>"]; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
 const refuse = (msg) => { console.log(msg); process.exit(1) }
 // an error says what went wrong in a line; the whole help is for lcw help
@@ -192,6 +192,11 @@ function unbuiltTail(open) {
 }
 // each step of a wave and the stage it belongs to: 'merging' means its final checks passed and it is landing
 const STEPS = { closures: 'Review', 'final checks': 'Ship', merging: 'Ship', none: true }
+/** Where wave start cuts the next wave: from the newest open wave, or beside waves still being planned or built, where the first of them was cut, so half-built work stays out of it until it takes them in. */
+function cutFrom(s, open) {
+  const beside = unbuiltTail(open)
+  return beside.length ? beside[0].base : takesFrom(s, open.at(-1)?.branch ?? s.branch)
+}
 /** What a wave cut after `after` takes in: that open wave's branch, or the sweep's own once that wave has shipped onto it. */
 function takesFrom(s, after) {
   const before = s.sweep.waves.find((x) => x.branch === after)
@@ -241,6 +246,8 @@ function githubRepo(root) {
 
 const gh = (cwd, ...a) => execFileSync('gh', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 const firstLine = (e) => String(e.stderr || e.message).trim().split('\n')[0]
+/** "; PR n is wave k's: lcw merge k" when a wave has that pull request number, else "". */
+const prWave = (w, n) => { const x = w.waves.find((v) => v.pr && Number(v.pr) === n); return x ? `; PR ${n} is wave ${x.n}'s: lcw merge ${x.n}` : '' }
 const wholeNumber = (text, what) => (/^\d+$/.test(String(text)) ? Number(text) : fail(`${what} takes a whole number, not ${text}. Nothing was changed.`))
 
 const QUESTION_KEYS = ['a', 'b', 'c']
@@ -252,7 +259,8 @@ function optionsOf(usage, cmd) {
     const [label, ...meaning] = String(flags[key]).split(': ')
     return { key, label: label.trim(), meaning: meaning.join(': ').trim() }
   })
-  if (options.length < 2 || options.some((o) => !o.label || !o.meaning)) fail(usage)
+  const bad = options.find((o) => !o.label || !o.meaning)
+  if (options.length < 2 || bad) fail(`${cmd} needs at least two of --a, --b and --c, each "<label>: <what it means>"${bad ? `; --${bad.key} is "${flags[bad.key]}", with no ": " and meaning after the label` : `; ${options.length ? `only --${options[0].key} was given` : 'none was given'}`}. Nothing was changed.\n${usage}`)
   const keys = options.map((o) => o.key)
   if (!keys.includes(flags.recommend)) fail(`${cmd} needs --recommend <${keys.join('|')}>: the option you recommend, which the box draws in pink. Nothing was changed.`)
   return options
@@ -356,7 +364,8 @@ const commands = {
     const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
     const base = `${date}-${slug(name)}`
     const main = mainCheckout(cwd)
-    const branchTaken = (nm) => { try { git(main, 'rev-parse', '--verify', '-q', `refs/heads/lcw/${nm}`); return true } catch { return false } }
+    // a wave's branch is lcw/<name>-wave-<n>, so a name whose first wave branch is left behind is taken too; outside a repository none is
+    const branchTaken = (nm) => { try { return git(main, 'for-each-ref', '--format=%(refname)', `refs/heads/lcw/${nm}`, `refs/heads/lcw/${nm}-wave-*`) !== '' } catch { return false } }
     let id = base, runName = slug(name), n = 1
     const before = machineRunCount()
     fs.mkdirSync(runsDir(home(), key), { recursive: true })
@@ -594,7 +603,7 @@ const commands = {
   checkpoint() {
     const run = need()
     const step = rest.join(' ')
-    const usage = 'Usage: lcw checkpoint "<next step>" | checkpoint --compact ["<next step>"] | checkpoint --keep "<why>"'
+    const usage = 'Usage: lcw checkpoint "<next step>" | checkpoint --compact ["<next step>"] | checkpoint --keep "<why>" ["<next step>"]'
     const ctx = contextOf(sessionId)
     const size = ctx ? `context ${tokensText(ctx.tokens)}` : 'context size unknown'
     const compact = (s) => {
@@ -602,8 +611,11 @@ const commands = {
       out(`${size}: checkpoint written; compaction happens when this turn ends, so end your turn now`)
     }
     if (flags.keep !== undefined) {
-      if (flags.compact || step) fail(usage)
+      if (flags.compact) fail(usage)
+      // unquoted, the reason's first word would be read as the reason and the rest as the next step
+      if (rest.length > 1) fail(`lcw checkpoint --keep takes the reason and the next step as two quoted words: --keep "<why>" "<next step>". Nothing was changed.`)
       if (compactChoice(ctx) === 'compact') fail(`${size}${ctx ? ", too near the window's end to keep" : ', so it cannot be kept'}: run lcw checkpoint --compact. Nothing was changed.`)
+      if (step) appendLedger(run.paths, `checkpoint: ${step}`, ledgerWave(run.state))
       appendLedger(run.paths, `${size} kept: ${flags.keep}`, ledgerWave(run.state))
       return out(`${size} kept; carry on with the next step now, and end your turn only to wait for agents' reports`)
     }
@@ -976,7 +988,8 @@ const commands = {
   hunt() {
     const run = need()
     sweepOnly(run)
-    if (run.state.stage !== 'Hunt') fail(`lcw hunt records the Hunt stage; this sweep is in ${run.state.stage}. Nothing was changed.`)
+    // a round's counts may come in after a wave has started and moved the sweep on
+    if (!run.state.sweep.round) fail(`lcw hunt records a hunt round, and this sweep has not hunted yet: lcw stage Hunt starts its first. Nothing was changed.`)
     const given = HUNT_COUNTS.filter((k) => flags[k] !== undefined).map((k) => [k, wholeNumber(flags[k], `--${k}`)])
     if (!given.length) fail(`Usage: lcw hunt ${HUNT_COUNTS.map((k) => `[--${k} N]`).join(' ')}`)
     const sorted = given.some(([k]) => ['fix', 'park', 'drop'].includes(k))
@@ -1019,10 +1032,9 @@ const commands = {
       const newest = open.at(-1)
       const next = w.waves.find((x) => x.status === 'queued') || fail('No wave is queued: queue one with lcw wave add. Nothing was changed.')
       const after = newest?.branch ?? s.branch
-      // beside waves still being planned or built, the new wave is cut from where the first of them was cut: half-built work stays out of it until it takes them in
       const beside = unbuiltTail(open)
       if (beside.length && !beside[0].base) fail(`Wave ${beside[0].n} is in ${beside[0].stage} and has no recorded start, so no wave can be cut beside it; the next wave starts once it is built and in Review. Nothing was changed.`)
-      const from = beside.length ? beside[0].base : takesFrom(s, after)
+      const from = cutFrom(s, open)
       const branch = `${s.branch}-wave-${next.n}`
       const wanted = `${s.repoRoot}/.claude/worktrees/${s.name}-wave-${next.n}`
       let worktree
@@ -1103,7 +1115,7 @@ const commands = {
       if (running.length) fail(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running, and a worker may be committing in ${wt}; wait for ${running.length > 1 ? 'them' : 'it'} to report, then lcw wave take --wave ${wave.n} again. Nothing was changed.`)
       // only the wave just before, once it holds everything beneath it, so each review range's merge base stays that wave's tip
       const prev = openWaves(s).filter((x) => x.n < wave.n && x.status === 'running').at(-1)
-      if (prev && !isBuilt(prev)) fail(`Wave ${prev.n} is still being ${prev.stage === 'Plan' ? 'planned' : 'built'}, and wave ${wave.n} was started beside it: it takes wave ${prev.n} in once that wave is built and in Review, and needs nothing from it until then. Nothing was changed.`)
+      if (prev && !isBuilt(prev)) fail(`Wave ${prev.n} is still being ${prev.stage === 'Plan' ? 'planned' : 'built'}, and wave ${wave.n} was started beside it: there is nothing to take in yet, and wave ${wave.n}'s review may go ahead. It takes wave ${prev.n} in once that wave is built and in Review. Nothing was changed.`)
       const behind = lagging(s, wave)
       if (behind) fail(`${behind.why}, and a wave takes in only the wave before it, oldest first. ${behind.how}, then lcw wave take --wave ${wave.n} again. Nothing was changed.`)
       const from = prev?.branch ?? s.branch
@@ -1219,7 +1231,7 @@ const commands = {
       throw e
     }
     if (w.prs !== 'merged') fail(`The charter's pull request choice is ${PR_CHOICES[w.prs] ?? 'not made yet'}, not merged as it goes, so the sweep merges nothing. Nothing was changed.`)
-    const wave = w.waves.find((x) => x.n === n) || fail(`No wave ${n}. Nothing was changed.`)
+    const wave = w.waves.find((x) => x.n === n) || fail(`No wave ${n}. lcw merge takes a wave number, not a pull request number${prWave(w, n)}. Nothing was changed.`)
     if (wave.empty) fail(`Wave ${n} shipped with no commits, so it has no pull request to merge. Nothing was changed.`)
     if (wave.status !== 'shipped' || !wave.pr) fail(`Wave ${n} is ${wave.status}${wave.pr ? '' : ' with no pull request'}; only a shipped wave's pull request is merged. Nothing was changed.`)
     if (wave.merged) fail(`Wave ${n}'s pull request #${wave.pr} is merged already. Nothing was changed.`)
@@ -1237,6 +1249,7 @@ const commands = {
     if (view.state === 'MERGED' && view.baseRefName !== main) fail(`#${pr} was merged into ${view.baseRefName}, not the default branch ${main}, so its changes have not landed; it needs you. Nothing was recorded and its branch is kept.`)
     // merged earlier but never recorded: go on to the branch, do not merge twice
     if (view.state !== 'MERGED') {
+      if (view.state === 'CLOSED') fail(`#${pr} was closed without being merged. Open a new pull request for ${wave.branch} and record it with lcw wave pr ${n} <number>; GitHub may refuse to open #${pr} again, so do that instead only if its base branch ${view.baseRefName} still exists. Nothing was merged or recorded.`)
       // the next wave's pull request is opened on this wave's branch, and GitHub retargets it only when that branch is deleted
       if (view.baseRefName !== main) fail(`#${pr} is based on ${view.baseRefName}, not the default branch ${main}; retarget it to ${main} first (gh pr edit ${pr} -R ${repo} --base ${main}). Nothing was merged or recorded.`)
       let state, readied = false, back = ''
@@ -1377,7 +1390,7 @@ function forgetMissing(root, dir) {
 function addWorktree(run, dir, branch, from) {
   const root = run.state.repoRoot
   forgetMissing(root, dir)
-  git(root, 'worktree', 'add', '-b', branch, dir, ...(from ? [from] : []))
+  git(root, 'worktree', 'add', '-q', '-b', branch, dir, ...(from ? [from] : []))
   const exclude = path.resolve(root, git(root, 'rev-parse', '--git-path', 'info/exclude'))
   fs.mkdirSync(path.dirname(exclude), { recursive: true })
   const text = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : ''
@@ -1389,13 +1402,16 @@ function addWorktree(run, dir, branch, from) {
 
 /**
  * The files the given waves have changed, each over its review range, so not what it took in: a fix planned in a later
- * wave must not need one. A wave at merging is left out: its head is settled, and the next wave is cut from it.
+ * wave must not need one. A wave at merging, or shipped and held for its merge, counts only for what the next wave's cut
+ * lacks of it: its head is settled, and a shipped one's review range is empty once the sweep's branch has moved to it.
  */
 function changedFiles(s, waves) {
+  const cut = cutFrom(s, waves)
   const by = new Map()
   for (const w of waves) {
-    if (!w.after || !w.branch || w.step === 'merging') continue
-    for (const f of git(s.repoRoot, 'diff', '--name-only', `refs/heads/${takesFrom(s, w.after)}...refs/heads/${w.branch}`).split('\n').filter(Boolean)) by.set(f, [...(by.get(f) ?? []), w.n])
+    if (!w.after || !w.branch) continue
+    const from = (w.step === 'merging' || w.status === 'shipped') && cut ? cut : `refs/heads/${takesFrom(s, w.after)}`
+    for (const f of git(s.repoRoot, 'diff', '--name-only', `${from}...refs/heads/${w.branch}`).split('\n').filter(Boolean)) by.set(f, [...(by.get(f) ?? []), w.n])
   }
   const files = [...by].sort(([a], [b]) => a.localeCompare(b)).map(([f, ns]) => `  ${f} (wave ${ns.join(', ')})`)
   return [files.length ? 'files the open waves have changed:' : 'files the open waves have changed: none', ...files]
@@ -1445,13 +1461,15 @@ function waveStage(run, wave, stage) {
   out(`wave ${wave.n} stage ${stage}`, ...(early ? [early] : []))
 }
 
-/** The open wave just before w, if it is still being planned or built: w was started beside it and takes nothing in until it is built. */
-const unbuiltBefore = (s, w) => { const prev = openWaves(s).filter((x) => x.n < w.n && x.status === 'running').at(-1); return prev && !isBuilt(prev) ? prev : null }
 /**
  * The branches a wave must hold, directly or through the wave before it: the sweep's own, which holds the shipped waves, and every earlier
- * open wave's. None while the wave before it is unbuilt: everything beneath reaches it through that wave, once it is built.
+ * open wave's. Past an earlier wave still being planned or built, only the waves after it: everything beneath reaches w through that wave, once it is built.
  */
-const takeIns = (s, w) => (unbuiltBefore(s, w) ? [] : [s.branch, ...openWaves(s).filter((x) => x.n < w.n && x.status === 'running').map((x) => x.branch)])
+function takeIns(s, w) {
+  const earlier = openWaves(s).filter((x) => x.n < w.n && x.status === 'running')
+  const unbuilt = earlier.findLastIndex((x) => !isBuilt(x))
+  return unbuilt < 0 ? [s.branch, ...earlier.map((x) => x.branch)] : earlier.slice(unbuilt + 1).map((x) => x.branch)
+}
 const contains = (s, from, branch) => { try { git(s.repoRoot, 'merge-base', '--is-ancestor', `refs/heads/${from}`, `refs/heads/${branch}`); return true } catch { return false } }
 const missingFrom = (s, w) => takeIns(s, w).filter((b) => !contains(s, b, w.branch))
 /** Whether a wave's branch holds all the work now on the branches it takes in. */
