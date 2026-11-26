@@ -8,7 +8,7 @@ import {
 import { bannerFor, bannerRows, limitsShort } from '../lib/banner.mjs'
 import type { Banner, BannerFacts } from '../lib/banner.mjs'
 import { moneyFrom, readingOf, spendFileCounts } from '../lib/spend.mjs'
-import { buildView, foldKey, renderCard } from '../lib/card.mjs'
+import { buildView, foldKey, roundFoldKey, renderCard } from '../lib/card.mjs'
 import { hex, thresholds as TH } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import { atMark, stopTexts, toldFile } from '../lib/mark.mjs'
@@ -18,7 +18,7 @@ import type { QuotaView } from '../lib/quota.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, completionPrompt, countsTurn, compactInstructions, cardMotion, cardPace, gateFor, isShown, layout, measureStep,
   longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, sittingPrompt, sittingWaves, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
-  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, briefOf,
+  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, isHuntBrief, briefOf,
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Sat, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
@@ -80,6 +80,9 @@ const S = {
   // The run whose mod-alive this process last wrote, and when.
   alive: { runDir: '', at: 0 },
   shownSince: 0,
+  // The tick of the fast fade last seen, which the slow pulse starts from when the pace slows; unset until the fade has run.
+  fadeTick: undefined as number | undefined,
+  fading: false,
   dirty: false,
   // What the card last showed (its view, as text, and its mode), and the step of its motion last drawn ('' still).
   shows: '',
@@ -206,11 +209,13 @@ function keepNotices($: EngineInterface) {
 }
 
 // An agent's brief says which wave it works for, and only its launch shows the brief: the wave is kept from there, by
-// the id the launch answered. An agent that one of a wave's agents starts works for that wave too.
+// the id the launch answered. An agent that one of a wave's agents starts works for that wave too. A hunt probe, whose
+// brief names the latest-work worktree, is kept as wave 0, which no wave is.
 const MAX_WAVES_KEPT = 400
 function noteLaunch($: EngineInterface, e: { prompt?: unknown; description?: unknown; parentAgentId?: string; resume?: unknown }, id: unknown) {
   if (e.resume || typeof id !== 'string' || !id || S.waves[id] !== undefined || !S.run?.state?.sweep) return
-  const wave = waveOfBrief(e.prompt, e.description, S.run.state.name) ?? (e.parentAgentId ? S.waves[e.parentAgentId] : undefined)
+  const name = S.run.state.name
+  const wave = waveOfBrief(e.prompt, e.description, name) ?? (e.parentAgentId ? S.waves[e.parentAgentId] : undefined) ?? (isHuntBrief(e.prompt, name) ? 0 : undefined)
   if (wave != null) keepWave($, id, wave)
 }
 
@@ -240,7 +245,8 @@ async function recallWaves($: EngineInterface, sweep: string, agents: readonly {
     const head = S.agentLogs ? await $.fs.read(`${S.agentLogs}/agent-${a.id}.jsonl`, { length: BRIEF_BYTES }).catch(() => null) : null
     // read: asked for good, whatever it says; not read: tried again at a later look
     S.waveAsked[a.id] = head === null ? (S.waveAsked[a.id] ?? 0) + 1 : WAVE_TRIES
-    const wave = head === null ? null : waveOfBrief(briefOf(head), a.description, sweep) ?? (a.parentId ? S.waves[a.parentId] : undefined)
+    const brief = head === null ? '' : briefOf(head)
+    const wave = head === null ? null : waveOfBrief(brief, a.description, sweep) ?? (a.parentId ? S.waves[a.parentId] : undefined) ?? (isHuntBrief(brief, sweep) ? 0 : undefined)
     if (wave != null) keepWave($, a.id, wave)
   }
 }
@@ -684,6 +690,8 @@ async function refresh($: EngineInterface) {
   const aliveAt = firstSight && run ? Number(await readText($, run.paths.modAlive)) : 0
   if (!S.run || S.run.runDir !== run?.runDir) {
     S.shownSince = now
+    S.fadeTick = undefined
+    S.fading = false
     S.totals = (run && (await readJson($, totalsFile(run.runDir)))) || {}
     S.totalsChanged = false
     S.quiet = null
@@ -733,7 +741,10 @@ async function pollAgents($: EngineInterface) {
   const sweep = run.state?.sweep ? run.state.name : null
   if (sweep) await recallWaves($, sweep, tracked.agents).catch(() => {})
   // An agent whose brief could not be read may still say its wave in its description.
-  S.agents = sweep ? tracked.agents.map((a) => ({ ...a, wave: S.waves[a.id] ?? waveOfBrief('', a.description, sweep) ?? undefined })) : tracked.agents
+  S.agents = sweep ? tracked.agents.map((a) => {
+    const wave = S.waves[a.id] ?? waveOfBrief('', a.description, sweep) ?? undefined
+    return { ...a, wave: wave || undefined, hunt: wave === 0 }
+  }) : tracked.agents
   S.seen = tracked.seen
   noteCard(now)
   // The mascot beside the status rows shows trouble with agents. It cannot ask the mod, so the count of quiet
@@ -1464,7 +1475,12 @@ async function start($: EngineInterface) {
   // The one place that redraws: when something changed, or the card's motion has come to its next step.
   $.clock.every(100, () => void (async () => {
     const pace = S.run && !S.collapsed ? cardPace(S.mode, working()) : 0
-    const step = pace ? stepAt(pace, await $.clock.now()) : ''
+    const at = pace ? await $.clock.now() : 0
+    const step = pace ? stepAt(pace, at) : ''
+    // The fade's tick, kept to the moment the pace slows. The pulse counts its seconds on the card's clock, so the tick is
+    // taken to the start of the second the slow pace begins in.
+    if (pace && pace < 1000) { S.fadeTick = cardMotion(pace, S.shownSince, at).tick; S.fading = true }
+    else if (pace && S.fading) { S.fading = false; if (S.fadeTick !== undefined) S.fadeTick = Math.max(S.fadeTick, 10 * (cardMotion(pace, S.shownSince, at).beat ?? 0)) }
     if (!S.dirty && step === S.step) return
     S.dirty = false
     S.step = step
@@ -1680,10 +1696,11 @@ export const register: Register = (on) => {
         const pace = S.collapsed ? 0 : cardPace(view.mode, working())
         S.step = stepAt(pace, now)
         const { tick, beat } = pace ? cardMotion(pace, S.shownSince, now) : { tick: undefined, beat: undefined }
+        const beatFrom = beat === undefined ? undefined : S.fadeTick
         // The mark box offers the raises and the answer box shows asks (an ask with options alone), so the card does not say them again,
         // unless the box waits for room.
         const draw = (maxRows: number, boxed: boolean) => {
-          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, beat, hideMarkHint: boxed && shown?.kind === 'mark', asksInBox: boxed && shown?.kind === 'answer' && !shown.forYou ? (shown.askN === undefined ? view.asks.map((a: any) => a.n) : [shown.askN]) : undefined }
+          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, beat, beatFrom, hideMarkHint: boxed && shown?.kind === 'mark', asksInBox: boxed && shown?.kind === 'answer' && !shown.forYou ? (shown.askN === undefined ? view.asks.map((a: any) => a.n) : [shown.askN]) : undefined }
           return renderCard(view, opts)
         }
         const boxed = drawn.length > 0 && (shown?.kind === 'mark' || shown?.kind === 'answer')
@@ -1740,6 +1757,10 @@ export const register: Register = (on) => {
           const wave = foldKey(run?.state.id, Number(id.slice(5)))
           if (S.ui.folded[wave]) delete S.ui.folded[wave]
           else S.ui.folded[wave] = true
+        } else if (id.startsWith('round:')) {
+          const round = roundFoldKey(run?.state.id, Number(id.slice(6)))
+          if (S.ui.folded[round]) delete S.ui.folded[round]
+          else S.ui.folded[round] = true
         } else if (id === 'more') S.ui.moreOpen = !S.ui.moreOpen
         S.dirty = true
       }

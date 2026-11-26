@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import {
   addTotals, addUsage, agentTokens, buttons, cardMotion, cardPace, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
-  longNudges, quietCounts, replacesGate, sittingPrompt, sittingWaves, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt, waveOfBrief, briefOf,
+  longNudges, quietCounts, replacesGate, sittingPrompt, sittingWaves, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt, waveOfBrief, isHuntBrief, briefOf,
   measureStep, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
@@ -664,6 +664,14 @@ test('a row with wide characters is laid out to the width in terminal cells', as
   const wide = (spans) => len(spans.map((s) => s.t).join(''))
   assert.equal(wide(left) + gap + wide(right), 30)
   assert.match(left[1].t, /…$/)
+})
+
+test('a hunt probe is told by its brief naming the sweep\'s latest-work worktree', () => {
+  assert.equal(isHuntBrief('Read the code in /repo/.claude/worktrees/tidy-latest and report', 'tidy'), true)
+  assert.equal(isHuntBrief('Read /repo/.claude/worktrees/tidy-latest/src', 'tidy'), true)
+  assert.equal(isHuntBrief('Work in /repo/.claude/worktrees/tidy-wave-2', 'tidy'), false)
+  assert.equal(isHuntBrief('Read /repo/.claude/worktrees/other-latest', 'tidy'), false, 'another sweep\'s')
+  assert.equal(isHuntBrief('Read /repo/.claude/worktrees/tidy-latest', null), false)
 })
 
 test('an agent\'s wave is read from its brief: a --wave flag first, then the wave\'s worktree, the wave\'s records, the description, the opening words', () => {

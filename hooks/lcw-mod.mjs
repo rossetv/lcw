@@ -437,6 +437,11 @@ export function waveOfBrief(prompt, description, name) {
   return found ? Number(found[1]) : null
 }
 
+/** Whether a brief names the worktree of a hunt round's latest work, <name>-latest: the brief of a hunt probe. */
+export function isHuntBrief(prompt, name) {
+  return !!name && new RegExp('\\.claude/worktrees/' + String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-latest\\b').test(String(prompt ?? ''))
+}
+
 /**
  * An agent's brief, from the start of its transcript, whose first line is the message that started it. Where that line
  * is longer than what was read it cannot be parsed, and its text is given as it is: the wave's worktree is still in it.

@@ -217,3 +217,37 @@ test("with every wave folded the card still holds the agents, so Claude Code's o
   expect(hidden).toBe(true)
   await row.unmount()
 })
+
+// A hunt of round 2 beside wave 2 still at work: the round has a lane, and its probes' briefs name the latest-work worktree.
+const HUNTING = JSON.stringify({ ...JSON.parse(SWEEP), stage: 'Hunt', sweep: { ...JSON.parse(SWEEP).sweep, round: 2, hunt: { areas: 3, hunted: 1, running: 2, findings: 0 }, waves: [wave(2, 'Build')] } })
+const PROBE = 'Hunt the settings pages. Read the code in /repo/.claude/worktrees/tidy-latest and report each problem'
+
+test('a hunt probe is listed under the round\'s lane, and a press on the lane folds it away and says how many it holds', async ($, on) => {
+  const w = engine(on, [agent('g1', 'Fix the toast notes'), agent('k1', 'Find where the export is built'), agent('h1', 'Hunt the settings pages'), agent('a1', 'Build the importer')])
+  w.files[RUN + '/state.json'] = HUNTING
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await launch($, 'a1', 'Build the importer', 'Work only in /repo/.claude/worktrees/tidy-wave-2')
+  await launch($, 'h1', 'Hunt the settings pages', PROBE)
+  await launch($, 'k1', 'Find where the export is built', 'Which file builds the export? Read and report.', 'h1')
+  await w.advance(2100)
+  expect(await viewed(band)).toEqual(['view:a1', 'view:k1', 'view:h1', 'view:g1'])
+  await band.press({ key: 'round:2' })
+  await w.advance(1100)
+  expect(await viewed(band)).toEqual(['view:a1', 'view:g1'])
+  expect(await band.find({ type: 'Text', text: /2 agents$/ })).toBeDefined()
+  await band.press({ key: 'round:2' })
+  await w.advance(1100)
+  expect(await viewed(band)).toEqual(['view:a1', 'view:k1', 'view:h1', 'view:g1'])
+  await band.unmount()
+})
+
+test('a hunt probe is known from its transcript when its launch was not seen', async ($, on) => {
+  const w = engine(on, [agent('g1', 'Fix the toast notes'), agent('h1', 'Hunt the settings pages')], log('h1', PROBE))
+  w.files[RUN + '/state.json'] = HUNTING
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await w.advance(2100)
+  expect(await viewed(band)).toEqual(['view:h1', 'view:g1'])
+  await band.unmount()
+})

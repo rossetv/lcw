@@ -44,6 +44,7 @@ export function measureStep(session: QuotaSession | null | undefined, rec: Spend
 export function usdWakePrompt(root: string, markUsd: number | null): string
 export function wakeable(state: any): boolean
 export function reopenDue(state: any, gate: unknown, aliveAt: number | null | undefined, now: number): boolean
+export function isHuntBrief(prompt: unknown, name: string | null | undefined): boolean
 export function waveOfBrief(prompt: unknown, description: unknown, name: string | null | undefined): number | null
 export function briefOf(head: unknown): string
 export function usageFrom(rateLimits: readonly { kind: string; percentUsed: number; resetsAt?: string }[] | undefined, now: number, seen?: number):
