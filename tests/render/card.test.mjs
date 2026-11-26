@@ -950,9 +950,8 @@ test('at 100 columns nothing is lost, at 80 the longer words go first, and below
   const long = (w) => headOf(laneRows(inputsOf('28-lanes-a-long-sweep'), w));
   assert.match(long(115), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +round 3 · 61 fixed · 170 parked …$/);
   assert.match(long(80), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +…$/);
-  // Too short for the counts beside the stages: the waves row of the narrow layout keeps them.
-  assert.match(long(72), /Ship {4}▰{3} {2}5 done · 2 queued {2}…$/);
-  assert.match(long(71), /^waves {3}▰{7}▱{2} {2}5 done · 2 in progress · 2 queued +61 fixed …$/);
+  // Too short for the counts beside the stages: the stages go and the counts stay.
+  assert.match(long(72), /^ {2}waves {3}▰{7}▱{2} {2}5 done · 2 queued +61 fixed · 170 parked …$/);
   for (const board of Object.keys(LANES)) for (const w of [140, 100, 80, 70, 60, 50, 44, 43, 36, 30]) {
     laneRows(inputsOf(board), w).forEach(l => assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l));
   }
@@ -1212,7 +1211,7 @@ test('a lane or heading that drops what it said ends in "…", and a row that fi
   }
   assert.ok(!laneOf(rows('06-build-wave-2-fixes-in-parallel', 80, false), 2).includes('…'));
   for (const width of [60, 70]) {
-    assert.match(headOf(rows('28-lanes-a-long-sweep', width, false)), /queued( …)? +61 fixed …$/, String(width));
+    assert.match(headOf(rows('28-lanes-a-long-sweep', width, false)), /queued( …)? +61 fixed( · 170 parked)? …$/, String(width));
   }
   assert.match(headOf(rows('28-lanes-a-long-sweep', 80, false)), /2 queued +…$/);
   assert.match(rows('28-lanes-a-long-sweep', 44, true).find(l => l.startsWith('│ waves ')), /2 queued …/);
@@ -1881,26 +1880,6 @@ test('a wave with no agent at work for ten minutes says so under its lane, until
   }
 });
 
-test('lanes too tight for the heading to keep its counts take the narrow layout, which keeps them and the totals', () => {
-  for (const width of [61, 66, 71]) {
-    const rows = laneRows(inputsOf('06-build-wave-2-fixes-in-parallel'), width);
-    assert.match(headOf(rows), /1 done · (1 in progress · )?4 queued .*27 fixed/, width + '\n' + rows.join('\n'));
-    assert.ok(rows.every(l => cols(l) <= width), width + '\n' + rows.join('\n'));
-  }
-  assert.match(headOf(laneRows(inputsOf('28-lanes-a-long-sweep'), 66)), /5 done · 2 in progress · 2 queued +61 fixed …$/);
-});
-
-test('a lane keeps as many of its words as its own row has room for, whatever the other lanes give up', () => {
-  const i = inputsOf('26-lanes-three-open');
-  i.state.sweep.waves[1] = { ...i.state.sweep.waves[1], round: 2, requirements: [...i.state.sweep.waves[1].requirements.slice(0, 6), { id: 'F9', name: 'the mark', status: 'failing' }] };
-  const said = (width, n) => laneOf(laneRows(i, width), n).replace(/^.*[▰▱] {4}/, '').replace(/ +\d+m$/, '');
-  for (const width of [66, 72]) {
-    assert.equal(said(width, 2), '6 of 7 …');
-    assert.equal(said(width, 3), '3 of 9 done …');
-  }
-  assert.equal(said(80, 3), '3 of 9 done · 4 running');
-});
-
 test("the run's sentence keeps to one row where it fits alone, and the share takes the second", () => {
   for (const width of [64, 68, 70, 74]) {
     const rows = laneRows(inputsOf('06-build-wave-2-fixes-in-parallel'), width);
@@ -1934,4 +1913,39 @@ test('a cut never ends a word one or two letters short of its end', () => {
       assert.equal(short, undefined, width + ' ' + frame + ': "' + x + '…" of ' + short);
     }
   }
+});
+
+test("the run's sentence alone on its row leaves the share whole on the second, however tight", () => {
+  const i = inputsOf('05-plan-for-wave-1');
+  i.state.bypasses = 3;
+  i.usage = { ...i.usage, sevenDay: { ...i.usage.sevenDay, percentUsed: 93 } };
+  const v = buildView(i);
+  for (let width = 44; width <= 60; width++) for (const frame of [false, true]) {
+    const rows = strip(toAnsi(renderCard(v, { width, frame }), 'dark', width)).split('\n');
+    assert.ok(rows.some(l => /% of your week/.test(l)), width + ' ' + frame + '\n' + rows.join('\n'));
+    assert.ok(rows.every(l => cols(l) <= width), width + ' ' + frame + '\n' + rows.join('\n'));
+  }
+});
+
+test("lanes too tight for the heading's stages keep their own rows and the heading its counts, its strip never all full while waves are queued", () => {
+  for (const [board, counts] of [['28-lanes-a-long-sweep', '5 done · 2 queued'], ['06-build-wave-2-fixes-in-parallel', '1 done · 4 queued']]) {
+    for (let width = 66; width <= 80; width++) for (const frame of [false, true]) {
+      const rows = strip(toAnsi(renderCard(buildView(inputsOf(board)), { width, frame }), 'dark', width)).split('\n').map(l => l.replace(/^│ | │$/g, '').trimEnd());
+      const at = board + ' ' + width + ' ' + frame + '\n' + rows.join('\n');
+      assert.ok(rows.some(l => /^▾ wave \d/.test(l)), at);
+      assert.ok(headOf(rows).includes(counts), at);
+      assert.match(headOf(rows), /▱/, at);
+    }
+  }
+});
+
+test('the lanes say their figures in one form, so their words stand in one column', () => {
+  const i = inputsOf('26-lanes-three-open');
+  i.state.sweep.waves[1] = { ...i.state.sweep.waves[1], round: 2, requirements: [...i.state.sweep.waves[1].requirements.slice(0, 6), { id: 'F9', name: 'the mark', status: 'failing' }] };
+  for (let width = 60; width <= 130; width++) {
+    const said = [2, 3].map(n => laneOf(laneRows(i, width), n)).filter(Boolean).map(l => l.replace(/^.*[▰▱] {4}/, '').replace(/ +\d+m$/, ''));
+    if (said.length < 2) continue;
+    assert.equal(new Set(said.map(s => /^\d+ of +\d+ [a-z]/.test(s))).size, 1, width + ': ' + said.join(' | '));
+  }
+  assert.equal(laneOf(laneRows(i, 80), 3).replace(/^.*[▰▱] {4}/, '').replace(/ +\d+m$/, ''), '3 of 9 done · 4 running');
 });
