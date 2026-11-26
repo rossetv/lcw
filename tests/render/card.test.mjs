@@ -1707,6 +1707,16 @@ test('a row cut short leaves no comma or full stop before its "…"', () => {
   }
 });
 
+test('a cut inside a path ends on a letter before its "…", never on a dot or a slash', () => {
+  const i = inputsOf('RunningA');
+  i.agents = i.agents.map((a, k) => ({ ...a, description: ['probe lib/card.mjs at widths 44-130', 'read skills/lcw/agents/worker/brief.md'][k % 2] }));
+  const v = buildView(i);
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+    const hit = toPlain(renderCard(v, { width, frame })).split('\n').find(l => /[./]…/.test(l));
+    assert.equal(hit, undefined, `${width}${frame ? ', framed' : ''}`);
+  }
+});
+
 test('a short row keeps a word of what the person must act on: the pause, the decisions to check, the line being asked', () => {
   const rowOf = (board, width, frame, has) => toPlain(card(board, { width, frame })).split('\n').find(l => l.includes(has));
   for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
