@@ -1111,7 +1111,7 @@ const commands = {
       }
       if (step === 'final checks') {
         const running = (wave.tasks ?? []).filter((t) => t.status === 'running')
-        if (running.length) block(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running; its final checks start on a settled head, once every worker has reported. Nothing was changed.`)
+        if (running.length) fail(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running; its final checks start on a settled head, once every worker has reported. Nothing was changed.`)
         inOrder('its final checks')
         checked = tipOf(s, wave)
       }
@@ -1181,6 +1181,9 @@ const commands = {
     }
     if (sub === 'shipped') {
       const wave = mustRun(waveOf(s) || fail('No wave is running. Nothing was changed.'))
+      // a worker may still be committing to it
+      const running = (wave.tasks ?? []).filter((t) => t.status === 'running')
+      if (running.length) fail(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running; a wave ships once every worker has reported. Nothing was changed.`)
       if (wave.stage !== 'Ship') block(`A wave ships in Ship; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
       if (wave.step !== 'merging') block(`Wave ${wave.n}'s final checks have not passed${wave.step ? ` (it is at ${wave.step})` : ''}: lcw wave step "final checks" when they start, then lcw wave step merging. Nothing was changed.`)
       const before = w.waves.find((x) => x.n < wave.n && x.status !== 'shipped')
@@ -1239,7 +1242,7 @@ const commands = {
         let state = null
         try { if (repo) state = JSON.parse(gh(s.repoRoot, 'pr', 'view', String(wave.pr), '-R', repo, '--json', 'state')).state } catch {}
         if (state !== 'CLOSED') block(`Wave ${wave.n} has pull request #${wave.pr} already${state ? `, ${state.toLowerCase()} on GitHub` : ''}; another takes its place only once GitHub shows it closed unmerged. Nothing was changed.`)
-        note += `, in place of #${wave.pr}, which GitHub closed unmerged`
+        note += `, in place of #${wave.pr}, ${state === 'CLOSED' ? 'which GitHub closed unmerged' : state ? `which GitHub shows ${state.toLowerCase()}` : 'whose state could not be read from GitHub'}`
       }
       change(run, note, () => { wave.pr = pr }, wave)
       return out(note)
@@ -1710,7 +1713,7 @@ function listItem(cmd, field, statuses, make) {
   const wave = waveOf(run.state, { shipped: true })
   const list = wave ? (wave[field] ??= []) : run.state[field]
   const of = wave ?? undefined
-  if (wave && wave.status !== 'running' && !(cmd === 'req' && rest[1] === 'drop')) block(`Wave ${wave.n} has shipped, so its ${field} stay as they are. Nothing was changed.`)
+  if (wave && wave.status !== 'running' && !(cmd === 'req' && rest[1] === 'drop')) fail(`Wave ${wave.n} has shipped, so its ${field} stay as they are. Nothing was changed.`)
   if (rest[0] === 'add') {
     const [, id, ...words] = rest
     const label = words.join(' ')
@@ -1742,7 +1745,7 @@ function listItem(cmd, field, statuses, make) {
     const item = find(list, 'id', id)
     // a running wave counts its dropped fixes when it ships; a shipped wave has counted its own already
     const running = wave?.status === 'running'
-    if (wave && !running && item.status !== 'parked') block(`${id} is ${item.status} in wave ${wave.n}, which has shipped; a shipped wave drops only its parked fixes. Nothing was changed.`)
+    if (wave && !running && item.status !== 'parked') fail(`${id} is ${item.status} in wave ${wave.n}, which has shipped; a shipped wave drops only its parked fixes. Nothing was changed.`)
     change(run, `req ${id} dropped: ${item.name}`, (s) => {
       if (item.status === 'parked') { s.sweep.parked--; if (!running) s.sweep.dropped++ }
       list.splice(list.indexOf(item), 1)
@@ -1752,7 +1755,7 @@ function listItem(cmd, field, statuses, make) {
   }
   if (!statuses.includes(status)) fail(`Usage: lcw ${cmd} <id> <${statuses.join('|')}>`)
   const item = find(list, 'id', id)
-  if (cmd === 'req' && item.status === 'parked') block(`${id} is parked for the person and stays parked; it can only be dropped. Nothing was changed.`)
+  if (cmd === 'req' && item.status === 'parked') fail(`${id} is parked for the person and stays parked; it can only be dropped. Nothing was changed.`)
   // work has started for the wave, so what it was waiting for is over
   change(run, `${cmd} ${id}: ${status}`, () => { item.status = status; if (cmd === 'task' && status === 'running' && wave) delete wave.waits }, of)
   out(`${id} ${status}`)
