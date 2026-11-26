@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildView, foldKey, renderCard, weekOf, weekShare } from '../../lib/card.mjs';
+import { buildView, foldKey, roundFoldKey, renderCard, weekOf, weekShare } from '../../lib/card.mjs';
 import { renderStatusRows } from '../../lib/status.mjs';
 import { toPlain, toAnsi } from '../../lib/paint.mjs';
 import { glyphs as G, hex } from '../../lib/theme.mjs';
@@ -1598,4 +1598,55 @@ test('a tight card gives up the rule above the lanes before the one under a ques
     if (underHint && !aboveLanes) one++;
   }
   assert.ok(one > 0, 'at some height only the rule above the lanes is given up');
+});
+
+// ---------------------------------------------------------------- a hunt round's probes, under the round's lane
+
+// A hunt of round 2 beside wave 3 in its final checks; agents are [id, description, wave, more], a probe with { hunt: true }.
+const huntCard = (agents, opts = {}) => {
+  const i = inputsOf('29-lanes-hunt-and-final-checks');
+  i.agents = agents.map(([id, description, wave, more = {}]) => ({ id, description, model: 'claude-haiku-5-5', effort: 'low', tokens: 1000, startTime: i.now - 60000, status: 'running', ...(wave == null ? {} : { wave }), ...more }));
+  if (opts.folded) i.ui = { folded: { [roundFoldKey(i.state.id, 2)]: true } };
+  const rows = renderCard(buildView(i), { width: 115, ...opts });
+  return opts.spans ? rows : strip(toAnsi(rows, 'dark', 115)).split('\n').map(l => l.trimEnd());
+};
+const probe = { hunt: true };
+const startsOfHunt = rows => rows.slice(2).map(l => l.match(/^( *\S.*?)(?: {2,}|$)/)[1].replace(/^([▾▸] |  )(waves|wave \d+|round \d+).*/, '$2'));
+
+test("a hunt round's probes are listed under the round's lane, and the agents of no wave and no round beneath", () => {
+  const rows = huntCard([['p', 'Hunt the card', null, probe], ['w', 'Run the final checks', 3], ['q', 'Hunt the boxes', null, probe], ['d', 'Deploy the docs', null]]);
+  assert.deepEqual(startsOfHunt(rows), ['waves', 'wave 3', '  → Run the final checks', 'round 2', '  → Hunt the card', '  → Hunt the boxes', '→ Deploy the docs']);
+  assert.ok(rows.some(l => /^▾ round 2 /.test(l)), rows.join('\n'));
+});
+
+test("the round's lane folds like a wave's: its probes are not listed and its lane says how many it holds", () => {
+  const agents = [['p', 'Hunt the card', null, probe], ['q', 'Hunt the boxes', null, probe], ['w', 'Run the final checks', 3]];
+  const rows = huntCard(agents, { folded: true });
+  assert.deepEqual(startsOfHunt(rows), ['waves', 'wave 3', '  → Run the final checks', 'round 2']);
+  assert.match(rows.at(-1), /^▸ round 2 .* 2 agents +\S+$/);
+  assert.doesNotMatch(rows.join('\n'), /more agent/);
+  const lane = huntCard(agents, { folded: true, spans: true }).find(r => r.some(s => s.t === 'round '));
+  assert.deepEqual([lane[0].t, lane[0].id], ['▸ ', 'round:2']);
+  assert.ok(lane.some(s => s.id === 'round:2' && s.t === '2 agents'), 'the count opens it again');
+});
+
+test("a probe is listed beneath when the card has no round's lane", () => {
+  const i = inputsOf('26-lanes-three-open');
+  i.agents = [{ id: 'p', description: 'Hunt the card', model: 'claude-haiku-5-5', tokens: 10, startTime: i.now, status: 'running', hunt: true }];
+  const rows = strip(toAnsi(renderCard(buildView(i), { width: 115 }), 'dark', 115)).split('\n');
+  assert.match(rows.at(-1), /^→ Hunt the card/);
+});
+
+test("a tight card with the round's probes keeps to its room and never gets shorter as its room grows", () => {
+  const agents = ['a', 'b', 'c', 'd'].map(id => [id, 'Hunt part ' + id, null, probe]);
+  for (const frame of [true, false]) for (const folded of [false, true]) {
+    const free = huntCard(agents, { frame, folded }).length;
+    let before = 0;
+    for (let maxRows = 1; maxRows <= free + 1; maxRows++) {
+      const rows = huntCard(agents, { frame, folded, maxRows });
+      assert.ok(rows.length >= before, `${maxRows}, frame ${frame}, folded ${folded}`);
+      if (maxRows >= 8) assert.ok(rows.length <= maxRows, `${maxRows} allowed, ${rows.length} drawn, frame ${frame}, folded ${folded}\n${rows.join('\n')}`);
+      before = rows.length;
+    }
+  }
 });
