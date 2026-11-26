@@ -85,3 +85,12 @@ test('a smaller window compacts at 80% of it, before 200K', () => {
   assert.equal(compactChoice({ tokens: 170_000, window: 200_000 }), 'compact')
   assert.equal(compactChoice({ tokens: 150_000, window: 200_000 }), 'keep')
 })
+
+test('--keep refused for no context reading still records the step, so --compact finds it', () => {
+  const t = started()
+  const r = t.cli('checkpoint', '--keep', 'why', 'start the review')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /run lcw checkpoint --compact/)
+  assert.equal(t.cli('checkpoint', '--compact').code, 0)
+  assert.equal(fs.readFileSync(`${t.dir}/checkpoint`, 'utf8'), 'start the review')
+})
