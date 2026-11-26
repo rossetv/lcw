@@ -193,7 +193,6 @@ export function gateHolds(paths, state, now = Date.now()) {
   if (!gate || gate.unit === 'quota') return false
   if (gateExpired(gate, now)) return false
   if (gate.unit === 'usd') {
-    const money = state.driver ? readMoney({ sessionId: state.driver, now, state }) : null
     if (money) return atMark(null, null, now, money)
     const usage = readUsage()
     return usage ? atMark(driverMark(state), usage, now) : false
