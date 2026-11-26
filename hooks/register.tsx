@@ -113,6 +113,8 @@ const S = {
   rung: [] as string[],
   // The bells asked for and not (yet) sent, by this load of the mod: one on its way, or one the person's settings or hooks stopped.
   ringing: new Set<string>(),
+  // When a box whose bell had no surface may be tried again.
+  ringRetryAt: new Map<string, number>(),
   // A person can see the session: a person at the prompt (isInteractive) or a surface attached, such as the desktop
   // app driving it through the SDK. Without either (a -p run, or an app that left): no box, no weekly check, no setting changed.
   interactive: false,
@@ -913,16 +915,17 @@ async function readBanner($: EngineInterface) {
 // sent it: one with no surface yet is tried again on a later draw, and one their settings or hooks stopped is not
 // tried again until the mod is loaded again, since each try runs their Notification hooks.
 const RUNG_HELD = 50
-function ring($: EngineInterface, shown: Banner | null) {
+const RING_RETRY_MS = 5000
+function ring($: EngineInterface, shown: Banner | null, now: number) {
   const key = ringKey(shown)
-  if (!key || !S.restored || S.rung.includes(key) || S.ringing.has(key)) return
+  if (!key || !S.restored || S.rung.includes(key) || S.ringing.has(key) || now < (S.ringRetryAt.get(key) ?? 0)) return
   S.ringing.add(key)
   void $.ui.notify(shown!.title).then((sent) => {
     if (sent.isSent) {
       S.ringing.delete(key)
       S.rung = [...S.rung, key].slice(-RUNG_HELD)
       keepRung($)
-    } else if (sent.reason === 'no-surface') S.ringing.delete(key)
+    } else if (sent.reason === 'no-surface') { S.ringing.delete(key); S.ringRetryAt.set(key, now + RING_RETRY_MS) }
   }, () => {})
 }
 
@@ -1738,7 +1741,7 @@ export const register: Register = (on) => {
       // never chose. So when the box drawn changes, the band is drawn for a moment with no buttons at all, which makes
       // the engine let the focus go; ctrl+x Tab takes it again. A box drawn where none was moves no focus.
       const boxNow = banner.length ? shown!.kind + ':' + shown!.key : ''
-      if (banner.length) ring($, shown)
+      if (banner.length) ring($, shown, now)
       if (boxNow !== S.drawnBox) {
         if (S.drawnBox) S.unfocusUntil = now + UNFOCUS_MS
         S.drawnBox = boxNow

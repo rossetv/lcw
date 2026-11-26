@@ -185,6 +185,18 @@ test('a bell that could not go out yet rings on a later draw, and the box counts
   await band.unmount()
 })
 
+test('a bell with no surface is tried at most once every few seconds, however often the box is drawn', async ($, on) => {
+  const w = engine(on, approving(), { notify: Array(20).fill({ isSent: false, reason: 'no-surface' }) })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  for (let i = 0; i < 8; i++) await w.clock.advance(500)
+  expect(w.notified.length).toBe(1)
+  await w.clock.advance(2000)
+  await w.clock.advance(1000)
+  expect(w.notified.length).toBe(2)
+  await band.unmount()
+})
+
 test('a bell no channel sounded is not counted as rung, and is not rung again on every draw', async ($, on) => {
   const w = engine(on, approving(), { notify: [{ isSent: false, reason: 'no-channel' }] })
   await start($)
