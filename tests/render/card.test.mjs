@@ -1545,7 +1545,7 @@ test('a stage strip too wide for the card keeps the stage the run is at, and giv
 const NARROWER = ['in', 'progress', 'waiting'];
 test('a short row gives up whole words, never part of one', () => {
   // Every word on a card that is cut to its width is a word of the same card drawn with room for everything.
-  const words = rows => new Set(rows.filter(r => !r.some(s => /^(view|toggle|more)/.test(s.id ?? '')))
+  const words = rows => new Set(rows.filter(r => !r.some(s => /^more/.test(s.id ?? '')))
     .flatMap(r => r.map(s => (s.r ? ' ' : '') + s.t).join('').split(/[\s·│╭╮╰╯├┤─]+/)).map(w => w.replace(/^…|[,;:]?…?$/g, '')).filter(w => w && !/^([▰▱]+|\d+)$/.test(w)));
   for (const name of Object.keys(fixtures)) {
     const v = buildView(inputsOf(name));
@@ -1647,6 +1647,18 @@ test("a tight card with the round's probes keeps to its room and never gets shor
       assert.ok(rows.length >= before, `${maxRows}, frame ${frame}, folded ${folded}`);
       if (maxRows >= 8) assert.ok(rows.length <= maxRows, `${maxRows} allowed, ${rows.length} drawn, frame ${frame}, folded ${folded}\n${rows.join('\n')}`);
       before = rows.length;
+    }
+  }
+});
+
+// ---------------------------------------------------------------- a short row keeps what it can
+
+test('agent rows on a framed card 44 to 47 columns wide keep a word of their description', () => {
+  for (const name of Object.keys(fixtures)) for (let width = 44; width <= 47; width++) {
+    const rows = card(name, { width, frame: true }).filter(r => r.some(s => (s.id ?? '').startsWith('view:')));
+    for (const r of rows) {
+      const desc = r.filter(s => (s.id ?? '').startsWith('view:')).map(s => s.t).join('');
+      assert.match(desc, /\p{L}{2,}/u, `${name} at ${width}: ${toPlain([r])}`);
     }
   }
 });
