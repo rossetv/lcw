@@ -1402,16 +1402,16 @@ function addWorktree(run, dir, branch, from) {
 
 /**
  * The files the given waves have changed, each over its review range, so not what it took in: a fix planned in a later
- * wave must not need one. A wave at merging is left out once the next wave's cut holds all of it: its head is settled.
- * One the cut lacks still counts, as when the next wave is cut beside a later wave that lacks its last fixes.
+ * wave must not need one. A wave at merging, or shipped and held for its merge, counts only for what the next wave's cut
+ * lacks of it: its head is settled, and a shipped one's review range is empty once the sweep's branch has moved to it.
  */
 function changedFiles(s, waves) {
   const cut = cutFrom(s, waves)
-  const held = (w) => { try { git(s.repoRoot, 'merge-base', '--is-ancestor', `refs/heads/${w.branch}`, cut); return true } catch { return false } }
   const by = new Map()
   for (const w of waves) {
-    if (!w.after || !w.branch || (w.step === 'merging' && cut && held(w))) continue
-    for (const f of git(s.repoRoot, 'diff', '--name-only', `refs/heads/${takesFrom(s, w.after)}...refs/heads/${w.branch}`).split('\n').filter(Boolean)) by.set(f, [...(by.get(f) ?? []), w.n])
+    if (!w.after || !w.branch) continue
+    const from = (w.step === 'merging' || w.status === 'shipped') && cut ? cut : `refs/heads/${takesFrom(s, w.after)}`
+    for (const f of git(s.repoRoot, 'diff', '--name-only', `${from}...refs/heads/${w.branch}`).split('\n').filter(Boolean)) by.set(f, [...(by.get(f) ?? []), w.n])
   }
   const files = [...by].sort(([a], [b]) => a.localeCompare(b)).map(([f, ns]) => `  ${f} (wave ${ns.join(', ')})`)
   return [files.length ? 'files the open waves have changed:' : 'files the open waves have changed: none', ...files]

@@ -2082,6 +2082,31 @@ test('wave files lists a wave at merging whose review fix the next wave, cut bes
   assert.match(t.cli('wave', 'files').out, /^ {2}F\.txt \(wave 1\)$/m)
 })
 
+const listed = (out) => out.split('\n').filter((l) => /^ {2}\S+ \(wave /.test(l))
+
+test('wave files and wave start list a late closure of a wave shipped and held for its merge that the next wave\'s cut lacks', () => {
+  const t = overlapping()
+  t.cli('set', 'sweep.prs=merged')
+  t.at(2, 'stage', 'Review')
+  commit(t.wt1, 'd.txt', 'closure\n')
+  t.at(1, 'stage', 'Ship')
+  t.at(1, 'wave', 'step', 'final checks')
+  t.at(1, 'wave', 'step', 'merging')
+  assert.equal(t.at(1, 'wave', 'shipped', '--pr', '12').code, 0)
+  assert.deepEqual(listed(t.cli('wave', 'files').out), ['  d.txt (wave 1)'])
+  t.cli('wave', 'add', '1')
+  const r = t.start()
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual(listed(r.out), ['  d.txt (wave 1)'])
+})
+
+test('wave files lists only what the newest built wave lacks of an older wave at merging', () => {
+  const t = bothShipping()
+  t.at(1, 'wave', 'step', 'final checks')
+  t.at(1, 'wave', 'step', 'merging')
+  assert.deepEqual(listed(t.cli('wave', 'files').out), ['  d.txt (wave 1)'])
+})
+
 test('a wave leaves Review only once every fix has its verdict', () => {
   const t = overlapping()
   for (const id of ['F1', 'F2', 'F3']) t.at(1, 'req', 'add', id, `fix ${id}`)
@@ -2266,5 +2291,7 @@ test('merge given a pull request number says it takes a wave number, and names t
   const miss = lcw(['merge', '99'], { ...t.o, env: gh.env })
   assert.match(miss.out, /takes a wave number/)
   assert.doesNotMatch(miss.out, /is wave/)
+  t.edit((s) => s.sweep.waves.push({ n: 3, fixes: 1, status: 'shipped', branch: 'lcw/tidy-wave-3', pr: null, empty: true, dropped: 1, fixed: 0 }))
+  assert.doesNotMatch(lcw(['merge', '0'], { ...t.o, env: gh.env }).out, /is wave/, 'a wave with no pull request has none numbered 0')
   assert.deepEqual(gh.calls(), [])
 })
