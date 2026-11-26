@@ -1762,14 +1762,20 @@ test('a merging wave names its pull request, or the earlier wave it lands after'
   assert.match(laneOf(laneRows(i), 2), /▰{6} {4}merging +22m$/);
 });
 
-test("an early hunt round says it cannot end the sweep, where there is room for it", () => {
+test("an early hunt round says so beside its name at every width the lanes are drawn, and why where there is room", () => {
   const early = board => { const i = inputsOf(board); i.state.sweep = { ...i.state.sweep, early: [3] }; return i; };
   const round = rows => rows.find(l => /^ {2}round 2 /.test(l));
-  assert.match(round(laneRows(early('29-lanes-hunt-and-final-checks'), 140)), /4 findings so far · early · can't end the sweep +5m$/);
-  // Short of room it goes, and the lane keeps every word it had.
-  assert.deepEqual(laneRows(early('29-lanes-hunt-and-final-checks'), 115), laneRows(inputsOf('29-lanes-hunt-and-final-checks'), 115));
-  // With no lanes it stands beside the stages.
+  assert.match(round(laneRows(early('29-lanes-hunt-and-final-checks'), 140)), /› Hunt · early  ▰.* 4 findings so far · can't end the sweep +5m$/);
+  // Short of room the why goes; the lane keeps "early" and every word it had.
+  for (const width of [115, 90]) {
+    const plain = round(laneRows(inputsOf('29-lanes-hunt-and-final-checks'), width));
+    assert.match(round(laneRows(early('29-lanes-hunt-and-final-checks'), width)), /› Hunt · early  ▰/);
+    assert.equal(round(laneRows(early('29-lanes-hunt-and-final-checks'), width)).replace(/ · early  [▰▱]+/, ''), plain.replace(/  [▰▱]+/, ''));
+  }
+  assert.match(laneRows(early('29-lanes-hunt-and-final-checks'), 56).find(l => /^round 2 /.test(l)), /▱ {2}Hunt · early$/);
+  // With no lanes it stands beside the stages, whole or as one word.
   assert.match(laneRows(early('03-hunt-round-1-probes-at-work'), 115).find(l => l.startsWith('✓ Charter')), /○ Ship +early · can't end the sweep$/);
+  assert.match(laneRows(early('03-hunt-round-1-probes-at-work'), 70).find(l => l.startsWith('✓ Charter')), /○ Ship +early$/);
   // Once the run has left Hunt the round is over.
   const built = early('25-lanes-review-and-build');
   assert.doesNotMatch(laneRows(built, 140).join('\n'), /early/);
@@ -1792,10 +1798,20 @@ test('an ask names the wave it is about, where its row has room', () => {
   const two = laneRows(asked('14-needs-you-two-questions', 2, 3), 140).filter(l => /^[12]  /.test(l));
   assert.match(two[0], /^1  .* wave 2 · \d+m$/);
   assert.match(two[1], /^2  .* wave 3 · \d+m$/);
-  // A question that would be cut for it keeps its words, and the wave goes.
-  const long = asked('14-needs-you-two-questions', 2);
-  long.state.asks[0].text = 'x'.repeat(130);
-  assert.doesNotMatch(laneRows(long, 140).find(l => l.startsWith('1  ')), /wave 2/);
+  // Every row names its wave or none does: a long question is cut a little more for it, and only where the
+  // questions would keep too few words do the waves go.
+  const long = asked('14-needs-you-two-questions', 2, 3);
+  long.state.asks[0].text = 'Merge wave 8 before wave 7 is reviewed, or hold it back until review ends?';
+  for (const width of [60, 90]) {
+    const rows = laneRows(long, width).filter(l => /^[12]  /.test(l));
+    assert.match(rows[0], /…\s+wave 2 · \d+m$/, width);
+    assert.match(rows[1], / wave 3 · \d+m$/, width);
+  }
+  const old = asked('14-needs-you-two-questions', 12, 13);
+  old.state.asks = old.state.asks.map(a => ({ ...a, at: NOW - 170 * 6e4 }));
+  const tight = laneRows(old, 44).filter(l => /^[12]  /.test(l));
+  assert.equal(tight.length, 2);
+  assert.ok(tight.every(l => !/wave 1\d/.test(l)), tight.join('\n'));
 });
 
 // The first row of a running card, with its week's figure and the run's state changed.
@@ -1807,7 +1823,7 @@ const stateRow = (used, state = {}, width = 100) => {
 };
 
 test('the state row shows the usage mark once the week comes within ten points of it', () => {
-  assert.match(stateRow(65), /on track · last commit 3m ago +75% mark · ≈ 9% of your week$/);
+  assert.match(stateRow(65), /on track · last commit 3m ago +week 65% · 75% mark · ≈ 9% of your week$/);
   assert.doesNotMatch(stateRow(64), /mark/);
   // Short of room the mark goes, and the run's own words keep their one row.
   assert.equal(stateRow(65, {}, 55), stateRow(50, {}, 55));
@@ -1815,8 +1831,8 @@ test('the state row shows the usage mark once the week comes within ten points o
 
 test('the state row counts the bypasses of standard LCW, giving way before the mark', () => {
   assert.match(stateRow(50, { bypasses: 1 }), / {2}1 bypass · ≈ 9% of your week$/);
-  assert.match(stateRow(65, { bypasses: 3 }), / {2}3 bypasses · 75% mark · ≈ 9% of your week$/);
-  assert.match(stateRow(65, { bypasses: 3 }, 70), /last commit 3m ago +75% mark · ≈ 9% of your week$/);
+  assert.match(stateRow(65, { bypasses: 3 }), / {2}3 bypasses · week 65% · 75% mark · ≈ 9% of your week$/);
+  assert.match(stateRow(65, { bypasses: 3 }, 80), /last commit 3m ago +week 65% · 75% mark · ≈ 9% of your week$/);
   assert.equal(stateRow(50, { bypasses: 3 }, 55), stateRow(50, {}, 55));
 });
 
