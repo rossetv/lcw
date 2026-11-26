@@ -557,21 +557,24 @@ test('the top border never outruns the box, whatever the tag, in both forms', ()
   }
 })
 
-test("the question box's short form clips a long label, pads and spaces its stacked buttons and keeps the tag and the note", () => {
+test("the question box's short form clips a long label, pads its stacked buttons to one width and keeps the tag", () => {
   const long = 'Answer with the whole of the long sentence the option carries'
   const q = bannerFor({ run: sweepWith({ ...QUESTION, recommend: 'b', options: [{ key: 'a', label: long, meaning: 'm' }, { key: 'b', label: 'Keep', meaning: 'm' }] }), now: 0 })
   const short = { ...q, choices: undefined, lines: [] }
   for (const cols of [30, 36, 44, 60]) {
     const rows = bannerRows(short, cols, true)
     sharp(rows, cols, `at ${cols}`)
-    const text = rows.map((r) => r.map((s) => s.t).join('')).join('\n')
     assert.match(rows[0].map((s) => s.t).join(''), /◆ LCW Sweep/, `tag at ${cols}`)
-    if (cols >= 36) assert.match(text, /Saved for the next wave|Saved for/, `note at ${cols}`)
     assert.deepEqual(filled(rows), ['banner:question:b'], `recommended at ${cols}`)
   }
-  const rows = bannerRows(short, 60, true)
-  const buttons = buttonsOf(rows)
-  assert.equal(new Set(buttons.map((s) => len(s.t))).size, 1, 'one width')
-  const at = (id) => rows.findIndex((r) => r.some((s) => s.id === id))
-  assert.equal(cells(rows[at(buttons[1].id) - 1].slice(1, -1).filter((s) => s.t.trim())), 0, 'a blank row between')
+  assert.equal(new Set(buttonsOf(bannerRows(short, 60, true)).map((s) => len(s.t))).size, 1, 'one width')
+})
+
+test("the question box's short form, which the mod draws where height is short, is well under the full form's height", () => {
+  const q = bannerFor({ run: sweepWith(QUESTION), now: 0 })
+  for (const cols of [44, 60]) {
+    const full = bannerRows(q, cols, true).length
+    const short = bannerRows({ ...q, choices: undefined, lines: [] }, cols, true).length
+    assert.ok(full - short >= 6, `${short} rows against ${full} at ${cols}`)
+  }
 })
