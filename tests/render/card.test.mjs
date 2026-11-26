@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildView, foldKey, renderCard, weekOf, weekShare } from '../../lib/card.mjs';
+import { buildView, foldKey, roundFoldKey, renderCard, weekOf, weekShare } from '../../lib/card.mjs';
 import { renderStatusRows } from '../../lib/status.mjs';
 import { toPlain, toAnsi } from '../../lib/paint.mjs';
 import { glyphs as G, hex } from '../../lib/theme.mjs';
+import { len } from '../../lib/format.mjs';
 import { inputsOf, fixtures, NOW } from './boards.mjs';
 
 // A sweep's card in each of its states, and a build's beside them, as approved: every row but the agents', the rules
@@ -94,7 +95,7 @@ const SWEEP = {
   "14-needs-you-two-questions": [
     "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 38m ─╮",
     "⚑ needs you · 2",
-    "1  The Fleet tests need Docker, and no Docker daemon is running here. Start it, or shall I park Fleet’s 10 fix…   41m",
+    "1  The Fleet tests need Docker, and no Docker daemon is running here. Start it, or shall I park Fleet’s 10…       41m",
     "2  The Billing fixes need a Stripe test key, and none is set. Add one, or shall I park them?                       9m",
     "answer in plain words below, e.g. “1 yes, 2 UTC”",
     "● 2 areas wait on your answers; Panel carries on                                                   ≈ 12% of your week",
@@ -229,8 +230,8 @@ const LANES = {
     narrow: [
       "◆ backlog-sweep           waves ▰▰▱",
       "⚑ needs you · 12m",
-      "Wave 1 cannot be pushed: GitHub re…",
-      "● wave 1 waits on your answer; wav…",
+      "Wave 1 cannot be pushed: GitHub…",
+      "● wave 1 waits on your answer;…",
       "wave 1  ▰▰▰ ▰▰▰ ▰▰▰ ▰▰▰  ⚑ waiting",
       "wave 2  ▰▰▰ ▰▰▰ ▱▱▱ ▱▱▱  Build",
     ],
@@ -260,7 +261,7 @@ const LANES = {
     ],
     narrow: [
       "◆ backlog-sweep           waves ▰▰▰",
-      "● hunting again, round 2; wave 3 i…",
+      "● hunting again, round 2; wave 3…",
       "wave 3   ▰▰▰ ▰▰▰ ▰▰▰ ▰▰▰  checks",
       "round 2  ▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱  Hunt",
     ],
@@ -302,7 +303,7 @@ test('the right group sits against the right edge at 126 and 80 columns', () => 
     const status = strip(toAnsi(renderStatusRows(inputsOf('Stalled').status, { width }), 'dark', width)).split('\n');
     assert.equal(cols(status[0]), width);
     assert.ok(status[0].endsWith('acme-api · lcw/export-csv'));
-    assert.ok(status[1].endsWith('resets in 3d · -15% short'));
+    assert.ok(status[1].endsWith('resets in 3d · 15% over pace'));
     const plain = renderCard(buildView(inputsOf('Stalled')), { width });
     const text = strip(toAnsi(plain, 'dark', width)).split('\n');
     assert.ok(text[0].endsWith('≈ 12% of your week') || text[0].endsWith('3h 02m'));
@@ -379,10 +380,10 @@ test('the context bar is drawn as cells and printed as [bar N%]', () => {
 });
 
 test('the context bar is twenty cells where there is room, narrows with the terminal to ten, and is six in the narrow layout', () => {
-  // Fable 5.2 · xhigh and 38% of 1M take 29 cells; "resets in 3d · +42% spare" on the right takes 25, and two apart
+  // Fable 5.2 · xhigh and 38% of 1M take 29 cells; "resets in 3d · 42% spare" on the right takes 24, and two apart
   const input = { model: 'Fable 5.2', effort: 'xhigh', contextPercent: 38, contextWindow: '1M', repo: 'lcw', branch: 'main', weekUsedPercent: 29, weekElapsedPercent: 50, markPercent: 75 };
   const bar = width => renderStatusRows(input, { width })[0].filter(s => s.plain !== undefined).reduce((n, s) => n + s.t.length, 0);
-  assert.deepEqual([126, 76, 71, 66, 60, 44, 40].map(bar), [20, 20, 15, 10, 10, 10, 6]);
+  assert.deepEqual([126, 76, 71, 66, 60, 44, 40].map(bar), [20, 20, 16, 11, 10, 10, 6]);
   for (const width of [126, 76, 71, 66]) {
     const lines = strip(toAnsi(renderStatusRows(input, { width }), 'dark', width)).split('\n');
     assert.ok(lines.every(l => cols(l) === width), 'both rows are ' + width + ' wide: ' + lines.map(cols));
@@ -1092,7 +1093,7 @@ test('a long model name is shortened so row 1 keeps to the width', () => {
     const rows = renderStatusRows(input, { width });
     rows.forEach((r, i) => assert.ok(rowCells(r) <= width, width + ', row ' + (i + 1) + ': ' + toPlain([r])));
   }
-  assert.match(joined(renderStatusRows(input, { width: 44 })[0]), /^Sonnet 4\.5 \(… · medium {12} 38% of 1M$/);
+  assert.match(joined(renderStatusRows(input, { width: 44 })[0]), /^Sonnet 4\.5 \(1M contex… +38% of 1M$/);
   assert.match(joined(renderStatusRows(input, { width: 80 })[0]), /^Sonnet 4\.5 \(1M context\) · medium/);
 });
 
@@ -1103,8 +1104,8 @@ test('just after the weekly reset the week row gives no pace, until enough of th
   };
   assert.equal(right(20 / 60 / 168 * 100, 1), 'resets in 6d');
   assert.equal(right(4.9, 1), 'resets in 6d');
-  assert.equal(right(5, 1), 'resets in 6d · +80% spare');
-  assert.equal(right(50, 60), 'resets in 3d · -20% short');
+  assert.equal(right(5, 1), 'resets in 6d · 80% spare');
+  assert.equal(right(50, 60), 'resets in 3d · 20% over pace');
 });
 
 test("the lanes' heading keeps its wave cells to the room left, so none is cut while the lanes fit", () => {
@@ -1175,7 +1176,7 @@ test('a cut on the edge of a span leaves no dangling dot and says it cut', () =>
 test('a cut that drops whole spans always shows "…", even where what is left ends on a word', () => {
   for (const width of [65, 77]) {
     const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), width).find(l => l.includes('areas '));
-    assert.match(row, /14 hunt.*…\s+23 findings so far/, width + ': ' + row);
+    assert.match(row, /(▱|14 hunted)…\s+23 findings so far/, width + ': ' + row);
     assert.ok(!row.includes('16 left'), row);
   }
   const plain = strip(toAnsi(card('03-hunt-round-1-probes-at-work', { width: 61 }), 'dark', 61)).split('\n').find(l => l.startsWith('areas '));
@@ -1241,7 +1242,7 @@ test('a cut inside a span ahead of a separator drops the separator too', () => {
       for (const l of lines) {
         // A dim " …" after the lanes, waves or totals marks parts dropped, and keeps its space; a clipped word does not.
         assert.ok(!/[·›] ?…/.test(l), board + ' at ' + w + ': ' + l);
-        assert.ok(!/\S\s+…/.test(l.replace(/(\d+ \w+|queued|fixed|done|waves?) …/g, '$1…')), board + ' at ' + w + ': ' + l);
+        assert.ok(!/\S\s+…/.test(l.replace(/^│ /, '').replace(/(\d+ \w+|queued|fixed|done|waves?) …/g, '$1…')), board + ' at ' + w + ': ' + l);
         assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l);
       }
     }
@@ -1482,4 +1483,170 @@ test('a running run with words of its own is the dot and the words; with none it
   const row = health => toPlain(renderCard(buildView({ ...i, state: { ...i.state, health } }), { width: 100 })).split('\n')[1].split('   ||   ')[0];
   assert.equal(row('on track'), '● on track');
   assert.equal(row(''), '● running');
+});
+
+// ---------------------------------------------------------------- an agent's row: its words, its chip
+
+// A card of the agents given, each [description, minutes it has run, its chip: 'stalled', 'quiet' or none].
+const agentCard = (list, opts = {}) => {
+  const i = inputsOf('RunningA');
+  i.agents = list.map(([description, minutes, chip], k) => ({ id: 'a' + k, description, model: 'claude-opus-5-5', effort: 'high', tokens: 1200,
+    startTime: NOW - minutes * 6e4, status: 'running', quietMs: chip === 'stalled' ? 20 * 6e4 : chip === 'quiet' ? 6 * 6e4 : 0, spark: [1, 2] }));
+  return renderCard(buildView(i), { width: 126, ...opts });
+};
+const agentRows = rows => rows.filter(r => r.some(s => /^view:/.test(s.id ?? '')));
+
+test("a newline or a tab in an agent's description stays on the agent's one row", () => {
+  const split = toPlain(agentCard([['Fix the importer\nand\tthe export', 5]]));
+  assert.equal(split, toPlain(agentCard([['Fix the importer and the export', 5]])));
+});
+
+test("a stalled agent's chip of an hour or a day keeps the figures of every agent in the same columns", () => {
+  const rows = agentRows(agentCard([['Build the importer', 75, 'stalled'], ['Review the export', 5], ['Check the mail', 26 * 60, 'quiet']]));
+  const ends = rows.map(r => len(r.slice(0, r.findIndex(s => s.c === 'text' && /\dk?$/.test(s.t) && s.t.trim().length <= 6) + 1).map(s => s.t).join('')));
+  assert.equal(new Set(ends).size, 1, toPlain(rows));
+  assert.equal(new Set(rows.map(r => len(r.map(s => s.t).join('')))).size, 1, toPlain(rows));
+});
+
+test("the stalled chip's words keep their contrast through its pulse", () => {
+  const chip = opts => agentCard([['Build the importer', 75, 'stalled']], opts).flat().find(s => s.bg).bg;
+  for (const opts of [...Array(28).keys()].map(tick => ({ tick }))) {
+    const at = Number(chip(opts).split('@')[1] ?? 100);
+    assert.ok(at >= 70, JSON.stringify(opts) + ': ' + chip(opts));
+  }
+});
+
+test('the slow pulse starts at the level nearest where the fade gave way, and steps evenly from there', () => {
+  const view = buildView(inputsOf('NeedsYou'));
+  const at = c => Number(c.split('@')[1] ?? 100);
+  const frame = opts => at(renderCard(view, { width: 100, frame: true, ...opts })[0][0].c);
+  for (let from = 0; from < 56; from += 2) {
+    const b = Math.floor(from / 10), was = frame({ tick: from });
+    const pulse = [0, 1, 2, 3, 4].map(k => frame({ beat: b + k, beatFrom: from }));
+    assert.ok(Math.abs(pulse[0] - was) <= 15, `from tick ${from}: the fade was at ${was}, the pulse starts at ${pulse[0]}`);
+    // four steps a second apart and back where it began: bright, half way, dim, half way
+    assert.equal(pulse[4], pulse[0]);
+    for (let k = 0; k < 4; k++) assert.equal(Math.abs(pulse[k + 1] - pulse[k]), 25, `from tick ${from}: ${pulse}`);
+  }
+});
+
+// ---------------------------------------------------------------- what a row gives up where it is short
+
+test('a stage strip too wide for the card keeps the stage the run is at, and gives up the stages done first', () => {
+  for (const board of ['StageReview', 'RunningA', 'StageSpec']) {
+    const v = buildView(inputsOf(board));
+    for (let width = 44; width <= 80; width++) for (const frame of [false, true]) {
+      const row = toPlain(renderCard(v, { width, frame })).split('\n').find(l => l.includes(G.stageNow + ' ' + v.stage) || /[✓○] (Brainstorm|Spec|Plan|Build)/.test(l));
+      assert.ok(row.includes(G.stageNow + ' ' + v.stage), `${board} at ${width}: ${row}`);
+    }
+  }
+});
+
+const NARROWER = ['in', 'progress', 'waiting'];
+test('a short row gives up whole words, never part of one', () => {
+  // Every word on a card that is cut to its width is a word of the same card drawn with room for everything.
+  const words = rows => new Set(rows.filter(r => !r.some(s => /^(view|toggle|more)/.test(s.id ?? '')))
+    .flatMap(r => r.map(s => (s.r ? ' ' : '') + s.t).join('').split(/[\s·│╭╮╰╯├┤─]+/)).map(w => w.replace(/^…|[,;:]?…?$/g, '')).filter(w => w && !/^([▰▱]+|\d+)$/.test(w)));
+  for (const name of Object.keys(fixtures)) {
+    const v = buildView(inputsOf(name));
+    for (const frame of [false, true]) {
+      // and the words only a narrower layout uses
+      const all = new Set([...words(renderCard(v, { width: 400, frame })), ...NARROWER]);
+      for (let width = 44; width <= 130; width += 2) {
+        const lost = [...words(renderCard(v, { width, frame }))].filter(w => !all.has(w));
+        assert.deepEqual(lost, [], `${name} at ${width}${frame ? ', framed' : ''}`);
+      }
+    }
+  }
+});
+
+test('the hint under several questions keeps its example whole, or leaves it out', () => {
+  for (let width = 44; width <= 70; width++) for (const frame of [false, true]) {
+    const hint = toPlain(card('SeveralAsks', { width, frame })).split('\n').find(l => l.includes('answer in plain words below'));
+    assert.match(hint, /below(, e\.g\. “1 yes, 2 UTC”)? *│?$/, width + ': ' + hint);
+  }
+});
+
+// ---------------------------------------------------------------- what a tight card gives up
+
+test("a folded wave's agents, listed beneath lanes too narrow for rows of their own, are listed or counted wherever the card has room to", () => {
+  const i = inputsOf('05-plan-for-wave-1');
+  i.agents = [{ id: 'a', description: 'Plan the billing wave', model: 'claude-opus-5-5', effort: 'high', tokens: 1000, startTime: NOW - 6e4, status: 'running', wave: 1 }];
+  i.state.health = 'Planning wave 1 over the billing, panel and sign-in fixes, with the importer last since it touches the most files.';
+  i.ui = { folded: { [foldKey(i.state.id, 1)]: true } };
+  const v = buildView(i), lists = rows => rows.some(r => r.some(s => /^(view|more)/.test(s.id ?? '')));
+  const free = renderCard(v, { width: 50, frame: true }).length;
+  assert.ok(lists(renderCard(v, { width: 50, frame: true })));
+  let before = 0;
+  for (let maxRows = 7; maxRows <= free; maxRows++) {
+    const rows = renderCard(v, { width: 50, frame: true, maxRows });
+    assert.ok(rows.length <= maxRows && lists(rows), `${maxRows} rows: ${rows.length} drawn\n${toPlain(rows)}`);
+    assert.ok(rows.length >= before);
+    before = rows.length;
+  }
+});
+
+test('a tight card gives up the rule above the lanes before the one under a question', () => {
+  const i = inputsOf('27-lanes-one-waits-on-you');
+  i.agents = ['Build the importer', 'Review the export fix', 'Check the mail'].map((description, k) => ({ id: 'a' + k, description, model: 'claude-opus-5-5', effort: 'high', tokens: 1000, startTime: NOW - 6e4, status: 'running', wave: 2 }));
+  let one = 0;
+  for (let maxRows = 8; maxRows <= 16; maxRows++) {
+    const rows = strip(toAnsi(renderCard(buildView(i), { width: 100, frame: true, maxRows }), 'dark', 100)).split('\n');
+    const hint = rows.findIndex(l => l.includes('answer in plain words below')), heading = rows.findIndex(l => l.includes(' waves '));
+    const underHint = rows[hint + 1].startsWith('├'), aboveLanes = rows[heading - 1].startsWith('├');
+    assert.ok(underHint || !aboveLanes, `${maxRows} rows\n${rows.join('\n')}`);
+    if (underHint && !aboveLanes) one++;
+  }
+  assert.ok(one > 0, 'at some height only the rule above the lanes is given up');
+});
+
+// ---------------------------------------------------------------- a hunt round's probes, under the round's lane
+
+// A hunt of round 2 beside wave 3 in its final checks; agents are [id, description, wave, more], a probe with { hunt: true }.
+const huntCard = (agents, opts = {}) => {
+  const i = inputsOf('29-lanes-hunt-and-final-checks');
+  i.agents = agents.map(([id, description, wave, more = {}]) => ({ id, description, model: 'claude-haiku-5-5', effort: 'low', tokens: 1000, startTime: i.now - 60000, status: 'running', ...(wave == null ? {} : { wave }), ...more }));
+  if (opts.folded) i.ui = { folded: { [roundFoldKey(i.state.id, 2)]: true } };
+  const rows = renderCard(buildView(i), { width: 115, ...opts });
+  return opts.spans ? rows : strip(toAnsi(rows, 'dark', 115)).split('\n').map(l => l.trimEnd());
+};
+const probe = { hunt: true };
+const startsOfHunt = rows => rows.slice(2).map(l => l.match(/^( *\S.*?)(?: {2,}|$)/)[1].replace(/^([▾▸] |  )(waves|wave \d+|round \d+).*/, '$2'));
+
+test("a hunt round's probes are listed under the round's lane, and the agents of no wave and no round beneath", () => {
+  const rows = huntCard([['p', 'Hunt the card', null, probe], ['w', 'Run the final checks', 3], ['q', 'Hunt the boxes', null, probe], ['d', 'Deploy the docs', null]]);
+  assert.deepEqual(startsOfHunt(rows), ['waves', 'wave 3', '  → Run the final checks', 'round 2', '  → Hunt the card', '  → Hunt the boxes', '→ Deploy the docs']);
+  assert.ok(rows.some(l => /^▾ round 2 /.test(l)), rows.join('\n'));
+});
+
+test("the round's lane folds like a wave's: its probes are not listed and its lane says how many it holds", () => {
+  const agents = [['p', 'Hunt the card', null, probe], ['q', 'Hunt the boxes', null, probe], ['w', 'Run the final checks', 3]];
+  const rows = huntCard(agents, { folded: true });
+  assert.deepEqual(startsOfHunt(rows), ['waves', 'wave 3', '  → Run the final checks', 'round 2']);
+  assert.match(rows.at(-1), /^▸ round 2 .* 2 agents +\S+$/);
+  assert.doesNotMatch(rows.join('\n'), /more agent/);
+  const lane = huntCard(agents, { folded: true, spans: true }).find(r => r.some(s => s.t === 'round '));
+  assert.deepEqual([lane[0].t, lane[0].id], ['▸ ', 'round:2']);
+  assert.ok(lane.some(s => s.id === 'round:2' && s.t === '2 agents'), 'the count opens it again');
+});
+
+test("a probe is listed beneath when the card has no round's lane", () => {
+  const i = inputsOf('26-lanes-three-open');
+  i.agents = [{ id: 'p', description: 'Hunt the card', model: 'claude-haiku-5-5', tokens: 10, startTime: i.now, status: 'running', hunt: true }];
+  const rows = strip(toAnsi(renderCard(buildView(i), { width: 115 }), 'dark', 115)).split('\n');
+  assert.match(rows.at(-1), /^→ Hunt the card/);
+});
+
+test("a tight card with the round's probes keeps to its room and never gets shorter as its room grows", () => {
+  const agents = ['a', 'b', 'c', 'd'].map(id => [id, 'Hunt part ' + id, null, probe]);
+  for (const frame of [true, false]) for (const folded of [false, true]) {
+    const free = huntCard(agents, { frame, folded }).length;
+    let before = 0;
+    for (let maxRows = 1; maxRows <= free + 1; maxRows++) {
+      const rows = huntCard(agents, { frame, folded, maxRows });
+      assert.ok(rows.length >= before, `${maxRows}, frame ${frame}, folded ${folded}`);
+      if (maxRows >= 8) assert.ok(rows.length <= maxRows, `${maxRows} allowed, ${rows.length} drawn, frame ${frame}, folded ${folded}\n${rows.join('\n')}`);
+      before = rows.length;
+    }
+  }
 });

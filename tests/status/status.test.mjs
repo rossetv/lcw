@@ -307,6 +307,19 @@ test('a clipped model or repo ends in one ellipsis', () => {
   }
 })
 
+test('the pace reads "over pace" or "spare" with no sign', () => {
+  const row2 = (used) => toAnsi(renderStatusRows({ model: 'Opus 5', contextPercent: 10, weekUsedPercent: used, weekElapsedPercent: 50, markPercent: 75 }, { width: 100 }), 'dark', 100).replace(/\x1b\[[0-9;]*m/g, '').split('\n')[1]
+  assert.match(row2(80), /60% over pace$/)
+  assert.match(row2(20), /60% spare$/)
+  assert.doesNotMatch(row2(80) + row2(20), /[+-]\d+%/)
+})
+
+test('where the row is short the effort goes before the model name is clipped', () => {
+  const first = (width) => toAnsi(renderStatusRows({ model: 'Haiku 5.5', effort: 'low', contextPercent: 38, contextWindow: '1M', weekUsedPercent: 40, weekElapsedPercent: 50, markPercent: 75 }, { width }), 'dark', width).replace(/\x1b\[[0-9;]*m/g, '').split('\n')[0]
+  for (const width of [20, 22, 25]) assert.match(first(width), /^Haiku 5\.5\b(?!…)/, width + ' columns')
+  assert.match(first(100), /^Haiku 5\.5 · low/)
+})
+
 test('the diff counts a branch from where it left main, with uncommitted edits and new files; on main only what is not committed', () => {
   const repo = makeRepo()                     // main: a.txt with one line
   const home = tmp('home')
@@ -352,7 +365,7 @@ test('the diff column stands at the right edge of both rows, and gives way befor
   const plain = (i, width) => toAnsi(renderStatusRows(i, { width }), 'dark', width).replace(/\x1b\[[0-9;]*m/g, '').split('\n')
   const rows = plain({ ...input, diff: { added: 23232, removed: 3231 } }, 112)
   assert.ok(rows[0].endsWith('lcw · lcw/status-line-diff │ +23.2k'), rows[0])
-  assert.ok(rows[1].endsWith('+58% spare │  −3.2k'), rows[1])
+  assert.ok(rows[1].endsWith('58% spare │  −3.2k'), rows[1])
   assert.ok(rows.every((r) => [...r].length === 112))
   assert.deepEqual(plain({ ...input, diff: { added: 0, removed: 0 } }, 112), plain(input, 112), 'no change, no column')
   const long = { ...input, branch: 'feature/add-retry-policy-for-uploads', diff: { added: 86, removed: 12 } }

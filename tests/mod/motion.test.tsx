@@ -136,3 +136,23 @@ test('a theme changed while the card is paused redraws it once, in the new colou
   expect([...now]).not.toContain(hex('dark', 'text'))
   await band.unmount()
 })
+
+// The dimmest green on the card: it moves with the fade and then the beat.
+const pulseLevel = async (band: any) => Math.min(...(await band.findAll({ type: 'Text' })).map((t: any) => String(t.props.color ?? ''))
+  .filter((c: string) => /^#/.test(c)).map((c: string) => [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16))).filter(([r, g, b]: number[]) => g > r && g > b).map(([, g]: number[]) => g))
+
+for (const lead of [3300, 3500, 3700]) {
+  test(`the slow pulse of a card that has just stopped working starts near where the fast fade stood (${lead} ms in)`, async ($, on) => {
+    const list = [agent('running')]
+    const w = engine(on, {}, list)
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+    const band = await $.ui.mount(BAND)
+    await w.advance(lead)
+    const levels = [await pulseLevel(band)]
+    list[0].status = 'waiting'
+    for (let i = 0; i < 12; i++) { await w.advance(100); levels.push(await pulseLevel(band)) }
+    // a step of the fade or the beat moves the level by about 37; the pace changing must not move it by more
+    expect(Math.max(...levels.slice(1).map((l, i) => Math.abs(l - levels[i])))).toBeLessThanOrEqual(40)
+    await band.unmount()
+  })
+}

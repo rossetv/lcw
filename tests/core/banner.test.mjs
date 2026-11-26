@@ -341,7 +341,6 @@ test('the approval box draws its replies in a column, Go variants on one row, ev
   }
   const long = bannerFor(approving({ go: ['Go with wrapped rows', 'Go with short rows!!', 'Go with no rows at a'], at: 5 }))
   for (const cols of [44, 74, 100]) for (const row of bannerRows(long, cols, true)) assert.equal(cells(row), cols, 'long labels at ' + cols)
-  assert.deepEqual(bannerRows(long, 44, true), [], 'buttons that cannot fit draw no box')
   const lone = bannerRows(bannerFor(approving()), 74, true).flatMap((r) => r.filter((s) => s.id))
   assert.equal(new Set(lone.map((s) => [...s.t].length)).size, 1, 'a lone Go is as wide as the grey buttons')
   const rows = bannerRows(b, 74, true)
@@ -533,4 +532,46 @@ test('Later on one answer box leaves the other: each is put off by itself', () =
   // a newer ask of its kind brings its box back
   const newer = { ...LOOK, n: 3, at: LOOK.at + 60000, text: 'And the empty state?' }
   assert.equal(bannerFor({ ...facts, run: { ...facts.run, asks: [LOOK, newer] }, dismissed: new Set(['answer:' + offered.key]) })?.forYou, true)
+})
+
+const buttonsOf = (rows) => rows.flat().filter((s) => s.id)
+const sharp = (rows, cols, what) => { for (const r of rows) assert.equal(cells(r), cols, what); }
+
+test('an approval box whose Go buttons do not fit one row stacks them, never drawing nothing', () => {
+  const b = bannerFor(approving({ go: ['Go with wrapped rows', 'Go with short rows!!', 'Go with no rows at a'], at: 5, recommend: 2 }))
+  for (const cols of [44, 60, 74, 90]) for (const tight of [false, true]) {
+    const rows = bannerRows(b, cols, true, tight)
+    sharp(rows, cols, `at ${cols}`)
+    assert.deepEqual(buttonsOf(rows).map((s) => s.id).filter((id) => /go\d/.test(id)), ['banner:approve:go1', 'banner:approve:go2', 'banner:approve:go3'], `at ${cols}`)
+    assert.deepEqual(filled(rows), ['banner:approve:go2'], `at ${cols}`)
+  }
+  const stacked = buttonsOf(bannerRows(b, 44, true)).map((s) => len(s.t))
+  assert.equal(new Set(stacked).size, 1, 'one width for every stacked button')
+})
+
+test('the top border never outruns the box, whatever the tag, in both forms', () => {
+  const q = bannerFor({ run: sweepWith({ ...QUESTION, recommend: 'a' }), now: 0 })
+  for (let cols = 32; cols <= 100; cols++) for (const form of [q, { ...q, choices: undefined, lines: [] }]) {
+    const rows = bannerRows(form, cols, true)
+    if (rows.length) sharp(rows, cols, `at ${cols}`)
+  }
+})
+
+test("the question box's short form clips a long label, pads and spaces its stacked buttons and keeps the tag and the note", () => {
+  const long = 'Answer with the whole of the long sentence the option carries'
+  const q = bannerFor({ run: sweepWith({ ...QUESTION, recommend: 'b', options: [{ key: 'a', label: long, meaning: 'm' }, { key: 'b', label: 'Keep', meaning: 'm' }] }), now: 0 })
+  const short = { ...q, choices: undefined, lines: [] }
+  for (const cols of [30, 36, 44, 60]) {
+    const rows = bannerRows(short, cols, true)
+    sharp(rows, cols, `at ${cols}`)
+    const text = rows.map((r) => r.map((s) => s.t).join('')).join('\n')
+    assert.match(rows[0].map((s) => s.t).join(''), /◆ LCW Sweep/, `tag at ${cols}`)
+    if (cols >= 36) assert.match(text, /Saved for the next wave|Saved for/, `note at ${cols}`)
+    assert.deepEqual(filled(rows), ['banner:question:b'], `recommended at ${cols}`)
+  }
+  const rows = bannerRows(short, 60, true)
+  const buttons = buttonsOf(rows)
+  assert.equal(new Set(buttons.map((s) => len(s.t))).size, 1, 'one width')
+  const at = (id) => rows.findIndex((r) => r.some((s) => s.id === id))
+  assert.equal(cells(rows[at(buttons[1].id) - 1].slice(1, -1).filter((s) => s.t.trim())), 0, 'a blank row between')
 })

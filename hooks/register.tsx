@@ -8,7 +8,7 @@ import {
 import { bannerFor, bannerRows, limitsShort } from '../lib/banner.mjs'
 import type { Banner, BannerFacts } from '../lib/banner.mjs'
 import { moneyFrom, readingOf, spendFileCounts } from '../lib/spend.mjs'
-import { buildView, foldKey, renderCard } from '../lib/card.mjs'
+import { buildView, foldKey, roundFoldKey, renderCard } from '../lib/card.mjs'
 import { hex, thresholds as TH } from '../lib/theme.mjs'
 import { mergeUsage } from '../lib/usage.mjs'
 import { atMark, stopTexts, toldFile } from '../lib/mark.mjs'
@@ -18,11 +18,11 @@ import type { QuotaView } from '../lib/quota.mjs'
 import {
   addTotals, addUsage, buttons, carryDue, carryFailed, carryPrompt, completionPrompt, countsTurn, compactInstructions, cardMotion, cardPace, gateFor, isShown, layout, measureStep,
   longNudges, nudgeable, quietCounts, reopenDue, reopenPrompt, replacesGate, resumePrompt, sittingPrompt, sittingWaves, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, usdWakePrompt,
-  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, briefOf,
+  wakeable, wakeDue, wakePrompt, quotaWakeEvidence, quotaBilling, gateIdentity, waveOfBrief, isHuntBrief, briefOf,
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Sat, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
-  AWAKE_EVERY_MS, RUNS_EVERY_MS, awakeApplies, awakeCheckWanted, claudeCommand, dismissKeys, markSpell, pressPlan, proxyQuotaEndpoint, proxyQuotaHost, runFact, said, sameBox, spendFailingFact,
+  AWAKE_EVERY_MS, RUNS_EVERY_MS, awakeApplies, awakeCheckWanted, claudeCommand, dismissKeys, markSpell, pressPlan, ringKey, proxyQuotaEndpoint, proxyQuotaHost, runFact, said, sameBox, spendFailingFact,
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue, weeklyIdle,
 } from './boxes.mjs'
 import type { Plan, RunSeen } from './boxes.mjs'
@@ -39,6 +39,7 @@ const UNFOCUS_MS = 300
 // What a reload of this code must not start over; a new tag makes a reload read what older code kept as absent.
 const KEPT = 'kept-1'
 const keptDismissed = atom({ plugin: 'lcw', key: 'dismissed' } as const, [], { shape: KEPT })
+const keptRung = atom({ plugin: 'lcw', key: 'rung' } as const, [] as string[], { shape: KEPT })
 const keptReplied = atom({ plugin: 'lcw', key: 'repliedAt' } as const, 0, { shape: KEPT })
 const keptTold = atom({ plugin: 'lcw', key: 'told' } as const, {}, { shape: KEPT })
 const keptNudged = atom({ plugin: 'lcw', key: 'nudged' } as const, {}, { shape: KEPT })
@@ -79,6 +80,9 @@ const S = {
   // The run whose mod-alive this process last wrote, and when.
   alive: { runDir: '', at: 0 },
   shownSince: 0,
+  // The tick of the fast fade last seen, which the slow pulse starts from when the pace slows; unset until the fade has run.
+  fadeTick: undefined as number | undefined,
+  fading: false,
   dirty: false,
   // What the card last showed (its view, as text, and its mode), and the step of its motion last drawn ('' still).
   shows: '',
@@ -105,6 +109,8 @@ const S = {
   // The banner pinned above the card until the person picks an option; dismissed is Not now, for this session
   // ('kind:key', or the bare kind of the three old boxes); answerFill the asks Answer now could not put in the prompt.
   banner: { shown: null as Banner | null, dismissed: new Set<string>(), answerFill: '' },
+  // The boxes that have rung the terminal, newest last: each occurrence rings once, whatever redraws or reloads follow.
+  rung: [] as string[],
   // A person can see the session: a person at the prompt (isInteractive) or a surface attached, such as the desktop
   // app driving it through the SDK. Without either (a -p run, or an app that left): no box, no weekly check, no setting changed.
   interactive: false,
@@ -185,6 +191,11 @@ function keepDismissed($: EngineInterface) {
   if (changed('dismissed', dismissed)) void update($, keptDismissed, () => dismissed).catch(unkept('dismissed'))
 }
 
+function keepRung($: EngineInterface) {
+  const rung = S.rung
+  if (changed('rung', rung)) void update($, keptRung, () => rung).catch(unkept('rung'))
+}
+
 function keepReplied($: EngineInterface) {
   const at = S.repliedAt
   if (changed('repliedAt', at)) void update($, keptReplied, () => at).catch(unkept('repliedAt'))
@@ -198,11 +209,13 @@ function keepNotices($: EngineInterface) {
 }
 
 // An agent's brief says which wave it works for, and only its launch shows the brief: the wave is kept from there, by
-// the id the launch answered. An agent that one of a wave's agents starts works for that wave too.
+// the id the launch answered. An agent that one of a wave's agents starts works for that wave too. A hunt probe, whose
+// brief names the latest-work worktree, is kept as wave 0, which no wave is.
 const MAX_WAVES_KEPT = 400
 function noteLaunch($: EngineInterface, e: { prompt?: unknown; description?: unknown; parentAgentId?: string; resume?: unknown }, id: unknown) {
   if (e.resume || typeof id !== 'string' || !id || S.waves[id] !== undefined || !S.run?.state?.sweep) return
-  const wave = waveOfBrief(e.prompt, e.description, S.run.state.name) ?? (e.parentAgentId ? S.waves[e.parentAgentId] : undefined)
+  const name = S.run.state.name
+  const wave = waveOfBrief(e.prompt, e.description, name) ?? (e.parentAgentId ? S.waves[e.parentAgentId] : undefined) ?? (isHuntBrief(e.prompt, name) ? 0 : undefined)
   if (wave != null) keepWave($, id, wave)
 }
 
@@ -232,7 +245,8 @@ async function recallWaves($: EngineInterface, sweep: string, agents: readonly {
     const head = S.agentLogs ? await $.fs.read(`${S.agentLogs}/agent-${a.id}.jsonl`, { length: BRIEF_BYTES }).catch(() => null) : null
     // read: asked for good, whatever it says; not read: tried again at a later look
     S.waveAsked[a.id] = head === null ? (S.waveAsked[a.id] ?? 0) + 1 : WAVE_TRIES
-    const wave = head === null ? null : waveOfBrief(briefOf(head), a.description, sweep) ?? (a.parentId ? S.waves[a.parentId] : undefined)
+    const brief = head === null ? '' : briefOf(head)
+    const wave = head === null ? null : waveOfBrief(brief, a.description, sweep) ?? (a.parentId ? S.waves[a.parentId] : undefined) ?? (isHuntBrief(brief, sweep) ? 0 : undefined)
     if (wave != null) keepWave($, a.id, wave)
   }
 }
@@ -263,6 +277,7 @@ async function restore($: EngineInterface) {
     const [dismissed, repliedAt, told, nudged, carry, session, completion, owed] = await Promise.all([
       read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(), read($, keptCompletion), read($, keptOwed),
     ])
+    S.rung = [...new Set([...(await read($, keptRung)), ...S.rung])]
     S.waves = { ...(await read($, keptWaves)), ...S.waves }
     if (!S.sat.run) S.sat = await read($, keptSat)
     for (const k of dismissed) S.banner.dismissed.add(k)
@@ -276,6 +291,7 @@ async function restore($: EngineInterface) {
   } catch {}
   S.restored = true
   keepDismissed($)
+  keepRung($)
   keepReplied($)
   keepNotices($)
   keepCarry($)
@@ -674,6 +690,8 @@ async function refresh($: EngineInterface) {
   const aliveAt = firstSight && run ? Number(await readText($, run.paths.modAlive)) : 0
   if (!S.run || S.run.runDir !== run?.runDir) {
     S.shownSince = now
+    S.fadeTick = undefined
+    S.fading = false
     S.totals = (run && (await readJson($, totalsFile(run.runDir)))) || {}
     S.totalsChanged = false
     S.quiet = null
@@ -723,7 +741,10 @@ async function pollAgents($: EngineInterface) {
   const sweep = run.state?.sweep ? run.state.name : null
   if (sweep) await recallWaves($, sweep, tracked.agents).catch(() => {})
   // An agent whose brief could not be read may still say its wave in its description.
-  S.agents = sweep ? tracked.agents.map((a) => ({ ...a, wave: S.waves[a.id] ?? waveOfBrief('', a.description, sweep) ?? undefined })) : tracked.agents
+  S.agents = sweep ? tracked.agents.map((a) => {
+    const wave = S.waves[a.id] ?? waveOfBrief('', a.description, sweep) ?? undefined
+    return { ...a, wave: wave || undefined, hunt: wave === 0 }
+  }) : tracked.agents
   S.seen = tracked.seen
   noteCard(now)
   // The mascot beside the status rows shows trouble with agents. It cannot ask the mod, so the count of quiet
@@ -883,6 +904,17 @@ async function readBanner($: EngineInterface) {
   S.facts = facts
   const shown = bannerFor(facts)
   if (JSON.stringify(shown) !== JSON.stringify(S.banner.shown)) { S.banner.shown = shown; S.dirty = true }
+}
+
+// A box that waits on the person rings the terminal, through their own notification channel, the first time it
+// is drawn; never before what an earlier copy of this code rang is read back.
+const RUNG_HELD = 50
+function ring($: EngineInterface, shown: Banner | null) {
+  const key = ringKey(shown)
+  if (!key || !S.restored || S.rung.includes(key)) return
+  S.rung = [...S.rung, key].slice(-RUNG_HELD)
+  keepRung($)
+  void $.ui.notify(shown!.title).catch(() => {})
 }
 
 // The facts that cost a process or a walk over the repository's runs, each at its own pace, and the weekly check.
@@ -1116,7 +1148,7 @@ async function fillReply($: EngineInterface, text: string, setup?: Banner) {
         await refresh($).catch(() => {})
         const facts = await gather($, await $.clock.now())
         if (!sameBox(setup, S.interactive ? bannerFor(facts) : null, 'setup') || !facts.proxyQuota?.canSetup || watch?.changed || S.turnRunning || S.compacting || S.carry || S.owed) {
-          $.ui.toast('The draft, connection or session controls changed. Nothing was filled; try setup again when this session is idle.')
+          $.ui.toast('The draft, connection or session controls changed. Nothing was filled; try setup again when this session is idle.', { timeoutMs: 10000 })
           return false
         }
         if (pass === 0) typed = await draft($)
@@ -1151,7 +1183,7 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
   // A prompt still owed to the run (a reopen, a resume) is sent with it, not dropped for it.
   if (plan.owe && S.run) owe($, S.run.runDir, S.owed?.runDir === S.run.runDir ? S.owed.text + '\n\n' + plan.owe : plan.owe, 0)
   if (plan.prompt) {
-    if (!(await submit($, plan.prompt))) return $.ui.toast(plan.promptFailed ?? 'Clear the prompt or wait for the turn to end, then press it again.')
+    if (!(await submit($, plan.prompt))) return $.ui.toast(plan.promptFailed ?? 'Clear the prompt or wait for the turn to end, then press it again.', { timeoutMs: 10000 })
   }
   if (plan.notices) {
     const file = noticesFile(await lcwHome($))
@@ -1187,7 +1219,7 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
 async function pressBanner($: EngineInterface, id: string, drawn: Banner | null) {
   const [, kind = '', option = ''] = id.split(':')
   if (!drawn || drawn.kind !== kind) return
-  if (S.pressing) return $.ui.toast('LCW is still on the last button you pressed.')
+  if (S.pressing) return $.ui.toast('LCW is still on the last button you pressed.', { timeoutMs: 10000 })
   S.pressing = true
   let later = false
   try {
@@ -1198,7 +1230,7 @@ async function pressBanner($: EngineInterface, id: string, drawn: Banner | null)
     if (!sameBox(drawn, fresh, option)) {
       S.banner.shown = fresh
       S.dirty = true
-      return $.ui.toast('That box changed before the click, so nothing was done.')
+      return $.ui.toast('That box changed before the click, so nothing was done.', { timeoutMs: 10000 })
     }
     const plan = pressPlan(fresh, option, facts, {
       root: $.plugin.root, sessionId: await $.session.id(), repoKey: S.repoKey ?? undefined,
@@ -1442,7 +1474,12 @@ async function start($: EngineInterface) {
   // The one place that redraws: when something changed, or the card's motion has come to its next step.
   $.clock.every(100, () => void (async () => {
     const pace = S.run && !S.collapsed ? cardPace(S.mode, working()) : 0
-    const step = pace ? stepAt(pace, await $.clock.now()) : ''
+    const at = pace ? await $.clock.now() : 0
+    const step = pace ? stepAt(pace, at) : ''
+    // The fade's tick, kept to the moment the pace slows. The pulse counts its seconds on the card's clock, so the tick is
+    // taken to the start of the second the slow pace begins in.
+    if (pace && pace < 1000) { S.fadeTick = cardMotion(pace, S.shownSince, at).tick; S.fading = true }
+    else if (pace && S.fading) { S.fading = false; if (S.fadeTick !== undefined) S.fadeTick = Math.max(S.fadeTick, 10 * (cardMotion(pace, S.shownSince, at).beat ?? 0)) }
     if (!S.dirty && step === S.step) return
     S.dirty = false
     S.step = step
@@ -1658,10 +1695,11 @@ export const register: Register = (on) => {
         const pace = S.collapsed ? 0 : cardPace(view.mode, working())
         S.step = stepAt(pace, now)
         const { tick, beat } = pace ? cardMotion(pace, S.shownSince, now) : { tick: undefined, beat: undefined }
+        const beatFrom = beat === undefined ? undefined : S.fadeTick
         // The mark box offers the raises and the answer box shows asks (an ask with options alone), so the card does not say them again,
         // unless the box waits for room.
         const draw = (maxRows: number, boxed: boolean) => {
-          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, beat, hideMarkHint: boxed && shown?.kind === 'mark', asksInBox: boxed && shown?.kind === 'answer' && !shown.forYou ? (shown.askN === undefined ? view.asks.map((a: any) => a.n) : [shown.askN]) : undefined }
+          const opts = { width: cols, maxRows, theme: S.theme, frame: true, tick, beat, beatFrom, hideMarkHint: boxed && shown?.kind === 'mark', asksInBox: boxed && shown?.kind === 'answer' && !shown.forYou ? (shown.askN === undefined ? view.asks.map((a: any) => a.n) : [shown.askN]) : undefined }
           return renderCard(view, opts)
         }
         const boxed = drawn.length > 0 && (shown?.kind === 'mark' || shown?.kind === 'answer')
@@ -1691,6 +1729,7 @@ export const register: Register = (on) => {
       // never chose. So when the box drawn changes, the band is drawn for a moment with no buttons at all, which makes
       // the engine let the focus go; ctrl+x Tab takes it again. A box drawn where none was moves no focus.
       const boxNow = banner.length ? shown!.kind + ':' + shown!.key : ''
+      if (banner.length) ring($, shown)
       if (boxNow !== S.drawnBox) {
         if (S.drawnBox) S.unfocusUntil = now + UNFOCUS_MS
         S.drawnBox = boxNow
@@ -1718,6 +1757,10 @@ export const register: Register = (on) => {
           const wave = foldKey(run?.state.id, Number(id.slice(5)))
           if (S.ui.folded[wave]) delete S.ui.folded[wave]
           else S.ui.folded[wave] = true
+        } else if (id.startsWith('round:')) {
+          const round = roundFoldKey(run?.state.id, Number(id.slice(6)))
+          if (S.ui.folded[round]) delete S.ui.folded[round]
+          else S.ui.folded[round] = true
         } else if (id === 'more') S.ui.moreOpen = !S.ui.moreOpen
         S.dirty = true
       }

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { DEFAULT_CAP_USD } from '../../lib/spend.mjs'
 import { dollars } from '../../lib/format.mjs'
 import {
-  LEARN_TEXT, awakeApplies, awakeCheckWanted, SHOWN_WITHIN_MS, claudeCommand, markSpell, dismissKeys, discussPrompt, fixSpendPrompt, nextStepOf, pressPlan, resumePrompt, runFact, sameBox,
+  LEARN_TEXT, awakeApplies, awakeCheckWanted, SHOWN_WITHIN_MS, claudeCommand, markSpell, dismissKeys, discussPrompt, fixSpendPrompt, nextStepOf, pressPlan, resumePrompt, ringKey, runFact, sameBox,
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue,
 } from '../../hooks/boxes.mjs'
 import { bannerFor, openWaves } from '../../lib/banner.mjs'
@@ -85,6 +85,29 @@ test('a raise with no run only sets the mark and resumes nothing', () => {
   const plan = press(facts, 'r100')
   assert.deepEqual(argvs(plan), ['mark 100 --session s1'])
   assert.equal(plan.prompt, undefined)
+})
+
+test('a raise with no run says the new mark in a sentence, as a share of the week or in dollars', () => {
+  assert.equal(press({ now: NOW, usage: { usedPercent: 80, markPercent: 75, atMark: true } }, 'r100').toast, 'This session now runs up to 100% of the week.')
+  const money = { now: NOW, billing: 'payg', usage: { spentUsd: 3050, capUsd: 4000, markUsd: 3000, atMark: true } }
+  assert.equal(press(money, 'r90').toast, `This session now runs up to ${dollars(3600)}.`)
+})
+
+test('Keep it awake says what it did, in a sentence', () => {
+  const awake = pressPlan({ kind: 'awake', key: 'r1:T', options: [['keep', 'Keep it awake'], ['never', 'Never']] }, 'keep', {}, CTX)
+  assert.deepEqual(argvs(awake), ['awake --session s1'])
+  assert.match(awake.toast, /^LCW keeps this computer awake .*\.$/)
+})
+
+test('only a box that waits on a choice from the person rings, once per occurrence', () => {
+  const mark = bannerFor({ now: NOW, run: runFact(pausedRun), usage: { usedPercent: 76, markPercent: 75, resetsAt: '2026-11-22T14:00:00Z' } })
+  assert.equal(ringKey(mark), 'mark:' + mark.key)
+  const later = bannerFor({ now: NOW, run: runFact({ ...pausedRun, pausedAt: '2026-11-21T03:00:00Z' }), usage: { usedPercent: 76, markPercent: 75, resetsAt: '2026-11-22T14:00:00Z' } })
+  assert.notEqual(ringKey(later), ringKey(mark), 'a later pause at the mark is a new occurrence')
+  assert.equal(ringKey({ kind: 'mark', key: 'q', options: [['wait', 'Wait']] }), null, 'a box that offers only waiting asks nothing')
+  for (const kind of ['question', 'approve', 'answer']) assert.equal(ringKey({ kind, key: 'k', options: [['a', 'A'], ['later', 'Later']] }), kind + ':k')
+  for (const kind of ['guide', 'cleanup', 'unfinished', 'awake', 'update']) assert.equal(ringKey({ kind, key: kind, options: [['a', 'A']] }), null, kind)
+  assert.equal(ringKey(null), null)
 })
 
 test('a button the box does not offer does nothing', () => {
