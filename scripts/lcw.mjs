@@ -22,10 +22,17 @@ import { noteQuotaSession, readSessionQuota, quotaUsage, quotaLine, sessionBilli
 
 class Fail extends Error {}
 const fail = (msg) => { throw new Fail(msg) }
+// the process refusals --bypass went past in this call, which change() writes to the ledger
+const passed = []
+/** A refusal of LCW's process, not of what cannot work: with --bypass "<why>" it is recorded and the command goes on. */
+const block = (msg) => {
+  if (flags.bypass === undefined) fail(`${msg} If this rule is wrong here (not standard LCW): add --bypass "<why>".`)
+  passed.push(msg.replace(/ Nothing was changed\.$/, ''))
+}
 // "now" is LCW_NOW (epoch ms) when it is set, else the clock, so tests can fix midnight and 08:00
 const now = () => (Number.isFinite(Number(process.env.LCW_NOW)) && process.env.LCW_NOW !== '' ? Number(process.env.LCW_NOW) : Date.now())
 
-// flags each command takes (all take a value); --session is accepted everywhere
+// flags each command takes (all take a value); --session and --bypass are accepted everywhere
 const COMMAND_FLAGS = {
   start: ['title', 'shape'], task: ['model', 'effort', 'wave'], req: ['wave'], set: ['wave'], stage: ['wave'], ledger: ['wave'], ask: ['waiting', 'wave', 'a', 'b', 'c', 'recommend'],
   approval: ['meaning', 'recommend'], finish: ['pr', 'branch'], stop: ['pr'],
@@ -59,12 +66,13 @@ req <id> rename "<name>" and req <id> drop change a requirement when what is bui
 approval ["<Go label>" ...] [--meaning "<what Go builds>"] [--recommend <n>] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. With several Go labels, --recommend <n> is needed: the one Claude recommends, which the box draws in pink. Asked again, it replaces the last; a new stage clears it.
 take <runId> makes this session take over a run of this repository that no session has shown for 15 minutes; abandon <runId> stops such a run for good and removes its worktree when nothing in it is uncommitted, keeping its branch.
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
-flags: --session <id> (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --no-wait --wave --a --b --c --recommend; approval --meaning --recommend; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; merge --wait; where --json; awake --check
+flags: --session <id> (any command); --bypass "<why>" (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --no-wait --wave --a --b --c --recommend; approval --meaning --recommend; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; merge --wait; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
 quota-command <endpoint> <command line> sets an external weekly subscription source for sessions whose ANTHROPIC_BASE_URL matches that endpoint; quota-command alone inspects it, quota-command off disables it. Quote the command as one argument for shell syntax; a final --session <id> is not part of it. Keep credentials out of command text. Setup requires a successful v:1 quota JSON reading within 30 seconds; failed setup leaves the prior setting intact. Refreshes are shared every 5 minutes; failed, refused or expired readings hold new work, never supply dollar estimates. The source is account-wide, not this machine's spend.
 ask "<question>" [--waiting N] [--wave N] puts a question to the person in LCW's box, answered by number in plain words; ask "<what you want from them>" --no-wait does the same for something nothing waits on (a look at a mock, a try on their own device): no wave or task is held, and the card marks it until answer <n>; with --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> its options are buttons too, the recommended one drawn in pink, and a press records the answer as answer <n> "<label>: <meaning>" does.
 question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> puts a short question to the person in LCW's box, in a sweep, the recommended option drawn in pink; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
 checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>" ["<next step>"]; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
+--bypass "<why>" goes past a refusal of LCW's process, one that names the flag, and writes "BYPASS, not standard LCW: <why>; went past: <refusal>" to the ledger for the person to review; the usage mark, approval and what cannot work never give way.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
 const refuse = (msg) => { console.log(msg); process.exit(1) }
 // an error says what went wrong in a line; the whole help is for lcw help
@@ -88,9 +96,9 @@ for (let i = 0; i < (spendWords || quotaWords ? 0 : argv.length); i++) {
   // a flag may come with its value in the same word, as --wave=2, or as "--wave 2" from a shell variable that was not split
   const [, name, joined] = /^--([a-z]+(?:-[a-z]+)*)(?:[=\s]\s*([\s\S]*))?$/.exec(a) ?? []
   if (name && switches.includes(name) && joined === undefined) flags[name] = true
-  else if (name && (name === 'session' || allowed.includes(name))) {
+  else if (name && (name === 'session' || name === 'bypass' || allowed.includes(name))) {
     const next = /^--([a-z]+(?:-[a-z]+)*)(?:=|$)/.exec(argv[i + 1] ?? '')?.[1]
-    if (joined === undefined && (i + 1 >= argv.length || (next && (next === 'session' || allowed.includes(next) || switches.includes(next))))) refuse(`${a} needs a value`)
+    if (joined === undefined && (i + 1 >= argv.length || (next && (next === 'session' || next === 'bypass' || allowed.includes(next) || switches.includes(next))))) refuse(`${a} needs a value`)
     flags[name] = joined === undefined ? argv[++i] : joined.trim()
   } else if (a === '-h' || a === '--help') help()
   else {
@@ -102,6 +110,10 @@ for (let i = 0; i < (spendWords || quotaWords ? 0 : argv.length); i++) {
 }
 const [command, ...rest] = quotaWords ? ['quota-command', ...quotaWords] : spendWords ? ['spend-command', ...spendWords] : args
 if (command === 'help') help()
+if (flags.bypass !== undefined) {
+  flags.bypass = String(flags.bypass).replace(/\s+/g, ' ').trim()
+  if (!flags.bypass) refuse(`--bypass needs the reason this run leaves standard LCW, as --bypass "<why>", for the person to review. ${SEE_HELP}`)
+}
 if (argv[0] !== command && argv.length) refuse(`The command must come first, as in "lcw status --session <id>". ${SEE_HELP}`)
 const sessionId = flags.session || process.env.CLAUDE_CODE_SESSION_ID || null
 const cwd = process.cwd()
@@ -114,6 +126,7 @@ const weekLine = (usage) => (usage?.sevenDay ? `week: ${usage.sevenDay.percentUs
 /**
  * Change the state, save it atomically, note it in the ledger. A run that starts running notes since when; one that
  * stops being 'running' (pauses, goes back to the person, finishes or stops) lets the computer sleep again.
+ * Each process refusal --bypass went past gets a BYPASS line beside the note, for the person to review.
  */
 function change(run, note, fn, wave) {
   mustHoldLock()
@@ -123,7 +136,13 @@ function change(run, note, fn, wave) {
   if (s.status === 'running' && was !== 'running') s.runningSince = new Date(now()).toISOString()
   if (s.status !== 'running') releaseHold(run.dir)
   save(run.paths, s)
-  appendLedger(run.paths, note, wave === undefined ? ledgerWave(s) : wave)
+  const about = wave === undefined ? ledgerWave(s) : wave
+  appendLedger(run.paths, note, about)
+  for (const refusal of passed.splice(0)) {
+    const line = `BYPASS, not standard LCW: ${flags.bypass}; went past: ${refusal}`
+    appendLedger(run.paths, line, about)
+    out(line)
+  }
 }
 
 const find = (list, key, value) => list.find((x) => x[key] === value) || fail(`No such item: ${value}`)
@@ -428,7 +447,9 @@ const commands = {
     moveOldWave(run.state) // shown as it will be saved by the next command that changes the run
     const s = run.state
     const p = run.paths
-    const ledger = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean).slice(-15)
+    const lines = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean)
+    const ledger = lines.slice(-15)
+    const bypasses = lines.filter((l) => l.includes(' BYPASS, not standard LCW: ')).length
     const money = readMoney({ sessionId: s.driver ?? sessionId, now: now() })
     const quota = readSessionQuota(s.driver ?? sessionId, now(), driverMark(s))
     out(
@@ -436,6 +457,7 @@ const commands = {
       `stage: ${s.stage}  status: ${s.status}${s.pausedReason ? ` (${s.pausedReason})` : ''}  health: ${s.health}`,
       `mark: ${money ? moneyMark(money) : `${driverMark(s)}%`}${s.worktree ? `  worktree: ${s.worktree}  branch: ${s.branch}` : ''}${s.base ? `  base: ${s.base}` : ''}`,
       ...(quota ? [quotaLine(quota), ...(quota.hold ? ['new work held'] : [])] : []),
+      ...(bypasses ? [`bypasses: ${bypasses}`] : []),
       'tasks:', ...(s.tasks.length ? s.tasks.map((t) => `  ${t.id} [${t.status}] ${t.title}`) : ['  none']),
       'asks:', ...(s.asks.length ? s.asks.map((a) => `  ${a.n}. ${a.text}${a.wave ? ` (wave ${a.wave})` : ''}${a.nowait ? ' (nothing waits on it)' : ''}`) : ['  none']),
       ...((s.questions ?? []).length ? ['questions (lcw question):', ...s.questions.map(questionLine)] : []),
@@ -470,12 +492,12 @@ const commands = {
         if (still.length) return out(`${stands}; no new round was started. The round that follows this early one starts once ${still.length > 1 ? 'waves' : 'wave'} ${still.map((x) => x.n).join(', ')} ${still.length > 1 ? 'hold' : 'holds'} in Ship`)
       }
       const queued = run.state.sweep.waves.filter((x) => x.status === 'queued')
-      if (queued.length) fail(`Waves ${queued.map((x) => x.n).join(', ')} are still queued; a new hunt starts once none is. Nothing was changed.`)
+      if (queued.length) block(`Waves ${queued.map((x) => x.n).join(', ')} are still queued; a new hunt starts once none is. Nothing was changed.`)
       const unbuilt = openWaves(run.state).filter((x) => x.status === 'running' && !isBuilt(x))
-      if (unbuilt.length) fail(`${unbuilt.length > 1 ? 'Waves' : 'Wave'} ${unbuilt.map((x) => `${x.n} (${x.stage})`).join(', ')} ${unbuilt.length > 1 ? 'are' : 'is'} still being planned or built; a new hunt starts once every open wave is built and in Review. Nothing was changed.`)
+      if (unbuilt.length) block(`${unbuilt.length > 1 ? 'Waves' : 'Wave'} ${unbuilt.map((x) => `${x.n} (${x.stage})`).join(', ')} ${unbuilt.length > 1 ? 'are' : 'is'} still being planned or built; a new hunt starts once every open wave is built and in Review. Nothing was changed.`)
       if (!run.state.sweep.approvedAt) fail('The charter has not been put to the person yet: ask with lcw approval in Charter first. Nothing was changed.')
       const charter = `${run.dir}/charter.md`
-      if (!fs.existsSync(charter) || !fs.readFileSync(charter, 'utf8').trim()) fail('charter.md is empty: write the agreed charter there first. Nothing was changed.')
+      if (!fs.existsSync(charter) || !fs.readFileSync(charter, 'utf8').trim()) block('charter.md is empty: write the agreed charter there first. Nothing was changed.')
     }
     const latest = stage === 'Hunt' ? freshLatest(run.state, run.state.sweep.round + 1) : null
     // a round that starts while a wave is short of Ship reads code that wave's review may still change
@@ -1024,7 +1046,7 @@ const commands = {
       const sizes = words.map((x) => wholeNumber(x, 'A wave'))
       if (sizes.includes(0)) fail('A wave holds at least one fix. Nothing was changed.')
       const queued = w.waves.filter((x) => x.status === 'queued')
-      if (queued.length) fail(`${queued.length > 1 ? `Waves ${queued.map((x) => x.n).join(', ')} are` : `Wave ${queued[0].n} is`} already queued, and waves are added once none is. A fix found since whose files are free joins wave ${queued[0].n} in findings.md, so that it can start (lcw wave start); once it has started, lcw wave add queues the rest. Nothing was changed.`)
+      if (queued.length) block(`${queued.length > 1 ? `Waves ${queued.map((x) => x.n).join(', ')} are` : `Wave ${queued[0].n} is`} already queued, and waves are added once none is. A fix found since whose files are free joins wave ${queued[0].n} in findings.md, so that it can start (lcw wave start); once it has started, lcw wave add queues the rest. Nothing was changed.`)
       const first = w.waves.length + 1
       change(run, `waves queued: ${sizes.map((f, i) => `${first + i} (${f} fixes)`).join(', ')}`, (st) => {
         sizes.forEach((fixes, i) => st.sweep.waves.push({ n: first + i, fixes, status: 'queued', branch: null, pr: null, merged: false, dropped: 0 }))
@@ -1063,7 +1085,7 @@ const commands = {
     if (sub === 'files') return out(...changedFiles(s, openWaves(s)))
     if (sub === 'round') {
       const wave = mustRun(waveOf(s) || fail('No wave is open. Nothing was changed.'))
-      if (wave.stage !== 'Review') fail(`Wave ${wave.n} is in ${wave.stage}; a review round is raised in Review. Nothing was changed.`)
+      if (wave.stage !== 'Review') block(`Wave ${wave.n} is in ${wave.stage}; a review round is raised in Review. Nothing was changed.`)
       const to = words.length ? wholeNumber(words[0], 'lcw wave round') : (wave.round ?? 0) + 1
       if (to < 1) fail('A review round is 1 or more. Nothing was changed.')
       // a number at or under the round it is at puts a mistaken raise right, and starts no round
@@ -1075,21 +1097,21 @@ const commands = {
       const step = words.join(' ')
       if (!STEPS[step]) fail(`Usage: lcw wave step <${Object.keys(STEPS).join('|')}> [--wave n]`)
       const wave = mustRun(waveOf(s) || fail('No wave is open. Nothing was changed.'))
-      if (STEPS[step] !== true && wave.stage !== STEPS[step]) fail(`The step ${step} is in ${STEPS[step]}; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
+      if (STEPS[step] !== true && wave.stage !== STEPS[step]) block(`The step ${step} is in ${STEPS[step]}; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
       let checked = null
       // one wave's final checks at a time, in order: each earlier wave's have passed on the head it holds now, and this wave runs on all of them
       const earlier = openWaves(s).filter((x) => x.n < wave.n && x.status === 'running')
       const inOrder = (what) => {
         const before = earlier.find((x) => x.step !== 'merging' || tipOf(s, x) !== x.checked)
-        if (before?.step === 'merging') fail(`Wave ${before.n}'s head moved from ${before.checked} to ${tipOf(s, before)} after its final checks passed, so they do not count until they run again on its settled head; ${what} must wait for them. Nothing was changed.`)
-        if (before) fail(`Wave ${before.n}'s final checks have not passed yet (it is in ${before.stage}${before.step ? `, ${before.step}` : ''}); final checks run one wave at a time, in order. Nothing was changed.`)
-        if (!hasTakenIn(s, wave)) fail(notTakenIn(s, wave, what))
+        if (before?.step === 'merging') block(`Wave ${before.n}'s head moved from ${before.checked} to ${tipOf(s, before)} after its final checks passed, so they do not count until they run again on its settled head; ${what} must wait for them. Nothing was changed.`)
+        else if (before) block(`Wave ${before.n}'s final checks have not passed yet (it is in ${before.stage}${before.step ? `, ${before.step}` : ''}); final checks run one wave at a time, in order. Nothing was changed.`)
+        if (!hasTakenIn(s, wave)) block(notTakenIn(s, wave, what))
         const behind = lagging(s, wave)
-        if (behind) fail(`${behind.why}, so ${what} would pass on work that is not its own. ${behind.how}, then lcw wave take --wave ${wave.n}. Nothing was changed.`)
+        if (behind) block(`${behind.why}, so ${what} would pass on work that is not its own. ${behind.how}, then lcw wave take --wave ${wave.n}. Nothing was changed.`)
       }
       if (step === 'final checks') {
         const running = (wave.tasks ?? []).filter((t) => t.status === 'running')
-        if (running.length) fail(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running; its final checks start on a settled head, once every worker has reported. Nothing was changed.`)
+        if (running.length) block(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running; its final checks start on a settled head, once every worker has reported. Nothing was changed.`)
         inOrder('its final checks')
         checked = tipOf(s, wave)
       }
@@ -1097,12 +1119,12 @@ const commands = {
         const tip = tipOf(s, wave)
         if (wave.step === 'merging' && tip === wave.checked) return out(`wave ${wave.n} is at merging already, at ${tip}`)
         if (wave.step === 'final checks' && wave.checked) {
-          if (tip !== wave.checked) fail(`${wave.branch} moved from ${wave.checked} to ${tip} while its final checks ran, so they do not count; run them again on the settled head. Nothing was changed.`)
+          if (tip !== wave.checked) block(`${wave.branch} moved from ${wave.checked} to ${tip} while its final checks ran, so they do not count; run them again on the settled head. Nothing was changed.`)
         } else {
           inOrder('its merge')
           // a wave with nothing of its own beyond what it took in sits on the head the wave before it was checked on
           const under = earlier.at(-1)?.checked ?? git(s.repoRoot, 'rev-parse', `refs/heads/${s.branch}`)
-          if (tip !== under) fail(`Wave ${wave.n} has no final checks running; they pass before it merges. Nothing was changed.`)
+          if (tip !== under) block(`Wave ${wave.n} has no final checks running; they pass before it merges. Nothing was changed.`)
         }
         checked = tip
       }
@@ -1120,9 +1142,9 @@ const commands = {
       if (running.length) fail(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running, and a worker may be committing in ${wt}; wait for ${running.length > 1 ? 'them' : 'it'} to report, then lcw wave take --wave ${wave.n} again. Nothing was changed.`)
       // only the wave just before, once it holds everything beneath it, so each review range's merge base stays that wave's tip
       const prev = openWaves(s).filter((x) => x.n < wave.n && x.status === 'running').at(-1)
-      if (prev && !isBuilt(prev)) fail(`Wave ${prev.n} is still being ${prev.stage === 'Plan' ? 'planned' : 'built'}, and wave ${wave.n} was started beside it: there is nothing to take in yet, and wave ${wave.n}'s review may go ahead. It takes wave ${prev.n} in once that wave is built and in Review. Nothing was changed.`)
+      if (prev && !isBuilt(prev)) block(`Wave ${prev.n} is still being ${prev.stage === 'Plan' ? 'planned' : 'built'}, and wave ${wave.n} was started beside it: there is nothing to take in yet, and wave ${wave.n}'s review may go ahead. It takes wave ${prev.n} in once that wave is built and in Review. Nothing was changed.`)
       const behind = lagging(s, wave)
-      if (behind) fail(`${behind.why}, and a wave takes in only the wave before it, oldest first. ${behind.how}, then lcw wave take --wave ${wave.n} again. Nothing was changed.`)
+      if (behind) block(`${behind.why}, and a wave takes in only the wave before it, oldest first. ${behind.how}, then lcw wave take --wave ${wave.n} again. Nothing was changed.`)
       const from = prev?.branch ?? s.branch
       const had = tipOf(s, wave)
       if (!contains(s, from, wave.branch)) {
@@ -1159,18 +1181,18 @@ const commands = {
     }
     if (sub === 'shipped') {
       const wave = mustRun(waveOf(s) || fail('No wave is running. Nothing was changed.'))
-      if (wave.stage !== 'Ship') fail(`A wave ships in Ship; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
-      if (wave.step !== 'merging') fail(`Wave ${wave.n}'s final checks have not passed${wave.step ? ` (it is at ${wave.step})` : ''}: lcw wave step "final checks" when they start, then lcw wave step merging. Nothing was changed.`)
+      if (wave.stage !== 'Ship') block(`A wave ships in Ship; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
+      if (wave.step !== 'merging') block(`Wave ${wave.n}'s final checks have not passed${wave.step ? ` (it is at ${wave.step})` : ''}: lcw wave step "final checks" when they start, then lcw wave step merging. Nothing was changed.`)
       const before = w.waves.find((x) => x.n < wave.n && x.status !== 'shipped')
       if (before) fail(`Wave ${before.n} has not shipped yet, and waves land in order. Nothing was changed.`)
       // a verdict changed after the wave entered Ship would ship uncounted
       const unsettled = (wave.requirements ?? []).filter((r) => r.status === 'todo' || r.status === 'failing')
-      if (unsettled.length) fail(`Wave ${wave.n} cannot ship with ${unsettled.map((r) => `${r.id} ${r.status}`).join(', ')}: send it back, lcw stage Build --wave ${wave.n}, or record each fix as it stands. Nothing was changed.`)
+      if (unsettled.length) block(`Wave ${wave.n} cannot ship with ${unsettled.map((r) => `${r.id} ${r.status}`).join(', ')}: send it back, lcw stage Build --wave ${wave.n}, or record each fix as it stands. Nothing was changed.`)
       if (flags.pr !== undefined && s.sweep.prs === 'end') fail('The charter chose one pull request at the end, so a wave has no pull request of its own. Nothing was changed.')
       const pr = flags.pr === undefined ? null : prOf(flags.pr).number || fail(`--pr takes the pull request's number, not ${flags.pr}. Nothing was changed.`)
       const root = s.repoRoot
       const tip = tipOf(s, wave)
-      if (tip !== wave.checked) fail(`${wave.branch} moved from ${wave.checked} to ${tip} since its final checks started, so they do not count; run them again on the settled head. Nothing was changed.`)
+      if (tip !== wave.checked) block(`${wave.branch} moved from ${wave.checked} to ${tip} since its final checks started, so they do not count; run them again on the settled head. Nothing was changed.`)
       // every fix dropped or parked: nothing to land, so no pull request and nothing for the waves after it to wait on
       const empty = Number(git(root, 'rev-list', '--count', `${s.branch}..${tip}`)) === 0
       if (empty && pr) fail(`${wave.branch} has no commits, so there is no pull request to record. Nothing was changed.`)
@@ -1216,7 +1238,7 @@ const commands = {
         const repo = githubRepo(s.repoRoot)
         let state = null
         try { if (repo) state = JSON.parse(gh(s.repoRoot, 'pr', 'view', String(wave.pr), '-R', repo, '--json', 'state')).state } catch {}
-        if (state !== 'CLOSED') fail(`Wave ${wave.n} has pull request #${wave.pr} already${state ? `, ${state.toLowerCase()} on GitHub` : ''}; another takes its place only once GitHub shows it closed unmerged. Nothing was changed.`)
+        if (state !== 'CLOSED') block(`Wave ${wave.n} has pull request #${wave.pr} already${state ? `, ${state.toLowerCase()} on GitHub` : ''}; another takes its place only once GitHub shows it closed unmerged. Nothing was changed.`)
         note += `, in place of #${wave.pr}, which GitHub closed unmerged`
       }
       change(run, note, () => { wave.pr = pr }, wave)
@@ -1455,7 +1477,7 @@ function waveStage(run, wave, stage) {
     mustHoldRange(run.state, wave, 'entering Ship')
     // a fix set back for a later round and never given its verdict again would ship uncounted
     const open = (wave.requirements ?? []).filter((r) => r.status === 'todo' || r.status === 'failing')
-    if (open.length) fail(`Wave ${wave.n} cannot enter Ship with ${open.map((r) => `${r.id} ${r.status}`).join(', ')}: record each fix as it stands, lcw req <id> pass|partial --wave ${wave.n}, or take it out with lcw req <id> park|drop --wave ${wave.n}. Nothing was changed.`)
+    if (open.length) block(`Wave ${wave.n} cannot enter Ship with ${open.map((r) => `${r.id} ${r.status}`).join(', ')}: record each fix as it stands, lcw req <id> pass|partial --wave ${wave.n}, or take it out with lcw req <id> park|drop --wave ${wave.n}. Nothing was changed.`)
   }
   // the round running now may read code this wave's review will change again, as a round started with it short of Ship would
   const sw = run.state.sweep
@@ -1500,9 +1522,9 @@ function lagging(s, w) {
 }
 /** Fails unless w holds every branch it takes in and the wave before it is not lagging, so its review range shows only its own work. */
 function mustHoldRange(s, w, what) {
-  if (!hasTakenIn(s, w)) fail(notTakenIn(s, w, what))
+  if (!hasTakenIn(s, w)) block(notTakenIn(s, w, what))
   const behind = lagging(s, w)
-  if (behind) fail(`${behind.why}, so wave ${w.n}'s review range would show work that is not its own. ${behind.how}, then lcw wave take --wave ${w.n}. Nothing was changed.`)
+  if (behind) block(`${behind.why}, so wave ${w.n}'s review range would show work that is not its own. ${behind.how}, then lcw wave take --wave ${w.n}. Nothing was changed.`)
 }
 const notTakenIn = (s, w, what) => `Wave ${w.n} has not taken in the latest of ${missingFrom(s, w).join(', ')}; take it in with lcw wave take --wave ${w.n} before ${what}. Nothing was changed.`
 
@@ -1688,7 +1710,7 @@ function listItem(cmd, field, statuses, make) {
   const wave = waveOf(run.state, { shipped: true })
   const list = wave ? (wave[field] ??= []) : run.state[field]
   const of = wave ?? undefined
-  if (wave && wave.status !== 'running' && !(cmd === 'req' && rest[1] === 'drop')) fail(`Wave ${wave.n} has shipped, so its ${field} stay as they are. Nothing was changed.`)
+  if (wave && wave.status !== 'running' && !(cmd === 'req' && rest[1] === 'drop')) block(`Wave ${wave.n} has shipped, so its ${field} stay as they are. Nothing was changed.`)
   if (rest[0] === 'add') {
     const [, id, ...words] = rest
     const label = words.join(' ')
@@ -1720,7 +1742,7 @@ function listItem(cmd, field, statuses, make) {
     const item = find(list, 'id', id)
     // a running wave counts its dropped fixes when it ships; a shipped wave has counted its own already
     const running = wave?.status === 'running'
-    if (wave && !running && item.status !== 'parked') fail(`${id} is ${item.status} in wave ${wave.n}, which has shipped; a shipped wave drops only its parked fixes. Nothing was changed.`)
+    if (wave && !running && item.status !== 'parked') block(`${id} is ${item.status} in wave ${wave.n}, which has shipped; a shipped wave drops only its parked fixes. Nothing was changed.`)
     change(run, `req ${id} dropped: ${item.name}`, (s) => {
       if (item.status === 'parked') { s.sweep.parked--; if (!running) s.sweep.dropped++ }
       list.splice(list.indexOf(item), 1)
@@ -1730,7 +1752,7 @@ function listItem(cmd, field, statuses, make) {
   }
   if (!statuses.includes(status)) fail(`Usage: lcw ${cmd} <id> <${statuses.join('|')}>`)
   const item = find(list, 'id', id)
-  if (cmd === 'req' && item.status === 'parked') fail(`${id} is parked for the person and stays parked; it can only be dropped. Nothing was changed.`)
+  if (cmd === 'req' && item.status === 'parked') block(`${id} is parked for the person and stays parked; it can only be dropped. Nothing was changed.`)
   // work has started for the wave, so what it was waiting for is over
   change(run, `${cmd} ${id}: ${status}`, () => { item.status = status; if (cmd === 'task' && status === 'running' && wave) delete wave.waits }, of)
   out(`${id} ${status}`)
