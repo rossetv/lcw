@@ -241,6 +241,8 @@ function githubRepo(root) {
 
 const gh = (cwd, ...a) => execFileSync('gh', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 const firstLine = (e) => String(e.stderr || e.message).trim().split('\n')[0]
+/** "; PR n is wave k's: lcw merge k" when a wave has that pull request number, else "". */
+const prWave = (w, n) => { const x = w.waves.find((v) => Number(v.pr) === n); return x ? `; PR ${n} is wave ${x.n}'s: lcw merge ${x.n}` : '' }
 const wholeNumber = (text, what) => (/^\d+$/.test(String(text)) ? Number(text) : fail(`${what} takes a whole number, not ${text}. Nothing was changed.`))
 
 const QUESTION_KEYS = ['a', 'b', 'c']
@@ -252,7 +254,8 @@ function optionsOf(usage, cmd) {
     const [label, ...meaning] = String(flags[key]).split(': ')
     return { key, label: label.trim(), meaning: meaning.join(': ').trim() }
   })
-  if (options.length < 2 || options.some((o) => !o.label || !o.meaning)) fail(usage)
+  const bad = options.find((o) => !o.label || !o.meaning)
+  if (options.length < 2 || bad) fail(`${cmd} needs at least two of --a, --b and --c, each "<label>: <what it means>"${bad ? `; --${bad.key} is "${flags[bad.key]}", with no ": " and meaning after the label` : `; ${options.length ? `only --${options[0].key} was given` : 'none was given'}`}. Nothing was changed.\n${usage}`)
   const keys = options.map((o) => o.key)
   if (!keys.includes(flags.recommend)) fail(`${cmd} needs --recommend <${keys.join('|')}>: the option you recommend, which the box draws in pink. Nothing was changed.`)
   return options
@@ -356,7 +359,8 @@ const commands = {
     const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
     const base = `${date}-${slug(name)}`
     const main = mainCheckout(cwd)
-    const branchTaken = (nm) => { try { git(main, 'rev-parse', '--verify', '-q', `refs/heads/lcw/${nm}`); return true } catch { return false } }
+    // a wave's branch is lcw/<name>-wave-<n>, so a name whose first wave branch is left behind is taken too
+    const branchTaken = (nm) => git(main, 'for-each-ref', '--format=%(refname)', `refs/heads/lcw/${nm}`, `refs/heads/lcw/${nm}-wave-*`) !== ''
     let id = base, runName = slug(name), n = 1
     const before = machineRunCount()
     fs.mkdirSync(runsDir(home(), key), { recursive: true })
@@ -594,7 +598,7 @@ const commands = {
   checkpoint() {
     const run = need()
     const step = rest.join(' ')
-    const usage = 'Usage: lcw checkpoint "<next step>" | checkpoint --compact ["<next step>"] | checkpoint --keep "<why>"'
+    const usage = 'Usage: lcw checkpoint "<next step>" | checkpoint --compact ["<next step>"] | checkpoint --keep "<why>" ["<next step>"]'
     const ctx = contextOf(sessionId)
     const size = ctx ? `context ${tokensText(ctx.tokens)}` : 'context size unknown'
     const compact = (s) => {
@@ -602,8 +606,9 @@ const commands = {
       out(`${size}: checkpoint written; compaction happens when this turn ends, so end your turn now`)
     }
     if (flags.keep !== undefined) {
-      if (flags.compact || step) fail(usage)
+      if (flags.compact) fail(usage)
       if (compactChoice(ctx) === 'compact') fail(`${size}${ctx ? ", too near the window's end to keep" : ', so it cannot be kept'}: run lcw checkpoint --compact. Nothing was changed.`)
+      if (step) appendLedger(run.paths, `checkpoint: ${step}`, ledgerWave(run.state))
       appendLedger(run.paths, `${size} kept: ${flags.keep}`, ledgerWave(run.state))
       return out(`${size} kept; carry on with the next step now, and end your turn only to wait for agents' reports`)
     }
@@ -1219,7 +1224,7 @@ const commands = {
       throw e
     }
     if (w.prs !== 'merged') fail(`The charter's pull request choice is ${PR_CHOICES[w.prs] ?? 'not made yet'}, not merged as it goes, so the sweep merges nothing. Nothing was changed.`)
-    const wave = w.waves.find((x) => x.n === n) || fail(`No wave ${n}. Nothing was changed.`)
+    const wave = w.waves.find((x) => x.n === n) || fail(`No wave ${n}. lcw merge takes a wave number, not a pull request number${prWave(w, n)}. Nothing was changed.`)
     if (wave.empty) fail(`Wave ${n} shipped with no commits, so it has no pull request to merge. Nothing was changed.`)
     if (wave.status !== 'shipped' || !wave.pr) fail(`Wave ${n} is ${wave.status}${wave.pr ? '' : ' with no pull request'}; only a shipped wave's pull request is merged. Nothing was changed.`)
     if (wave.merged) fail(`Wave ${n}'s pull request #${wave.pr} is merged already. Nothing was changed.`)
@@ -1237,6 +1242,7 @@ const commands = {
     if (view.state === 'MERGED' && view.baseRefName !== main) fail(`#${pr} was merged into ${view.baseRefName}, not the default branch ${main}, so its changes have not landed; it needs you. Nothing was recorded and its branch is kept.`)
     // merged earlier but never recorded: go on to the branch, do not merge twice
     if (view.state !== 'MERGED') {
+      if (view.state === 'CLOSED') fail(`#${pr} was closed without being merged. Open it again on GitHub, or open a new pull request for ${wave.branch} and record it with lcw wave pr ${n} <number>. Nothing was merged or recorded.`)
       // the next wave's pull request is opened on this wave's branch, and GitHub retargets it only when that branch is deleted
       if (view.baseRefName !== main) fail(`#${pr} is based on ${view.baseRefName}, not the default branch ${main}; retarget it to ${main} first (gh pr edit ${pr} -R ${repo} --base ${main}). Nothing was merged or recorded.`)
       let state, readied = false, back = ''
@@ -1377,7 +1383,7 @@ function forgetMissing(root, dir) {
 function addWorktree(run, dir, branch, from) {
   const root = run.state.repoRoot
   forgetMissing(root, dir)
-  git(root, 'worktree', 'add', '-b', branch, dir, ...(from ? [from] : []))
+  git(root, 'worktree', 'add', '-q', '-b', branch, dir, ...(from ? [from] : []))
   const exclude = path.resolve(root, git(root, 'rev-parse', '--git-path', 'info/exclude'))
   fs.mkdirSync(path.dirname(exclude), { recursive: true })
   const text = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : ''

@@ -2145,3 +2145,54 @@ test('set waits is refused where no wave is open: in a build, and in a sweep tha
   assert.equal(t.cli('set', 'waits=nothing to do').code, 1)
   assert.equal('waits' in t.state(), false)
 })
+
+test('a question option with no meaning is refused by naming it and the form it needs', () => {
+  const t = hunting()
+  const r = t.cli('question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Answer 422', '--b', 'Keep the 409: closed as decided', '--recommend', 'b')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /--a is "Answer 422"/)
+  assert.match(r.out, /<label>: <what it means>/)
+  const one = t.cli('question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--recommend', 'a')
+  assert.match(one.out, /at least two.*only --a was given/)
+})
+
+test('a sweep name is taken while a wave branch of that name is left behind', () => {
+  const t = sweep()
+  git(t.repo, 'branch', 'lcw/other-wave-1')
+  const second = lcw(['start', 'other', '--title', 'Other', '--shape', 'sweep'], { ...t.o, session: 's2' })
+  assert.equal(second.code, 0, second.out)
+  assert.match(second.out, /^Run \d+-other-2$/m)
+})
+
+test('a worktree git refuses says why, not its progress line', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '3')
+  git(t.repo, 'branch', 'lcw/tidy-wave-1')
+  const r = t.start()
+  assert.equal(r.code, 1)
+  assert.match(r.out, /already exists/)
+  assert.doesNotMatch(r.out, /Preparing worktree/)
+})
+
+test('merge of a pull request GitHub closed unmerged says to open it again, not to retarget it', () => {
+  const t = shippedWaves()
+  const r = lcw(['merge', '1'], { ...t.o, env: fakeGh({ GH_STATE: 'CLOSED' }).env })
+  assert.equal(r.code, 1)
+  assert.match(r.out, /closed without being merged/)
+  assert.match(r.out, /lcw wave pr 1 <number>/)
+  assert.doesNotMatch(r.out, /retarget/)
+  assert.equal(t.state().sweep.waves[0].merged, false)
+})
+
+test('merge given a pull request number says it takes a wave number, and names the wave that has that pull request', () => {
+  const t = shippedWaves()
+  const gh = fakeGh()
+  const hit = lcw(['merge', '13'], { ...t.o, env: gh.env })
+  assert.equal(hit.code, 1)
+  assert.match(hit.out, /takes a wave number/)
+  assert.match(hit.out, /PR 13 is wave 2's: lcw merge 2/)
+  const miss = lcw(['merge', '99'], { ...t.o, env: gh.env })
+  assert.match(miss.out, /takes a wave number/)
+  assert.doesNotMatch(miss.out, /is wave/)
+  assert.deepEqual(gh.calls(), [])
+})

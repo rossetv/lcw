@@ -40,6 +40,16 @@ test('from 200K a checkpoint compacts nothing until the orchestrator chooses, an
   assert.match(k.ledger(), /context 320K kept: the fix round needs these findings/)
 })
 
+test('--keep takes the next step too and records it as the plain form does', () => {
+  const t = at(320_000)
+  const r = t.cli('checkpoint', '--keep', 'the fix round needs these findings', 'start the review')
+  assert.equal(r.code, 0, r.out)
+  assert.equal(t.file(), '')
+  assert.match(t.ledger(), /context 320K kept: the fix round needs these findings/)
+  assert.match(t.cli('status').out, /next step: start the review/)
+  assert.equal(t.cli('checkpoint', '--keep', 'why', '--compact').code, 1, '--keep and --compact together are still refused')
+})
+
 test('near the end of the window, or with no fresh reading, a checkpoint compacts and cannot be kept', () => {
   for (const t of [at(850_000), at(150_000, { age: 11 * 60000 })]) {
     assert.match(t.cli('checkpoint', 'go on').out, /compaction happens when this turn ends/)
