@@ -167,6 +167,17 @@ test('a wave shipped past its stage and final checks leaves a sweep that carries
   assert.match(fs.readFileSync(`${/^worktree: (.+)$/m.exec(next.out)[1]}/b.txt`, 'utf8'), /fix/, 'the next wave holds the shipped work')
 })
 
+test('a wave shipped before its final checks started is bypassed once per refusal, with no false moved-head line', () => {
+  const t = planning()
+  commit(t.wt, 'b.txt')
+  t.cli('stage', 'Build')
+  assert.equal(t.cli('wave', 'shipped', '--bypass', 'checked by hand').code, 0)
+  const lines = t.ledger().split('\n').filter((l) => BYPASS.test(l))
+  assert.equal(lines.length, 2, lines.join('\n'))
+  assert.doesNotMatch(t.ledger(), /moved from null/)
+  assert.match(t.cli('status').out, /^bypasses: 2$/m)
+})
+
 test('status counts the bypasses in the ledger', () => {
   const t = planning()
   t.cli('ledger', 'the person asked what BYPASS, not standard LCW: means')

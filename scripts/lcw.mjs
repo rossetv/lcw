@@ -1199,7 +1199,7 @@ const commands = {
       try { git(root, 'merge-base', '--is-ancestor', s.branch, tip) } catch { fail(`${s.branch} has commits ${wave.branch} does not, so it cannot fast-forward to the wave. Nothing was changed.`) }
       if (wave.stage !== 'Ship') block(`A wave ships in Ship; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
       if (wave.step !== 'merging') block(`Wave ${wave.n}'s final checks have not passed${wave.step ? ` (it is at ${wave.step})` : ''}: lcw wave step "final checks" when they start, then lcw wave step merging. Nothing was changed.`)
-      if (tip !== wave.checked) block(`${wave.branch} moved from ${wave.checked} to ${tip} since its final checks started, so they do not count; run them again on the settled head. Nothing was changed.`)
+      if (wave.checked && tip !== wave.checked) block(`${wave.branch} moved from ${wave.checked} to ${tip} since its final checks started, so they do not count; run them again on the settled head. Nothing was changed.`)
       // a sweep from before waves had worktrees of their own may keep one on its branch, and git moves a checked-out branch only there
       let oldOnBranch = false
       try { oldOnBranch = Boolean(s.worktree) && git(s.worktree, 'symbolic-ref', '-q', 'HEAD') === `refs/heads/${s.branch}` } catch {}
