@@ -741,6 +741,14 @@ test('paused at a mark the week has already passed, the hint offers a step above
   assert.equal(hint(75, 100), undefined);
 });
 
+test('paused at a mark with an outside quota reading, the hint offers a step above the quota\'s figure', () => {
+  const hint = (markPercent, percentUsed) => plain(renderCard(buildView({ state: { stage: 'Build', status: 'paused', pausedReason: 'mark', markPercent, name: 'd' },
+    quota: { status: 'ok', hold: true, percentUsed }, ...at }), { width: 100, frame: true })).join('\n').match(/run up to (\d+)%/)?.[1];
+  assert.equal(hint(70, 85), '90');
+  assert.equal(hint(75, 92), '100');
+  assert.equal(hint(75, 40), '85');
+});
+
 test('the placeholder zeros a spec and a plan start with are not drawn as figures', () => {
   const drawn = (stage, more) => plain(renderCard(buildView({ state: { stage, status: 'running', name: 'd', ...more }, ...at }), { width: 100, frame: true })).join('\n');
   assert.doesNotMatch(drawn('Spec', { spec: { requirements: 0, scenarios: 0 } }), /requirements|scenarios/);
