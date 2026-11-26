@@ -1232,7 +1232,7 @@ test('a totals group that drops a part ends in "…", and one that fits whole ha
 test('a cut never leaves a separator before its "…"', () => {
   const at = (board, width, start) => strip(toAnsi(card(board, { width, frame: false }), 'dark', width)).split('\n').find(l => l.startsWith(start));
   assert.match(at('RunningA', 44, 'tasks'), /▱  11 done · 3 running · 6 left$/);
-  assert.match(toPlain(card('RunningA', { width: 44, frame: true })).split('\n').find(l => l.startsWith('│ tasks')), /3 running … │$/);
+  assert.match(toPlain(card('RunningA', { width: 44, frame: true })).split('\n').find(l => l.startsWith('│ tasks')), /3 running … +│$/);
   assert.match(at('StageSpec', 77, 'blind review'), /reviewer 1 · row…/);
 });
 
@@ -1544,17 +1544,19 @@ test('a stage strip too wide for the card keeps the stage the run is at, and giv
 });
 
 const NARROWER = ['in', 'progress', 'waiting'];
-test('a short row gives up whole words, never part of one', () => {
-  // Every word on a card that is cut to its width is a word of the same card drawn with room for everything.
+test('a short row shows only words of the card, cut inside one only at its "…"', () => {
+  // Every word on a card that is cut to its width is a word of the same card drawn with room for everything, or the
+  // start of one, ended by a "…".
   const words = rows => new Set(rows.filter(r => !r.some(s => /^more/.test(s.id ?? '')))
-    .flatMap(r => r.map(s => (s.r ? ' ' : '') + s.t).join('').split(/[\s·│╭╮╰╯├┤─]+/)).map(w => w.replace(/^…|[,;:.]?…?$/g, '')).filter(w => w && !/^([▰▱]+|\d+)$/.test(w)));
+    .flatMap(r => r.map(s => (s.r ? ' ' : '') + s.t).join('').split(/[\s·│╭╮╰╯├┤─]+/)).map(w => w.replace(/^…|[,;:.]?(…?)$/g, '$1')).filter(w => w && !/^([▰▱]+|\d+)…?$/.test(w)));
   for (const name of Object.keys(fixtures)) {
     const v = buildView(inputsOf(name));
     for (const frame of [false, true]) {
       // and the words only a narrower layout uses
-      const all = new Set([...words(renderCard(v, { width: 400, frame })), ...NARROWER]);
+      const all = [...words(renderCard(v, { width: 400, frame })), ...NARROWER], whole = new Set(all.map(w => w.replace(/…$/, '')));
+      const ofCard = w => whole.has(w.replace(/…$/, '')) || (w.endsWith('…') && all.some(a => a.startsWith(w.slice(0, -1))));
       for (let width = 44; width <= 130; width += 2) {
-        const lost = [...words(renderCard(v, { width, frame }))].filter(w => !all.has(w));
+        const lost = [...words(renderCard(v, { width, frame }))].filter(w => !ofCard(w));
         assert.deepEqual(lost, [], `${name} at ${width}${frame ? ', framed' : ''}`);
       }
     }
@@ -1711,5 +1713,37 @@ test('a short row keeps a word of what the person must act on: the pause, the de
     assert.match(rowOf('Done', width, frame, 'requirements pass'), /pass · 2 decisions/, at);
     assert.match(rowOf('StageBrainstorm', width, frame, 'questions open'), /intent .*› edge cases/, at);
     assert.match(rowOf('01-charter-with-you', width, frame, 'question open'), /charter .*› PRs/, at);
+  }
+});
+
+test("an agent's description cut short gives up a few cells at most to end on a whole word", () => {
+  for (const name of Object.keys(fixtures)) {
+    const v = buildView(inputsOf(name));
+    for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+      // The description is the agent's text padded to its column.
+      for (const s of renderCard(v, { width, frame }).flat().filter(s => /^view:/.test(s.id ?? '') && len(s.t) > 2)) {
+        const kept = s.t.trimEnd();
+        if (kept.endsWith('…')) assert.ok(len(kept) >= len(s.t) - 6, `${name} at ${width}${frame ? ', framed' : ''}: "${kept}" in ${len(s.t)} cells`);
+      }
+    }
+  }
+});
+
+test('the bar of a progress row never grows as the card gets narrower', () => {
+  for (const name of Object.keys(fixtures)) {
+    const v = buildView(inputsOf(name));
+    for (const frame of [false, true]) {
+      const wider = {};
+      for (let width = 130; width >= 44; width--) {
+        for (const row of toPlain(renderCard(v, { width, frame })).split('\n')) {
+          const m = /^(.*?)([▰▱]+)/.exec(row);
+          if (!m) continue;
+          const label = m[1].replace(/[│\s]+/g, ' ').trim(), was = wider[label];
+          if (!/^\w+$/.test(label)) continue;
+          assert.ok(!was || m[2].length <= was.cells, `${name}${frame ? ', framed' : ''}, "${label}": ${was?.cells} cells at ${was?.width}, ${m[2].length} at ${width}`);
+          wider[label] = { cells: m[2].length, width };
+        }
+      }
+    }
   }
 });
