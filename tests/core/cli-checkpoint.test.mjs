@@ -50,6 +50,14 @@ test('--keep takes the next step too and records it as the plain form does', () 
   assert.equal(t.cli('checkpoint', '--keep', 'why', '--compact').code, 1, '--keep and --compact together are still refused')
 })
 
+test('--keep with an unquoted reason is refused and records nothing, so its words are not split into a reason and a step', () => {
+  const t = at(320_000)
+  const r = t.cli('checkpoint', '--keep', 'the', 'fix', 'round', 'needs', 'these', 'findings')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /--keep "<why>" "<next step>"/)
+  assert.doesNotMatch(t.ledger(), /kept|checkpoint:/)
+})
+
 test('near the end of the window, or with no fresh reading, a checkpoint compacts and cannot be kept', () => {
   for (const t of [at(850_000), at(150_000, { age: 11 * 60000 })]) {
     assert.match(t.cli('checkpoint', 'go on').out, /compaction happens when this turn ends/)

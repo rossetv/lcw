@@ -64,7 +64,7 @@ spend-command <command line> sets the command that prints your 7-day spend in do
 quota-command <endpoint> <command line> sets an external weekly subscription source for sessions whose ANTHROPIC_BASE_URL matches that endpoint; quota-command alone inspects it, quota-command off disables it. Quote the command as one argument for shell syntax; a final --session <id> is not part of it. Keep credentials out of command text. Setup requires a successful v:1 quota JSON reading within 30 seconds; failed setup leaves the prior setting intact. Refreshes are shared every 5 minutes; failed, refused or expired readings hold new work, never supply dollar estimates. The source is account-wide, not this machine's spend.
 ask "<question>" [--waiting N] [--wave N] puts a question to the person in LCW's box, answered by number in plain words; ask "<what you want from them>" --no-wait does the same for something nothing waits on (a look at a mock, a try on their own device): no wave or task is held, and the card marks it until answer <n>; with --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> its options are buttons too, the recommended one drawn in pink, and a press records the answer as answer <n> "<label>: <meaning>" does.
 question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> puts a short question to the person in LCW's box, in a sweep, the recommended option drawn in pink; question <id> pick <a|b|c|park> is what a press records, question <id> answer "<words>" records an answer they typed, question <id> used marks one acted on, and question alone lists them.
-checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>"; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
+checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>" ["<next step>"]; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
 const refuse = (msg) => { console.log(msg); process.exit(1) }
 // an error says what went wrong in a line; the whole help is for lcw help
@@ -607,6 +607,8 @@ const commands = {
     }
     if (flags.keep !== undefined) {
       if (flags.compact) fail(usage)
+      // unquoted, the reason's first word would be read as the reason and the rest as the next step
+      if (rest.length > 1) fail(`lcw checkpoint --keep takes the reason and the next step as two quoted words: --keep "<why>" "<next step>". Nothing was changed.`)
       if (compactChoice(ctx) === 'compact') fail(`${size}${ctx ? ", too near the window's end to keep" : ', so it cannot be kept'}: run lcw checkpoint --compact. Nothing was changed.`)
       if (step) appendLedger(run.paths, `checkpoint: ${step}`, ledgerWave(run.state))
       appendLedger(run.paths, `${size} kept: ${flags.keep}`, ledgerWave(run.state))
