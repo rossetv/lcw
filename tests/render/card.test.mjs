@@ -516,11 +516,11 @@ test('buildView: quiet, stalled and waiting agents', () => {
   assert.equal(buildView({ ...i, agents: [{ id: 'x', status: 'completed' }] }).agents.length, 0);
 });
 
-test('buildView: an agent held after its report is marked stalled at fifteen minutes, and not before', () => {
+test('buildView: an agent held after its report is marked held at fifteen minutes, and not before', () => {
   const i = inputsOf('RunningA');
   const mk = (heldMs) => buildView({ ...i, agents: [{ id: 'x', description: 'd', model: 'm', startTime: NOW, tokens: 1, status: 'waiting', quietMs: 0, heldMs }] }).agents[0].chip;
   assert.equal(mk(14 * 6e4), null);
-  assert.equal(mk(15 * 6e4), 'stalled');
+  assert.equal(mk(15 * 6e4), 'held');
 });
 
 test('buildView: states', () => {
@@ -1816,4 +1816,25 @@ test('the state row counts the bypasses of standard LCW, giving way before the m
   assert.match(stateRow(65, { bypasses: 3 }), / {2}3 bypasses · 75% mark · ≈ 9% of your week$/);
   assert.match(stateRow(65, { bypasses: 3 }, 70), /last commit 3m ago +75% mark · ≈ 9% of your week$/);
   assert.equal(stateRow(50, { bypasses: 3 }, 55), stateRow(50, {}, 55));
+});
+
+test('an agent that waits, or has reported and not ended, says so and holds still; one long reported is not called stalled', () => {
+  const i = inputsOf('RunningA');
+  const mk = (id, over) => ({ id, description: 'agent ' + id, model: 'Sonnet 5.5', effort: 'low', tokens: 9000, startTime: NOW - 30 * 6e4, status: 'running', quietMs: 0, spark: [1, 2, 3], ...over });
+  i.agents = [mk('work'), mk('wait', { status: 'waiting' }), mk('done', { status: 'waiting', held: true, heldMs: 20 * 6e4 })];
+  const v = buildView(i);
+  const rowOf = (rows, id) => rows.find(r => r.some(s => s.id === 'view:' + id));
+  const looks = id => [0, 3, 7, 11].map(tick => JSON.stringify(rowOf(renderCard(v, { width: 126, tick }), id).map(s => [s.c, s.bg])));
+  assert.notEqual(looks('work')[0], looks('work')[2], 'an agent at work pulses');
+  for (const id of ['wait', 'done']) assert.equal(new Set(looks(id)).size, 1, id + ' holds still');
+  const text = r => r.map(s => s.t).join('');
+  const words = id => text(rowOf(renderCard(v, { width: 126 }), id));
+  assert.match(words('wait'), /agent wait .* waiting +9k +30m$/);
+  assert.match(words('done'), new RegExp('agent done .* reported +9k +' + G.warn + ' 30m $'));
+  // Its chip is not the red one of an agent stalled at work.
+  assert.ok(!rowOf(renderCard(v, { width: 126 }), 'done').some(s => String(s.bg ?? '').startsWith('needsYou')));
+  // The narrow card says it too.
+  const first = id => renderCard(buildView({ ...i, agents: i.agents.filter(a => a.id === id) }), { width: 40 }).map(text).join('\n');
+  assert.match(first('wait'), /low · 9k · waiting · 30m/);
+  assert.match(first('done'), new RegExp('low · 9k · reported · ' + G.warn + ' 30m'));
 });

@@ -5,7 +5,7 @@ export interface AgentInput {
   id: string; description?: string; model?: string; effort?: string;
   tokens?: number | null;       // null or missing: shown as a dash (the card without the mod)
   startTime?: number; parentId?: string | null;
-  status?: string;              // "waiting" is never quiet, and stalled only once held; completed, done, failed, killed, stopped, cancelled are not shown
+  status?: string;              // "waiting" (on its own background work, a plan's approval or an agent) is never quiet; completed, done, failed, killed, stopped, cancelled are not shown
   quietMs?: number;             // how long its token count has not moved
   heldMs?: number;              // how long it has stayed listed since its turn ended, with no live agent of its own
   spark?: number[];             // tokens gained in each of its last 20-second spans, oldest first (the mod keeps them)
@@ -16,7 +16,10 @@ export interface AgentInput {
 }
 export interface AgentNode {
   id: string; desc: string; model: string; effort: string; tokens: number | null; spark: number[] | null; elapsed: string;
-  chip: 'quiet' | 'stalled' | null; expanded: boolean; kids: AgentNode[]; wave: number | null;
+  /** quiet and stalled: at work with no tokens moving; held: reported fifteen minutes ago or more and not ended. */
+  chip: 'quiet' | 'stalled' | 'held' | null; expanded: boolean; kids: AgentNode[]; wave: number | null;
+  /** Why a worker is not at work, said in its sparkline's place: it has reported and not ended, or it waits. */
+  rest: 'reported' | 'waiting' | null;
 }
 /** One open wave as its lane draws it: running, or shipped and waiting on its merge while the charter merges as it goes (then at Ship, step 'merging'). */
 export interface OpenWave {
