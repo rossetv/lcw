@@ -1268,6 +1268,8 @@ const underLanes = (agents, opts = {}) => {
   if (opts.folded) i.ui = { folded: Object.fromEntries(opts.folded.map(f => [foldKey(f.run ?? i.state.id, f.wave ?? f), true])) };
   // waits: why a wave has no agent at work, by its number; edit: any other change to the sweep's state
   for (const [n, why] of Object.entries(opts.waits ?? {})) i.state.sweep.waves.find(w => w.n === Number(n)).waits = why;
+  // sat: since when each wave has had no agent at work, by its number, as the mod keeps it for this run
+  if (opts.sat) i.sat = { run: i.state.id, waves: Object.fromEntries(Object.entries(opts.sat).map(([n, since]) => [n, { since }])) };
   opts.edit?.(i.state);
   if (opts.spans) return renderCard(buildView(i), { width: opts.width ?? 115 });
   const width = opts.width ?? 115;
@@ -1837,4 +1839,24 @@ test('an agent that waits, or has reported and not ended, says so and holds stil
   const first = id => renderCard(buildView({ ...i, agents: i.agents.filter(a => a.id === id) }), { width: 40 }).map(text).join('\n');
   assert.match(first('wait'), /low · 9k · waiting · 30m/);
   assert.match(first('done'), new RegExp('low · 9k · reported · ' + G.warn + ' 30m'));
+});
+
+test('a wave with no agent at work for ten minutes says so under its lane, until a reason is recorded', () => {
+  const sat = { 2: NOW - 10 * 6e4, 3: NOW - 9 * 6e4 };
+  assert.deepEqual(startsOf(underLanes([['a', 'Build the importer', 1]], { sat })), ['waves', 'wave 1', '  → Build the importer', 'wave 2', '  no agent at work', 'wave 3']);
+  assert.deepEqual(startsOf(underLanes([], { sat, waits: { 2: 'the TV parts need the screens' } })).slice(2, 4), ['wave 2', '  waits: the TV parts need the screens']);
+  // Not for a wave an agent is at work for, one folded or waiting on the person, nor from another run's record.
+  assert.doesNotMatch(underLanes([['a', 'Build the importer', 2]], { sat }).join('\n'), /no agent/);
+  assert.doesNotMatch(underLanes([], { sat, folded: [2] }).join('\n'), /no agent/);
+  assert.doesNotMatch(underLanes([], { sat, edit: s => { s.sweep.waves.find(w => w.n === 2).waiting = true; } }).join('\n'), /no agent/);
+  assert.doesNotMatch(underLanes([], { sat, edit: s => { s.id = 'another-run'; } }).join('\n'), /no agent/);
+  // It comes out of the rows the agents may take, and the card never gets shorter as its room grows.
+  const agents = ['a', 'b', 'c', 'd'].map(id => [id, 'Build part ' + id, 3]);
+  let was = 0;
+  for (let maxRows = 4; maxRows <= 16; maxRows++) {
+    const rows = underLanes(agents, { sat, maxRows, frame: true });
+    assert.ok(rows.length >= was, maxRows + ': ' + rows.length);
+    if (rows.length <= maxRows) assert.ok(rows.some(l => /no agent at work/.test(l)), maxRows + ': ' + rows.join('\n'));
+    was = rows.length;
+  }
 });

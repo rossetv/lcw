@@ -32,6 +32,8 @@ export interface OpenWave {
   folded?: boolean;
   /** Why the wave has no agent at work, as the orchestrator recorded it, else ''; and whether none is at work for it now. */
   waits?: string; sits?: boolean;
+  /** True once it has had no agent at work for waveSitsAfterMinutes with no reason recorded: its lane says so. */
+  idle?: boolean;
   /** Its figure while at work: tasks in Build, fixes in Review, the plan in Plan; null otherwise. */
   d: { k: 'tasks' | 'reqs' | 'plan'; [key: string]: unknown } | null;
   /** How long it has stood at its stage. */
@@ -96,6 +98,8 @@ export interface BuildInput {
   now?: number;
   /** folded: the waves whose agents the person folded away, by foldKey. */
   ui?: { expanded?: Record<string, boolean>; moreOpen?: boolean; folded?: Record<string, boolean> };
+  /** The mod's record of the waves with no agent at work, for the run it names: since when, by wave number. */
+  sat?: { run?: string; waves?: Record<string, { since: number }> } | null;
 }
 
 export function buildView(input?: BuildInput): View;

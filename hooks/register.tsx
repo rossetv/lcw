@@ -663,7 +663,7 @@ async function recoverQuota($: EngineInterface, run: Run, now: number) {
 function cardView(run: Run, now: number) {
   // The mod's totals are newer than the run's copy: the turn that ran lcw finish is counted after it.
   const state = Number.isFinite(S.totals.tokens) ? { ...run.state, totals: { ...run.state.totals, agents: S.totals.agents, tokens: S.totals.tokens } } : run.state
-  return buildView({ state, agents: S.agents, usage: run.usage, gate: run.gate, money: run.money, quota: run.quota, now, ui: S.ui })
+  return buildView({ state, agents: S.agents, usage: run.usage, gate: run.gate, money: run.money, quota: run.quota, now, ui: S.ui, sat: S.sat })
 }
 
 // An agent that waits (at a permission prompt, say), or has finished and is still listed, leaves the run waiting on the person.
