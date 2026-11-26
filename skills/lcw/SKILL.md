@@ -111,7 +111,7 @@ Launch agents with the Agent tool and never give one a name, and do not run the 
 
 In Code Mode a launch from a script returns at once, even when you await it: the result says `async_launched` and gives the agent's id, and the agent's report comes later, as a task notification in a turn of its own. So launch the agents that go together (a milestone's workers, a round's reviewers) in one script, keep each id, and end your turn; act on each report as its notification arrives, since the notification carries the report. Do not wait for them inside a script or read their output files.
 
-What the human says to any agent counts. Ask every agent to report anything the human told it. If that changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements (`lcw req add`, `lcw req <id> rename "<name>"`, `lcw req <id> drop`, with `--wave <n>` for a fix of a shipped wave), and tell the agents it affects; otherwise it only steered that agent.
+What the human says to any agent counts. Ask every agent to report anything the human told it. If that changes WHAT is being built, update spec.md (in a sweep, charter.md), the ledger and the requirements (`lcw req add`, `lcw req <id> rename "<name>"`, `lcw req <id> drop`, with `--wave <n>` for a fix of a shipped wave), and tell the agents it affects; otherwise it only steered that agent. In a sweep, a new ask from the human is a finding with its own requirement, built in a new wave (started at once if its files are free), never a task added to an open wave, so the open wave ships on its own scope.
 
 ## When an agent stalls
 
