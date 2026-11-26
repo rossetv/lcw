@@ -43,12 +43,12 @@ test("once Claude Code's agent rows are hidden under a question box and the card
   on('session.id', () => ({ value: 's1' }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'LCW_HOME' ? '/lcw' : undefined }))
   on('session.info', () => ({ value: { transcriptPath: '/t/s1.jsonl', platform: 'linux' } }))
-  on('fs.read', (_: any, e: any) => { if (e.path in files) return { value: files[e.path] }; throw new Error('ENOENT') })
+  on('fs.read', (_: any, e: any) => { if (e.path in files) return { value: files[e.path]! }; throw new Error('ENOENT') })
   on('fs.exists', (_: any, e: any) => ({ value: e.path in files }))
   on('fs.write', (_: any, e: any) => { files[e.path] = e.text; return { value: undefined } })
-  on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '' } }))
+  on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
-  on('agent.list', () => ({ value: AGENTS }))
+  on('agent.list', () => ({ value: AGENTS as any }))
   on('config.list', () => ({ value: [] }))
   let hidden: unknown = 'not asked'
   on('ui.render', ($: any, e: any) => {

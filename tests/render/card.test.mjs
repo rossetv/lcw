@@ -1374,23 +1374,53 @@ test('a framed card that fits its height keeps the agents under its lanes', () =
   }
 });
 
-test('a card with agents says how many it holds at every height it has room for a row, the run\'s words giving up their second row and the rule above the count going', () => {
+test('a card with agents gives up its words\' second row, then the rule above the lanes, then the rule above the count, to say how many agents it holds', () => {
   const words = 'Hunting again over what the fixes changed. Live next: the card and mod fixes, once their final test run passes, and then the last round of hunting over the merged waves before the pull request.';
   const agents = [['a', 'Build the importer', 3], ['b', 'Review the export fix', 2]];
   const edit = s => { s.health = words; };
   const base = underLanes([], { frame: true, edit }).length, free = underLanes(agents, { frame: true, edit }).length;
-  for (let maxRows = base; maxRows <= free; maxRows++) {
+  // two rows of words, two rules and the count: the card keeps to its room from the base height down to one less
+  for (let maxRows = base - 1; maxRows <= free; maxRows++) {
     const rows = underLanes(agents, { frame: true, edit, maxRows });
     assert.ok(rows.length <= maxRows, `${maxRows} rows allowed, ${rows.length} drawn`);
     assert.ok(rows.some(l => /more agents|→ /.test(l)), `at ${maxRows} rows no agent is listed and none is counted\n${rows.join('\n')}`);
   }
-  // a row short of what the lanes need with the count: the card is as it was, its words in two rows
-  const short = underLanes(agents, { frame: true, edit, maxRows: base - 1 });
-  assert.equal(short.length, base);
-  assert.doesNotMatch(short.join('\n'), /more agents/);
-  const bare = underLanes(agents, { frame: true, edit, maxRows: base });
-  assert.equal(bare.filter(l => l.startsWith('├')).length, 1, 'the rule above the count is the one that goes');
-  assert.match(bare.join('\n'), /…/);
+  const at = n => underLanes(agents, { frame: true, edit, maxRows: n });
+  assert.equal(at(base).filter(l => l.startsWith('├')).length, 1, 'the rule above the count goes first');
+  assert.equal(at(base - 1).filter(l => l.startsWith('├')).length, 0, 'then the one above the lanes');
+  assert.match(at(base).join('\n'), /…/, 'the words are cut to one row');
+  // one row less and there is no room to say: the card is as short as it can be, with no count
+  assert.doesNotMatch(at(base - 2).join('\n'), /more agents/);
+  assert.ok(at(base - 2).length <= at(base - 1).length);
+});
+
+test('every board with agents says how many it holds at each height that has a row for it, and the card never gets shorter as its room grows', () => {
+  const lists = rows => rows.some(r => r.some(s => /^(view|toggle|more)/.test(s.id ?? '')));
+  let boards = 0;
+  for (const name of Object.keys(fixtures)) {
+    const i = inputsOf(name), view = buildView(i);
+    if (!view.agents.length || view.closing) continue;
+    boards++;
+    const bare = buildView({ ...i, agents: [] });
+    for (const width of [100, 126, 160]) {
+      for (const frame of [true, false]) {
+        const base = renderCard(bare, { width, frame }).length, free = renderCard(view, { width, frame }).length;
+        let before = 0;
+        for (let maxRows = 1; maxRows <= free + 2; maxRows++) {
+          const rows = renderCard(view, { width, frame, maxRows });
+          const where = `${name}, width ${width}, frame ${frame}, ${maxRows} of ${free} rows`;
+          assert.ok(rows.length >= before, 'shorter than at one row less: ' + where);
+          before = rows.length;
+          // a framed card gives up the rule above the count, an unframed one has none to give up
+          if (maxRows >= base + (frame ? 0 : 1) && maxRows <= free) {
+            assert.ok(rows.length <= maxRows, 'taller than its room: ' + where);
+            assert.ok(lists(rows), 'no agent and no count: ' + where);
+          }
+        }
+      }
+    }
+  }
+  assert.ok(boards > 10);
 });
 
 test("every wave's lane starts with an arrow that is a button: down while its agents are listed, to the side once folded", () => {
