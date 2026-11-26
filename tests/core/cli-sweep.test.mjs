@@ -191,8 +191,21 @@ test('hunt records progress and sorting; park and drop add to the totals once, h
   t.cli('hunt', '--park', '1')
   assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped], [4, 1], 'a new round adds to what the last one parked')
   assert.equal(t.cli('hunt', '--fix', 'many').code, 1)
-  t.cli('stage', 'Plan')
-  assert.equal(t.cli('hunt', '--fix', '1').code, 1, 'outside Hunt')
+})
+
+test('hunt records a round\'s park and drop after a wave has started and moved the sweep on, and nothing before the first round', () => {
+  const fresh = sweep()
+  fresh.cli('stage', 'Plan')
+  assert.equal(fresh.cli('hunt', '--park', '1').code, 1, 'no round has begun')
+  assert.equal(fresh.state().sweep.parked, 0)
+  const t = hunting()
+  t.cli('wave', 'add', '1')
+  t.start()
+  assert.equal(t.state().stage, 'Plan')
+  const r = t.cli('hunt', '--park', '2', '--drop', '1')
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped], [2, 1])
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /hunt, round 1: park 2, drop 1/)
 })
 
 test('hunt, wave and merge are refused in a build', () => {
@@ -292,6 +305,7 @@ test('a wave starts beside one still being built, cut from where that wave was c
   const early = at(2, 'wave', 'take')
   assert.equal(early.code, 1)
   assert.match(early.out, /Wave 1 is still being built/)
+  assert.match(early.out, /nothing to take in yet.*go on to Review/)
   assert.equal(at(2, 'stage', 'Build').code, 0)
   assert.equal(at(2, 'stage', 'Review').code, 0, 'its review range is its own while wave 1 is unbuilt')
   assert.match(t.cli('status').out, /review range: git diff lcw\/tidy-wave-1\.\.\.lcw\/tidy-wave-2/)
@@ -306,6 +320,35 @@ test('a wave starts beside one still being built, cut from where that wave was c
   assert.equal(fs.existsSync(`${wt2}/b.txt`), true)
   assert.equal(git(t.repo, 'diff', '--name-only', 'lcw/tidy-wave-1...lcw/tidy-wave-2'), 'e.txt', 'the range is still wave 2\'s own work')
   assert.equal(at(2, 'stage', 'Ship').code, 0)
+})
+
+test('a wave cut from a built wave goes on to Review while an older wave is still being built, and takes that one in through the wave before once it is built', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '1', '1', '1')
+  const at = (n, ...a) => t.cli(...a, '--wave', String(n))
+  t.start()
+  const wt1 = t.wt
+  at(1, 'stage', 'Build')
+  commit(wt1, 'b.txt', 'half built\n')
+  t.start()
+  commit(t.wt, 'e.txt', 'wave 2 fix\n')
+  at(2, 'stage', 'Build')
+  at(2, 'stage', 'Review')
+  assert.equal(t.start().code, 0)
+  commit(t.wt, 'f.txt', 'wave 3 fix\n')
+  at(3, 'stage', 'Build')
+  const review = at(3, 'stage', 'Review')
+  assert.equal(review.code, 0, review.out)
+  commit(wt1, 'c.txt', 'the rest\n')
+  at(1, 'stage', 'Review')
+  const held = at(3, 'stage', 'Ship')
+  assert.equal(held.code, 1, 'wave 1 is built now, and reaches wave 3 only through wave 2')
+  assert.match(held.out, /lcw wave take --wave 3/)
+  assert.match(at(3, 'wave', 'take').out, /lcw wave take --wave 2 first/)
+  assert.equal(at(2, 'wave', 'take').code, 0)
+  assert.equal(at(3, 'wave', 'take').code, 0)
+  assert.equal(fs.existsSync(`${t.wt}/c.txt`), true)
+  assert.equal(at(3, 'stage', 'Ship').code, 0)
 })
 
 test('a third wave started beside two still being built is cut from where the first of them was cut', () => {
@@ -2001,13 +2044,26 @@ test('status names the wave an ask is about', () => {
   assert.match(t.cli('status').out, /^ {2}1\. push needs your token \(wave 2\)$/m)
 })
 
-test('wave files leaves out a wave once it is at merging', () => {
-  const t = bothShipping()
-  commit(t.wt2, 'e.txt', 'wave 2 fix\n')
-  t.at(1, 'wave', 'step', 'final checks')
+test('wave files leaves out the newest open wave once it is at merging, as the next wave is cut from it', () => {
+  const t = shipping(1)
+  commit(t.wt, 'b.txt', 'fix\n')
+  t.cli('wave', 'step', 'final checks')
   assert.match(t.cli('wave', 'files').out, /^ {2}b\.txt \(wave 1\)$/m)
+  t.cli('wave', 'step', 'merging')
+  assert.equal(t.cli('wave', 'files').out.trim(), 'files the open waves have changed: none')
+})
+
+test('wave files lists a wave at merging whose review fix the next wave, cut beside a later wave, does not hold', () => {
+  const t = overlapping()
+  commit(t.wt2, 'e.txt', 'wave 2 fix\n')
+  t.at(1, 'stage', 'Build')
+  commit(t.wt1, 'F.txt', 'review fix\n')
+  t.at(1, 'stage', 'Review')
+  t.at(1, 'stage', 'Ship')
+  t.at(1, 'wave', 'step', 'final checks')
   t.at(1, 'wave', 'step', 'merging')
-  assert.deepEqual(t.cli('wave', 'files').out.trim().split('\n').slice(1), ['  e.txt (wave 2)'])
+  assert.equal(t.w(1).step, 'merging')
+  assert.match(t.cli('wave', 'files').out, /^ {2}F\.txt \(wave 1\)$/m)
 })
 
 test('a wave leaves Review only once every fix has its verdict', () => {
