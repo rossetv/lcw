@@ -16,12 +16,13 @@ const approving = (approval: object = { go: ['Go (a)', 'Go (b)'], meaning: 'buil
   [RUN + '/state.json']: JSON.stringify({ id: 'r1', name: 'phone-rows', status: 'with-you', stage: 'Brainstorm', stageSince: NOW - 60000, tasks: [], asks: [], approval, ...over }),
 })
 
-function engine(on: any, files: Record<string, string>, opts: { draft?: string; fills?: boolean; kept?: Record<string, any> } = {}) {
+function engine(on: any, files: Record<string, string>, opts: { draft?: string; fills?: boolean; kept?: Record<string, any>; notify?: object[] } = {}) {
   const kept = opts.kept ?? {}
   const clock = mock.clock(on, { now: NOW })
   const prompts: string[] = []
   const filled: string[] = []
   const toasts: string[] = []
+  const notified: string[] = []
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 's1' }))
   on('session.info', () => ({ value: { transcriptPath: '', platform: 'linux' } }))
@@ -42,12 +43,13 @@ function engine(on: any, files: Record<string, string>, opts: { draft?: string; 
   on('prompt.read', () => ({ value: { text: opts.draft ?? '', cursor: 0 } }))
   on('prompt.fill', (_: any, e: any) => { if (opts.fills === false) return { isFilled: false }; filled.push(e.text); return { isFilled: true } })
   on('ui.toast', (_: any, e: any) => { toasts.push(e.text); return { value: undefined } })
+  on('ui.notify', (_: any, e: any) => { notified.push(e.text); return { value: opts.notify?.shift() ?? { isSent: true, channel: 'terminal_bell' } } })
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
   // $.state as a reload of the mod's code finds it: what the test put there, and what the mod writes.
   on('state.get', (_: any, e: any) => ({ value: { value: kept[e.key], version: e.key in kept ? 1 : 0 } }))
   on('state.set', (_: any, e: any) => { kept[e.key] = e.value; return { value: { isSet: true, version: 2 } } })
-  return { clock, prompts, filled, toasts, kept }
+  return { clock, prompts, filled, toasts, notified, kept }
 }
 
 const start = ($: any) => $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -159,4 +161,76 @@ test("a sweep's charter box asks for the charter, and its Go only fills the prom
   expect(w.prompts).toEqual([])
   expect(w.toasts).toEqual([])
   await band.unmount()
+})
+
+test('the approval box rings once when it appears, and not again as it is drawn again', async ($, on) => {
+  const w = engine(on, approving())
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await w.clock.advance(30000)
+  await band.unmount()
+  const again = await $.ui.mount(BAND)
+  await w.clock.advance(10000)
+  expect(w.notified).toEqual(['Is this what you want built?'])
+  await again.unmount()
+})
+
+test('a bell that could not go out yet rings on a later draw, and the box counts as rung once it went out', async ($, on) => {
+  const w = engine(on, approving(), { notify: [{ isSent: false, reason: 'no-surface' }] })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await w.clock.advance(30000)
+  expect(w.notified).toEqual(['Is this what you want built?', 'Is this what you want built?'])
+  expect(w.kept.rung?.value).toEqual(['approve:r1:' + (NOW - 1000)])
+  await band.unmount()
+})
+
+test('a bell with no surface is tried at most once every few seconds, however often the box is drawn', async ($, on) => {
+  const w = engine(on, approving(), { notify: Array(20).fill({ isSent: false, reason: 'no-surface' }) })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  for (let i = 0; i < 8; i++) await w.clock.advance(500)
+  expect(w.notified.length).toBe(1)
+  await w.clock.advance(2000)
+  await w.clock.advance(1000)
+  expect(w.notified.length).toBe(2)
+  await band.unmount()
+})
+
+test('a bell no channel sounded is not counted as rung, and is not rung again on every draw', async ($, on) => {
+  const w = engine(on, approving(), { notify: [{ isSent: false, reason: 'no-channel' }] })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await w.clock.advance(30000)
+  expect(w.notified).toEqual(['Is this what you want built?'])
+  expect(w.kept.rung?.value ?? []).toEqual([])
+  await band.unmount()
+})
+
+test('a box that rang before a reload of the mod does not ring after it', async ($, on) => {
+  const w = engine(on, approving(), { kept: { rung: { shape: 'kept-1', value: ['approve:r1:' + (NOW - 1000)] } } })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await w.clock.advance(10000)
+  expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeDefined()
+  expect(w.notified).toEqual([])
+  await band.unmount()
+})
+
+test('a mark box that waits for room above the card does not ring; it rings once it is drawn', async ($, on) => {
+  const w = engine(on, {
+    ...approving(undefined, { status: 'paused', pausedReason: 'mark', pausedAt: '2026-11-20T03:00:00Z', markPercent: 75, stage: 'Build' }),
+    '/lcw/usage.json': JSON.stringify({ at: NOW, sevenDay: { percentUsed: 76, resetsAt: '2026-11-22T14:00:00Z' } }),
+  })
+  await start($)
+  const tight = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 13 } })
+  await w.clock.advance(10000)
+  expect(await tight.find({ type: 'Text', text: /paused at your 75% mark\./ })).toBeUndefined()
+  expect(w.notified).toEqual([])
+  await tight.unmount()
+  const roomy = await $.ui.mount(BAND)
+  await w.clock.advance(10000)
+  expect(await roomy.find({ type: 'Text', text: /paused at your 75% mark\./ })).toBeDefined()
+  expect(w.notified.length).toBe(1)
+  await roomy.unmount()
 })

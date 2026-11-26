@@ -90,6 +90,8 @@ export interface BuildInput {
 export function buildView(input?: BuildInput): View;
 /** The name a folded wave is kept under in ui.folded. */
 export function foldKey(runId: string | undefined, wave: number): string;
+/** The name a folded hunt round's lane is kept under in ui.folded. */
+export function roundFoldKey(runId: string | undefined, round: number): string;
 export interface WeekFigures { shareBefore: number; weekAtStart: number | null; weekResetsAt: string | null; weekUsed: number | null }
 /** The run's week figures for this reading: a week that has ended since weekResetsAt is folded into shareBefore. */
 export function weekOf(state: Record<string, any>, week?: { percentUsed?: number; resetsAt?: string | null } | null): WeekFigures;

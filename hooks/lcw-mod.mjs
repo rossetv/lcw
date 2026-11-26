@@ -20,7 +20,7 @@ export function isShown(state, now) {
 
 /**
  * How long a step of the card's motion lasts, in ms, for the card's mode (buildView's): 200 while a turn or an agent
- * works, 1000 while the run waits on the person, 0 (it holds still) when paused or finished.
+ * works, 1000 while the run waits on the person or runs with nothing at work, 0 (it holds still) when paused or finished.
  */
 export const cardPace = (mode, working) => (mode !== 'running' && mode !== 'with-you' ? 0 : working ? 200 : 1000)
 
@@ -166,7 +166,8 @@ export function stallPrompt(due, all) {
   const again = (a) => (a.times > 1 ? ', and this is the ' + (a.times === 2 ? 'second' : 'third and last') + ' time you are told' : '')
   const kinds = [
     ['still', (a) => `${name(a)} has not moved for ${mins(a.quietMs)} minutes${again(a)}`, 'agents have stalled',
-      'Do not keep waiting. Act now as the lcw skill says under "When an agent stalls": ask it once what it is doing; if it has already been asked, or is going round in circles, stop it and give its work to a fresh agent.'],
+      // The notice waits for a turn to end, and the agent may have moved on by the time it is read.
+      (n) => `If ${n === 1 ? 'it is' : 'they are'} still stalled, do not keep waiting. Act now as the lcw skill says under "When an agent stalls": ask it once what it is doing; if it has already been asked, or is going round in circles, stop it and give its work to a fresh agent.`],
     ['held', (a) => `${name(a)} gave its report ${mins(a.heldMs)} minutes ago and has not ended${again(a)}`, 'agents have reported and not ended',
       'Such an agent ended its turn with background work of its own still running, such as a command that never ended, and until that work ends it stays on LCW\'s card, though ListAgents may call it completed. Do not message it: a message would start it working again. If its report was complete, stop it now, TaskStop with its id, which ends that work too: its turn has ended, and it still needs this stop. If its report said it was waiting for that work, leave it: it will report again.'],
     ['long', (a) => `${name(a)} has been at work for ${mins(a.listedMs)} minutes and has used ${tokenCount(a.tokens)} tokens`, 'agents have been at work for a long time',
@@ -175,7 +176,7 @@ export function stallPrompt(due, all) {
   return kinds.flatMap(([why, one, many, act]) => {
     const of = due.filter((a) => (a.why ?? 'still') === why)
     if (!of.length) return []
-    return [`LCW: ${of.length === 1 ? `the agent ${one(of[0])}` : `${of.length} ${many}: ${of.map(one).join('; ')}`}. ${act}`]
+    return [`LCW: ${of.length === 1 ? `the agent ${one(of[0])}` : `${of.length} ${many}: ${of.map(one).join('; ')}`}. ${typeof act === 'function' ? act(of.length) : act}`]
   }).join('\n\n')
 }
 
@@ -434,6 +435,11 @@ export function waveOfBrief(prompt, description, name) {
   const found = /--wave[ =](\d+)/.exec(brief) ?? (tree && tree.exec(brief)) ?? /\/waves\/(\d+)\//.exec(brief) ?? /\/wave-?(\d+)\//.exec(brief)
     ?? /\bwave (\d+)\b/i.exec(String(description ?? '')) ?? /\bwave (\d+)\b/i.exec(brief.slice(0, 160))
   return found ? Number(found[1]) : null
+}
+
+/** Whether a brief names the worktree of a hunt round's latest work, <name>-latest: the brief of a hunt probe. */
+export function isHuntBrief(prompt, name) {
+  return !!name && new RegExp('\\.claude/worktrees/' + String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-latest\\b').test(String(prompt ?? ''))
 }
 
 /**

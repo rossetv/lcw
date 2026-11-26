@@ -27,6 +27,7 @@ export function weeklyIdle(args: Idle): boolean
 export function weeklyDue(args: Idle & { askedAt?: number }): boolean
 export function awakeCheckWanted(state: any, notices: Record<string, unknown> | null | undefined, dismissed: Set<string> | undefined): boolean
 export function dismissKeys(banner: Banner): string[]
+export function ringKey(banner: Banner | null | undefined): string | null
 export function approveText(banner: Banner, option: string): string | undefined
 export function sameBox(drawn: Banner | null | undefined, fresh: Banner | null | undefined, option: string): boolean
 
@@ -48,7 +49,7 @@ export type Plan = {
   fillText?: string
   proxyQuotaChoice?: { host: string; choice: string }
   dismiss?: boolean
-  toast?: string
+  toast?: string | ((result: { stdout?: string; stderr?: string } | null) => string)
 }
 export function pressPlan(banner: Banner | null | undefined, option: string, facts: BannerFacts | null | undefined,
   ctx: { root: string; sessionId: string; repoKey?: string; cleanupPath?: string }): Plan | null
