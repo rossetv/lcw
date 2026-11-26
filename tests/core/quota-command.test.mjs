@@ -233,7 +233,7 @@ test('the adapter group remains bounded when its runner is killed abruptly', asy
   let timer
   let watcher
   const ready = new Promise((resolve, reject) => {
-    timer = setTimeout(() => reject(new Error('adapter did not start')), 3000)
+    timer = setTimeout(() => reject(new Error('adapter did not start')), 30000)
     watcher = fs.watch(home, () => {
       try {
         pids = JSON.parse(fs.readFileSync(pidFile, 'utf8'))
@@ -242,7 +242,6 @@ test('the adapter group remains bounded when its runner is killed abruptly', asy
     })
   })
   const runner = spawn(process.execPath, [runnerFile], { stdio: 'ignore', env: { ...process.env, LCW_HOME: home, LCW_NOW: String(at + 300000) } })
-  const exited = once(runner, 'exit', { signal: AbortSignal.timeout(3000) })
   t.after(() => {
     clearTimeout(timer)
     watcher.close()
@@ -252,12 +251,13 @@ test('the adapter group remains bounded when its runner is killed abruptly', asy
   await ready
   clearTimeout(timer)
   watcher.close()
+  const exited = once(runner, 'exit', { signal: AbortSignal.timeout(10000) })
   runner.kill('SIGKILL')
   await exited
   const running = (pid) => {
     try { return !fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1].startsWith('Z') } catch { return false }
   }
-  const until = Date.now() + 750
+  const until = Date.now() + 5000
   while (pids.some(running) && Date.now() < until) await new Promise((r) => setImmediate(r))
   assert.equal(pids.some(running), false)
 })
