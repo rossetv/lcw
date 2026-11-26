@@ -37,7 +37,6 @@ export function quotaWakeEvidence(gate: any, quota: import('../lib/quota.mjs').Q
 export function replacesGate(current: { unit?: string; resetsAt?: string | null } | null | undefined, next: Gate | UsdGate | null | undefined): boolean
 export function wakeDue(gate: { resetsAt?: string | null; unit?: string; retryAt?: number } | null | undefined, now: number,
   wokeFor: string | number | null | undefined, billing?: Billing | string, quota?: import('../lib/quota.mjs').QuotaView | null): boolean
-export function retryGate(gate: UsdGate, money: Money | null | undefined, now: number): UsdGate | null
 type QuotaSession = { billing?: Billing; quotaSelection?: import('../lib/quota.mjs').QuotaSelection | null; quotaDefaultBilling?: Billing }
 export function quotaBilling(session: QuotaSession | null | undefined, quota: import('../lib/quota.mjs').QuotaView | null | undefined): Billing
 export function measureStep(session: QuotaSession | null | undefined, rec: SpendRecord | null | undefined,
