@@ -27,6 +27,7 @@ function engine(on: any, files: Record<string, string>, opts: {
   const touch = (path: string) => { times[path] = clock.now() + ++changes / 1000 }
   files = new Proxy(files, { set: (all, path: string, text) => { all[path] = text; touch(path); return true } })
   const runs: string[][] = []
+  const limits: Record<string, unknown> = {}
   const prompts: { text: string; asUser?: boolean }[] = []
   const toasts: string[] = []
   const filled: string[] = []
@@ -59,6 +60,7 @@ function engine(on: any, files: Record<string, string>, opts: {
   })
   on('process.run', async (_: any, e: any) => {
     runs.push([...e.argv])
+    limits[e.argv.join(' ')] = e.init?.timeoutMs
     const said = await opts.answer?.(e.argv)
     if (said) return { value: { stderr: '', isStdoutTruncated: false, isStderrTruncated: false, ...said } }
     const out = e.argv.includes('where') ? JSON.stringify({ main: '/repo', key: 'repo-1', run: null }) : ''
@@ -76,7 +78,7 @@ function engine(on: any, files: Record<string, string>, opts: {
   on('ui.toast', (_: any, e: any) => { toasts.push(e.text); return { value: undefined } })
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
-  return { clock, files, times, runs, prompts, toasts, filled, reads }
+  return { clock, files, times, runs, limits, prompts, toasts, filled, reads }
 }
 
 const start = ($: any, isInteractive = true, surface: string | null = 'terminal') => $.session.start({ cwd: '/repo', surface, isInteractive })
@@ -403,6 +405,27 @@ test('a run left halfway shows to a session driving none; Resume takes it over a
   await band.unmount()
 })
 
+test('lcw where is given a time limit, so one that hangs cannot hold the slow checks', async ($, on) => {
+  const w = engine(on, leftHalfway())
+  await start($)
+  await w.clock.advance(2000)
+  const ms = Object.entries(w.limits).find(([argv]) => / where --json$/.test(argv))?.[1]
+  expect(typeof ms === 'number' && ms > 0).toBe(true)
+})
+
+test('a failed lcw where is asked again half a minute later, so the run left halfway still shows', async ($, on) => {
+  let wheres = 0
+  const w = engine(on, leftHalfway(), { answer: (a) => (a.includes('where') && ++wheres <= 2 ? { exitCode: 1, stdout: '' } : undefined) })
+  await start($)
+  await w.clock.advance(32000)
+  expect(wheres).toBe(2)
+  await w.clock.advance(32000)
+  expect(wheres).toBe(3)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /stopped halfway: old-run\./ })).toBeDefined()
+  await band.unmount()
+})
+
 test('Resume pressed seconds after the session started hands Claude the run once, with no reopen prompt on top', async ($, on) => {
   const w = engine(on, leftHalfway(), {
     answer: (a) => { if (a[2] === 'take') w.files['/lcw/sessions/s1.json'] = JSON.stringify({ billing: 'subscription', runDir: OLD }); return undefined },
@@ -622,6 +645,14 @@ test('no weekly check is asked while the session is at the usage mark', async ($
 })
 
 const awakeCheck = (a: string[]) => (a.includes('--check') ? { exitCode: 0, stdout: JSON.stringify({ canHold: true, heldByOther: false, kept: false }) } : undefined)
+test('the awake check is given a time limit, so one that hangs cannot hold the slow checks', async ($, on) => {
+  const w = engine(on, bound({ runningSince: 'T' }), { answer: awakeCheck })
+  await start($)
+  await w.clock.advance(65000)
+  const ms = Object.entries(w.limits).find(([argv]) => / awake --check /.test(argv))?.[1]
+  expect(typeof ms === 'number' && ms > 0).toBe(true)
+})
+
 const checks = (runs: string[][]) => runs.filter((a) => a.includes('--check')).length
 
 test('whether the computer can be kept awake is not asked once the box is turned off', async ($, on) => {

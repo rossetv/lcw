@@ -1,6 +1,6 @@
 import { expect, mock } from 'claude-code/testing'
 import { test } from './kit'
-import { gateFor, retryGate } from '../../hooks/lcw-mod.mjs'
+import { gateFor } from '../../hooks/lcw-mod.mjs'
 import { moneyFrom } from '../../lib/spend.mjs'
 
 // The mod on pay-per-token billing: the dollar gate's morning try, the spend it records, and a subscriber left as today.
@@ -54,7 +54,7 @@ function engine(on: any, files: Record<string, string>, transcriptPath = '', mti
       const g = JSON.parse(files[file] ?? 'null')
       if (JSON.stringify(g) !== JSON.stringify(p.expectedGate)) return { value: { exitCode: 0, stdout: '{"ok":false}', stderr: '' } }
       if (p.action === 'ack') delete files[file]
-      if (p.action === 'retry') files[file] = JSON.stringify(retryGate(g, { atMark: true } as any, g.retryAt))
+      if (p.action === 'retry') files[file] = JSON.stringify({ ...g, retryAt: next0800(g.retryAt), retried: true })
       if (p.action === 'sync') {
         const session = JSON.parse(files['/lcw/sessions/s1.json'] ?? 'null')
         const state = JSON.parse(files[RUN + '/state.json'] ?? 'null')

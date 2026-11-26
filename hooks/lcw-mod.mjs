@@ -460,15 +460,6 @@ export function usageFrom(rateLimits, now, seen) {
   return r ? { at: now, ...(Number.isFinite(seen) && seen > 0 ? { seen } : {}), sevenDay: { percentUsed: r.percentUsed, resetsAt: r.resetsAt ?? null }, source: 'mod' } : null
 }
 
-/**
- * The morning try at a dollar gate: null when the run may go on (the 7-day spend is under the mark, or money is
- * null because the session is no longer billed per token), else the gate moved on to the following 08:00.
- */
-export function retryGate(gate, money, now) {
-  if (!money?.atMark) return null
-  return { ...gate, retryAt: next0800(now), retried: true }
-}
-
 export function quotaBilling(session, quota) {
   return quota ? 'subscription' : session?.quotaSelection ? session.quotaDefaultBilling ?? 'unclear' : session?.billing ?? 'unclear'
 }

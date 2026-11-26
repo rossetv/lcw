@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import {
   addTotals, addUsage, agentTokens, buttons, cardMotion, cardPace, countsTurn, compactInstructions, gateFor, isShown, layout, reopenDue, reopenPrompt, resumePrompt,
   longNudges, quietCounts, replacesGate, sittingPrompt, sittingWaves, stallNudges, stallPrompt, themeFrom, trackAgents, usageFrom, wakeDue, wakePrompt, waveOfBrief, briefOf,
-  measureStep, retryGate, usdWakePrompt, carryDue, carryFailed, carryPrompt,
+  measureStep, usdWakePrompt, carryDue, carryFailed, carryPrompt,
 } from '../../hooks/lcw-mod.mjs'
 import { buildView, renderCard } from '../../lib/card.mjs'
 import { inputsOf } from '../render/boards.mjs'
@@ -592,13 +592,6 @@ test('a dollar gate is due once at its retryAt, and at once on a session settled
   assert.equal(wakeDue(gate, TOMORROW_8 + 60000, TOMORROW_8, 'payg'), false, 'this try was made')
   assert.equal(wakeDue(gate, NOW, null, 'subscription'), true)
   assert.equal(wakeDue(gate, NOW, TOMORROW_8, 'subscription'), false)
-})
-
-test('at 08:00 a run still at its dollar mark tries again the following morning; under the mark, or off pay-per-token, it goes on', () => {
-  const gate = { reason: 'mark', unit: 'usd', markUsd: 3000, usedUsd: 3020, retryAt: TOMORROW_8, retried: false, at: NOW }
-  assert.deepEqual(retryGate(gate, atMark, TOMORROW_8), { ...gate, retryAt: Date.parse('2026-11-20T08:00:00Z'), retried: true })
-  assert.equal(retryGate(gate, under, TOMORROW_8), null)
-  assert.equal(retryGate(gate, null, TOMORROW_8), null)
 })
 
 test('the dollar wake names the mark in dollars and the commands to carry on; a subscription hears no dollars', () => {
