@@ -209,6 +209,13 @@ export const awakeCheckWanted = (state, notices, dismissed) =>
 /** What dismissing a box adds to the session's dismissed set: its occurrence, and the bare kind for the three old boxes. */
 export const dismissKeys = (banner) => (String(banner.key) === banner.kind ? [banner.kind] : [banner.kind + ':' + banner.key])
 
+/** The boxes that wait on the person's choice: each occurrence rings the terminal once. */
+const RINGS = ['question', 'approve', 'mark', 'answer']
+
+/** What a box rings under, kind and occurrence; null for one that needs no choice (a mark box that offers only Wait). */
+export const ringKey = (banner) =>
+  banner && RINGS.includes(banner.kind) && banner.options.some(([id]) => id !== 'wait' && id !== 'later') ? banner.kind + ':' + banner.key : null
+
 /**
  * Whether a box drawn earlier is still the one that applies: same kind and occurrence (for an ask's options, the same ask), and it still offers option
  * under the label that was drawn ("Run up to $3,600" runs 3,600 or nothing).

@@ -22,7 +22,7 @@ import {
 } from './lcw-mod.mjs'
 import type { CardAgent, Carry, Nudged, Row, Sat, Seen, Span, Told, Totals } from './lcw-mod.mjs'
 import {
-  AWAKE_EVERY_MS, RUNS_EVERY_MS, awakeApplies, awakeCheckWanted, claudeCommand, dismissKeys, markSpell, pressPlan, proxyQuotaEndpoint, proxyQuotaHost, runFact, said, sameBox, spendFailingFact,
+  AWAKE_EVERY_MS, RUNS_EVERY_MS, awakeApplies, awakeCheckWanted, claudeCommand, dismissKeys, markSpell, pressPlan, ringKey, proxyQuotaEndpoint, proxyQuotaHost, runFact, said, sameBox, spendFailingFact,
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue, weeklyIdle,
 } from './boxes.mjs'
 import type { Plan, RunSeen } from './boxes.mjs'
@@ -39,6 +39,7 @@ const UNFOCUS_MS = 300
 // What a reload of this code must not start over; a new tag makes a reload read what older code kept as absent.
 const KEPT = 'kept-1'
 const keptDismissed = atom({ plugin: 'lcw', key: 'dismissed' } as const, [], { shape: KEPT })
+const keptRung = atom({ plugin: 'lcw', key: 'rung' } as const, [] as string[], { shape: KEPT })
 const keptReplied = atom({ plugin: 'lcw', key: 'repliedAt' } as const, 0, { shape: KEPT })
 const keptTold = atom({ plugin: 'lcw', key: 'told' } as const, {}, { shape: KEPT })
 const keptNudged = atom({ plugin: 'lcw', key: 'nudged' } as const, {}, { shape: KEPT })
@@ -105,6 +106,8 @@ const S = {
   // The banner pinned above the card until the person picks an option; dismissed is Not now, for this session
   // ('kind:key', or the bare kind of the three old boxes); answerFill the asks Answer now could not put in the prompt.
   banner: { shown: null as Banner | null, dismissed: new Set<string>(), answerFill: '' },
+  // The boxes that have rung the terminal, newest last: each occurrence rings once, whatever redraws or reloads follow.
+  rung: [] as string[],
   // A person can see the session: a person at the prompt (isInteractive) or a surface attached, such as the desktop
   // app driving it through the SDK. Without either (a -p run, or an app that left): no box, no weekly check, no setting changed.
   interactive: false,
@@ -185,6 +188,11 @@ function keepDismissed($: EngineInterface) {
   if (changed('dismissed', dismissed)) void update($, keptDismissed, () => dismissed).catch(unkept('dismissed'))
 }
 
+function keepRung($: EngineInterface) {
+  const rung = S.rung
+  if (changed('rung', rung)) void update($, keptRung, () => rung).catch(unkept('rung'))
+}
+
 function keepReplied($: EngineInterface) {
   const at = S.repliedAt
   if (changed('repliedAt', at)) void update($, keptReplied, () => at).catch(unkept('repliedAt'))
@@ -263,6 +271,7 @@ async function restore($: EngineInterface) {
     const [dismissed, repliedAt, told, nudged, carry, session, completion, owed] = await Promise.all([
       read($, keptDismissed), read($, keptReplied), read($, keptTold), read($, keptNudged), read($, keptCarry), $.session.id(), read($, keptCompletion), read($, keptOwed),
     ])
+    S.rung = [...new Set([...(await read($, keptRung)), ...S.rung])]
     S.waves = { ...(await read($, keptWaves)), ...S.waves }
     if (!S.sat.run) S.sat = await read($, keptSat)
     for (const k of dismissed) S.banner.dismissed.add(k)
@@ -276,6 +285,7 @@ async function restore($: EngineInterface) {
   } catch {}
   S.restored = true
   keepDismissed($)
+  keepRung($)
   keepReplied($)
   keepNotices($)
   keepCarry($)
@@ -883,6 +893,18 @@ async function readBanner($: EngineInterface) {
   S.facts = facts
   const shown = bannerFor(facts)
   if (JSON.stringify(shown) !== JSON.stringify(S.banner.shown)) { S.banner.shown = shown; S.dirty = true }
+  ring($, shown)
+}
+
+// A box that waits on the person rings the terminal, through their own notification channel, the first time it
+// shows; never before what an earlier copy of this code rang is read back.
+const RUNG_HELD = 50
+function ring($: EngineInterface, shown: Banner | null) {
+  const key = ringKey(shown)
+  if (!key || !S.restored || S.rung.includes(key)) return
+  S.rung = [...S.rung, key].slice(-RUNG_HELD)
+  keepRung($)
+  void $.ui.notify(shown!.title).catch(() => {})
 }
 
 // The facts that cost a process or a walk over the repository's runs, each at its own pace, and the weekly check.

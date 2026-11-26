@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { DEFAULT_CAP_USD } from '../../lib/spend.mjs'
 import { dollars } from '../../lib/format.mjs'
 import {
-  LEARN_TEXT, awakeApplies, awakeCheckWanted, SHOWN_WITHIN_MS, claudeCommand, markSpell, dismissKeys, discussPrompt, fixSpendPrompt, nextStepOf, pressPlan, resumePrompt, runFact, sameBox,
+  LEARN_TEXT, awakeApplies, awakeCheckWanted, SHOWN_WITHIN_MS, claudeCommand, markSpell, dismissKeys, discussPrompt, fixSpendPrompt, nextStepOf, pressPlan, resumePrompt, ringKey, runFact, sameBox,
   statusLineFact, unfinishedCandidates, unfinishedFact, usageFact, weeklyDue,
 } from '../../hooks/boxes.mjs'
 import { bannerFor, openWaves } from '../../lib/banner.mjs'
@@ -102,6 +102,17 @@ test('Abandon and Keep it awake say what they did in sentences, naming what the 
   const awake = pressPlan({ kind: 'awake', key: 'r1:T', options: [['keep', 'Keep it awake'], ['never', 'Never']] }, 'keep', {}, CTX)
   assert.deepEqual(argvs(awake), ['awake --session s1'])
   assert.match(awake.toast, /^LCW keeps this computer awake .*\.$/)
+})
+
+test('only a box that waits on a choice from the person rings, once per occurrence', () => {
+  const mark = bannerFor({ now: NOW, run: runFact(pausedRun), usage: { usedPercent: 76, markPercent: 75, resetsAt: '2026-11-22T14:00:00Z' } })
+  assert.equal(ringKey(mark), 'mark:' + mark.key)
+  const later = bannerFor({ now: NOW, run: runFact({ ...pausedRun, pausedAt: '2026-11-21T03:00:00Z' }), usage: { usedPercent: 76, markPercent: 75, resetsAt: '2026-11-22T14:00:00Z' } })
+  assert.notEqual(ringKey(later), ringKey(mark), 'a later pause at the mark is a new occurrence')
+  assert.equal(ringKey({ kind: 'mark', key: 'q', options: [['wait', 'Wait']] }), null, 'a box that offers only waiting asks nothing')
+  for (const kind of ['question', 'approve', 'answer']) assert.equal(ringKey({ kind, key: 'k', options: [['a', 'A'], ['later', 'Later']] }), kind + ':k')
+  for (const kind of ['guide', 'cleanup', 'unfinished', 'awake', 'update']) assert.equal(ringKey({ kind, key: kind, options: [['a', 'A']] }), null, kind)
+  assert.equal(ringKey(null), null)
 })
 
 test('a button the box does not offer does nothing', () => {
