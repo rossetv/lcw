@@ -10,6 +10,7 @@ declare module 'claude-code' {
     lcw: {
       dismissed: Shaped<string[]>
       repliedAt: Shaped<number>
+      rung: Shaped<string[]>
       told: Shaped<Record<string, 1>>
       nudged: Shaped<LcwNudged>
       waves: Shaped<Record<string, number>>

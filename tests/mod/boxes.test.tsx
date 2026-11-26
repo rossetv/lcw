@@ -455,14 +455,26 @@ test('Resume pressed seconds after the session started hands Claude the run once
   await band.unmount()
 })
 
-test('Abandon runs lcw abandon and says what it did', async ($, on) => {
-  const w = engine(on, leftHalfway(), { answer: (a) => (a[2] === 'abandon' ? { exitCode: 0, stdout: 'abandoned r2: stopped for good\nbranch kept: lcw/old-run' } : undefined) })
+test('Abandon runs lcw abandon and says what it did: the worktree removed or kept and why, and the branch kept', async ($, on) => {
+  const said = (stdout: string) => (a: string[]) => (a[2] === 'abandon' ? { exitCode: 0, stdout } : undefined)
+  const kept = engine(on, leftHalfway(), { answer: said('abandoned r2: stopped for good\nworktree kept: /repo/.claude/worktrees/old-run, because it has uncommitted or untracked files\nbranch kept: lcw/old-run') })
+  await start($)
+  await kept.clock.advance(2000)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'banner:unfinished:abandon' })
+  expect(lcwCalls(kept.runs, 'abandon')).toEqual(['abandon r2 --session s1'])
+  expect(kept.toasts.join(' ')).toMatch(/stopped for good.*worktree kept.*because it has uncommitted or untracked files.*branch kept: lcw\/old-run/)
+  await band.unmount()
+})
+
+test('Abandon says the worktree was removed when lcw removed it', async ($, on) => {
+  const w = engine(on, leftHalfway(), { answer: (a) => (a[2] === 'abandon' ? { exitCode: 0, stdout: 'abandoned r2: stopped for good\nworktree removed: /repo/.claude/worktrees/old-run' } : undefined) })
   await start($)
   await w.clock.advance(2000)
   const band = await $.ui.mount(BAND)
   await band.press({ key: 'banner:unfinished:abandon' })
-  expect(lcwCalls(w.runs, 'abandon')).toEqual(['abandon r2 --session s1'])
-  expect(w.toasts).toEqual(['old-run is stopped for good.'])
+  expect(w.toasts.join(' ')).toMatch(/worktree removed/)
+  expect(w.toasts.join(' ')).not.toMatch(/kept/)
   await band.unmount()
 })
 

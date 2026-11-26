@@ -349,9 +349,8 @@ export function pressPlan(banner, option, facts, ctx) {
       const u = facts?.unfinished
       if (!u) return null
       if (option === 'abandon') {
-        // lcw abandon keeps a worktree whose removal could lose work, or that a session is in.
-        const toast = [`${u.name} is stopped for good.`, u.worktree && 'Its worktree is removed, unless that could lose work or a session is in it.', u.branch && 'Its branch is kept.']
-        return { steps: [lcw('abandon', u.id)], toast: toast.filter(Boolean).join(' '), dismiss: true }
+        // lcw abandon says itself whether it removed the worktree or kept it, and why: that is what the person is told.
+        return { steps: [lcw('abandon', u.id)], toast: 'output', dismiss: true }
       }
       // Paused at the mark it stays paused: only a Run up to press raises the mark.
       const resumed = u.status === 'paused' && u.pausedReason !== 'mark'

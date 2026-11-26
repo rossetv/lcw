@@ -184,3 +184,21 @@ test('a box that rang before a reload of the mod does not ring after it', async 
   expect(w.notified).toEqual([])
   await band.unmount()
 })
+
+test('a mark box that waits for room above the card does not ring; it rings once it is drawn', async ($, on) => {
+  const w = engine(on, {
+    ...approving(undefined, { status: 'paused', pausedReason: 'mark', pausedAt: '2026-11-20T03:00:00Z', markPercent: 75, stage: 'Build' }),
+    '/lcw/usage.json': JSON.stringify({ at: NOW, sevenDay: { percentUsed: 76, resetsAt: '2026-11-22T14:00:00Z' } }),
+  })
+  await start($)
+  const tight = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 13 } })
+  await w.clock.advance(10000)
+  expect(await tight.find({ type: 'Text', text: /paused at your 75% mark\./ })).toBeUndefined()
+  expect(w.notified).toEqual([])
+  await tight.unmount()
+  const roomy = await $.ui.mount(BAND)
+  await w.clock.advance(10000)
+  expect(await roomy.find({ type: 'Text', text: /paused at your 75% mark\./ })).toBeDefined()
+  expect(w.notified.length).toBe(1)
+  await roomy.unmount()
+})

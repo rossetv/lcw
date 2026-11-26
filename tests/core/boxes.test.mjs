@@ -93,12 +93,7 @@ test('a raise with no run says the new mark in a sentence, as a share of the wee
   assert.equal(press(money, 'r90').toast, `This session now runs up to ${dollars(3600)}.`)
 })
 
-test('Abandon and Keep it awake say what they did in sentences, naming what the run had', () => {
-  const left = (over) => unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000, state: { id: 'r2', name: 'old-run', status: 'running', stage: 'Build', ...over } }, '')
-  const bare = press({ now: NOW, unfinished: left({}) }, 'abandon').toast
-  assert.equal(bare, 'old-run is stopped for good.')
-  const full = press({ now: NOW, unfinished: left({ worktree: '/repo/.claude/worktrees/old-run', branch: 'lcw/old-run' }) }, 'abandon').toast
-  assert.match(full, /^old-run is stopped for good\. .*worktree.*\. Its branch is kept\.$/)
+test('Keep it awake says what it did, in a sentence', () => {
   const awake = pressPlan({ kind: 'awake', key: 'r1:T', options: [['keep', 'Keep it awake'], ['never', 'Never']] }, 'keep', {}, CTX)
   assert.deepEqual(argvs(awake), ['awake --session s1'])
   assert.match(awake.toast, /^LCW keeps this computer awake .*\.$/)

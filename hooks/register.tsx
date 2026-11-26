@@ -904,11 +904,10 @@ async function readBanner($: EngineInterface) {
   S.facts = facts
   const shown = bannerFor(facts)
   if (JSON.stringify(shown) !== JSON.stringify(S.banner.shown)) { S.banner.shown = shown; S.dirty = true }
-  ring($, shown)
 }
 
 // A box that waits on the person rings the terminal, through their own notification channel, the first time it
-// shows; never before what an earlier copy of this code rang is read back.
+// is drawn; never before what an earlier copy of this code rang is read back.
 const RUNG_HELD = 50
 function ring($: EngineInterface, shown: Banner | null) {
   const key = ringKey(shown)
@@ -1730,6 +1729,7 @@ export const register: Register = (on) => {
       // never chose. So when the box drawn changes, the band is drawn for a moment with no buttons at all, which makes
       // the engine let the focus go; ctrl+x Tab takes it again. A box drawn where none was moves no focus.
       const boxNow = banner.length ? shown!.kind + ':' + shown!.key : ''
+      if (banner.length) ring($, shown)
       if (boxNow !== S.drawnBox) {
         if (S.drawnBox) S.unfocusUntil = now + UNFOCUS_MS
         S.drawnBox = boxNow

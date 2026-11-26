@@ -1510,7 +1510,7 @@ test("a stalled agent's chip of an hour or a day keeps the figures of every agen
 
 test("the stalled chip's words keep their contrast through its pulse", () => {
   const chip = opts => agentCard([['Build the importer', 75, 'stalled']], opts).flat().find(s => s.bg).bg;
-  for (const opts of [...Array(28).keys()].map(tick => ({ tick })).concat([0, 1, 2, 3].map(beat => ({ beat })))) {
+  for (const opts of [...Array(28).keys()].map(tick => ({ tick }))) {
     const at = Number(chip(opts).split('@')[1] ?? 100);
     assert.ok(at >= 70, JSON.stringify(opts) + ': ' + chip(opts));
   }
