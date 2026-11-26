@@ -1566,3 +1566,36 @@ test('the hint under several questions keeps its example whole, or leaves it out
     assert.match(hint, /below(, e\.g\. “1 yes, 2 UTC”)? *│?$/, width + ': ' + hint);
   }
 });
+
+// ---------------------------------------------------------------- what a tight card gives up
+
+test("a folded wave's agents, listed beneath lanes too narrow for rows of their own, are listed or counted wherever the card has room to", () => {
+  const i = inputsOf('05-plan-for-wave-1');
+  i.agents = [{ id: 'a', description: 'Plan the billing wave', model: 'claude-opus-5-5', effort: 'high', tokens: 1000, startTime: NOW - 6e4, status: 'running', wave: 1 }];
+  i.state.health = 'Planning wave 1 over the billing, panel and sign-in fixes, with the importer last since it touches the most files.';
+  i.ui = { folded: { [foldKey(i.state.id, 1)]: true } };
+  const v = buildView(i), lists = rows => rows.some(r => r.some(s => /^(view|more)/.test(s.id ?? '')));
+  const free = renderCard(v, { width: 50, frame: true }).length;
+  assert.ok(lists(renderCard(v, { width: 50, frame: true })));
+  let before = 0;
+  for (let maxRows = 7; maxRows <= free; maxRows++) {
+    const rows = renderCard(v, { width: 50, frame: true, maxRows });
+    assert.ok(rows.length <= maxRows && lists(rows), `${maxRows} rows: ${rows.length} drawn\n${toPlain(rows)}`);
+    assert.ok(rows.length >= before);
+    before = rows.length;
+  }
+});
+
+test('a tight card gives up the rule above the lanes before the one under a question', () => {
+  const i = inputsOf('27-lanes-one-waits-on-you');
+  i.agents = ['Build the importer', 'Review the export fix', 'Check the mail'].map((description, k) => ({ id: 'a' + k, description, model: 'claude-opus-5-5', effort: 'high', tokens: 1000, startTime: NOW - 6e4, status: 'running', wave: 2 }));
+  let one = 0;
+  for (let maxRows = 8; maxRows <= 16; maxRows++) {
+    const rows = strip(toAnsi(renderCard(buildView(i), { width: 100, frame: true, maxRows }), 'dark', 100)).split('\n');
+    const hint = rows.findIndex(l => l.includes('answer in plain words below')), heading = rows.findIndex(l => l.includes(' waves '));
+    const underHint = rows[hint + 1].startsWith('├'), aboveLanes = rows[heading - 1].startsWith('├');
+    assert.ok(underHint || !aboveLanes, `${maxRows} rows\n${rows.join('\n')}`);
+    if (underHint && !aboveLanes) one++;
+  }
+  assert.ok(one > 0, 'at some height only the rule above the lanes is given up');
+});
