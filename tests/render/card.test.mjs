@@ -1825,18 +1825,27 @@ const stateRow = (used, state = {}, width = 100) => {
   return laneRows(i, width)[1];
 };
 
-test('the state row shows the usage mark once the week comes within ten points of it', () => {
-  assert.match(stateRow(65), /on track · last commit 3m ago +week 65% · 75% mark · ≈ 9% of your week$/);
-  assert.doesNotMatch(stateRow(64), /mark/);
-  // Short of room the mark goes, and the run's own words keep their one row.
-  assert.equal(stateRow(65, {}, 55), stateRow(50, {}, 55));
+test('the state row leaves the week and its mark to the status line, near the mark or not', () => {
+  for (const used of [50, 65, 74]) assert.match(stateRow(used, { bypasses: 3 }), /on track · last commit 3m ago +3 bypasses · ≈ 9% of your week$/);
 });
 
-test('the state row counts the bypasses of standard LCW, giving way before the mark', () => {
+test('the state row counts the bypasses of standard LCW', () => {
   assert.match(stateRow(50, { bypasses: 1 }), / {2}1 bypass · ≈ 9% of your week$/);
-  assert.match(stateRow(65, { bypasses: 3 }), / {2}3 bypasses · week 65% · 75% mark · ≈ 9% of your week$/);
-  assert.match(stateRow(65, { bypasses: 3 }, 80), /last commit 3m ago +week 65% · 75% mark · ≈ 9% of your week$/);
-  assert.equal(stateRow(50, { bypasses: 3 }, 55), stateRow(50, {}, 55));
+});
+
+test('the bypasses show at every width from the narrowest that has room for them, the run\'s sentence split or not', () => {
+  const i = inputsOf('06-build-wave-2-fixes-in-parallel');
+  i.state.bypasses = 3;
+  const v = buildView(i);
+  for (const frame of [false, true]) {
+    const shown = [];
+    for (let width = 44; width <= 130; width++) {
+      const rows = strip(toAnsi(renderCard(v, { width, frame }), 'dark', width)).split('\n');
+      if (rows.some(l => l.includes('3 bypasses'))) shown.push(width);
+    }
+    assert.ok(shown[0] <= 56, frame + ': ' + shown.join(' '));
+    assert.equal(shown.length, 131 - shown[0], frame + ': ' + shown.join(' '));
+  }
 });
 
 test('an agent that waits, or has reported and not ended, says so and holds still; one long reported is not called stalled', () => {
