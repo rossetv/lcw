@@ -811,7 +811,7 @@ async function measureSpend($: EngineInterface, e: { cost?: { usd: number } }, r
     const anchor = await lentAnchor($, id, session)
     if (anchor && anchor.billing !== step.billing) await write($, sessionFile(home, anchor.sessionCanonicalId), JSON.stringify({ ...anchor, billing: step.billing }))
   }
-  if (step.drop) await $.process.run(['rm', '-f', spent]).catch(() => {}).finally(() => forget(spent))
+  if (step.drop) await $.process.run(['rm', '-f', spent], { timeoutMs: 5000 }).catch(() => {}).finally(() => forget(spent))
   // A record caught mid-write is left for the next reading rather than started again from this one.
   if (step.record && rec !== undefined) await write($, spent, JSON.stringify(step.record))
   return step.billing
@@ -912,7 +912,7 @@ async function slowFacts($: EngineInterface) {
 
 // The repository's key, as lcw computes it from the main checkout; false when lcw gave none. No session is named, so the call binds nothing.
 async function readKey($: EngineInterface) {
-  const r = await $.process.run(['node', lcwCli($), 'where', '--json'], { env: { CLAUDE_CODE_SESSION_ID: '' } }).catch(() => null)
+  const r = await $.process.run(['node', lcwCli($), 'where', '--json'], { timeoutMs: 10000, env: { CLAUDE_CODE_SESSION_ID: '' } }).catch(() => null)
   try {
     const key = JSON.parse(String(r?.stdout ?? '')).key
     if (typeof key === 'string' && /^[\w.-]+$/.test(key)) { S.repoKey = key; return true }
@@ -955,12 +955,12 @@ async function driverOpen($: EngineInterface, driver: unknown) {
   const pid = Number((await readJson($, sessionFile(home, driver)))?.claudePid)
   if (!Number.isInteger(pid) || pid <= 1) return false
   if (pid === Number((await readJson($, sessionFile(home, id)))?.claudePid)) return false
-  const r = await $.process.run(['ps', '-ww', '-o', 'args=', '-p', String(pid)]).catch(() => null)
+  const r = await $.process.run(['ps', '-ww', '-o', 'args=', '-p', String(pid)], { timeoutMs: 1000 }).catch(() => null)
   return r?.exitCode === 0 && claudeCommand(String(r.stdout ?? ''))
 }
 
 async function checkSleep($: EngineInterface) {
-  const r = await $.process.run(['node', lcwCli($), 'awake', '--check', '--session', await $.session.id()]).catch(() => null)
+  const r = await $.process.run(['node', lcwCli($), 'awake', '--check', '--session', await $.session.id()], { timeoutMs: 10000 }).catch(() => null)
   try {
     const j = JSON.parse(String(r?.stdout ?? ''))
     S.sleep = { canHold: j.canHold === true, heldByOther: j.heldByOther === true, kept: j.kept === true }
@@ -1087,7 +1087,7 @@ async function weekly($: EngineInterface, now: number) {
 
 // LCW's status rows and attribution off, by themselves, on a watched session's first draw.
 async function autoSetup($: EngineInterface) {
-  const r = await $.process.run(['node', `${$.plugin.root}/scripts/setup.mjs`, 'auto']).catch(() => null)
+  const r = await $.process.run(['node', `${$.plugin.root}/scripts/setup.mjs`, 'auto'], { timeoutMs: 10000 }).catch(() => null)
   if (r?.exitCode !== 0) return
   for (const line of String(r.stdout ?? '').split('\n').map((l) => l.trim()).filter(Boolean)) $.ui.toast(line, { timeoutMs: 8000 })
 }
