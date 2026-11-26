@@ -111,6 +111,12 @@ test('reusing a run name keeps id, name and branch in agreement', () => {
   assert.equal(git(w.out.trim(), 'rev-parse', '--abbrev-ref', 'HEAD'), 'lcw/again-2')
 })
 
+test('start works in a folder that is not a git repository', () => {
+  const r = lcw(['start', 'demo', '--title', 'Demo'], { home: tmp('home'), cwd: tmp('plain'), session: 's1' })
+  assert.equal(r.code, 0, r.out + r.err)
+  assert.match(r.out, /^folder: .+demo$/m)
+})
+
 test('start without a title, or without a name, is refused and creates nothing', () => {
   const home = tmp('home')
   const o = { home, cwd: makeRepo(), session: 's1' }

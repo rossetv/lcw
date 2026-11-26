@@ -359,8 +359,8 @@ const commands = {
     const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
     const base = `${date}-${slug(name)}`
     const main = mainCheckout(cwd)
-    // a wave's branch is lcw/<name>-wave-<n>, so a name whose first wave branch is left behind is taken too
-    const branchTaken = (nm) => git(main, 'for-each-ref', '--format=%(refname)', `refs/heads/lcw/${nm}`, `refs/heads/lcw/${nm}-wave-*`) !== ''
+    // a wave's branch is lcw/<name>-wave-<n>, so a name whose first wave branch is left behind is taken too; outside a repository none is
+    const branchTaken = (nm) => { try { return git(main, 'for-each-ref', '--format=%(refname)', `refs/heads/lcw/${nm}`, `refs/heads/lcw/${nm}-wave-*`) !== '' } catch { return false } }
     let id = base, runName = slug(name), n = 1
     const before = machineRunCount()
     fs.mkdirSync(runsDir(home(), key), { recursive: true })
