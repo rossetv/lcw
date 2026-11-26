@@ -302,7 +302,7 @@ test('the right group sits against the right edge at 126 and 80 columns', () => 
     const status = strip(toAnsi(renderStatusRows(inputsOf('Stalled').status, { width }), 'dark', width)).split('\n');
     assert.equal(cols(status[0]), width);
     assert.ok(status[0].endsWith('acme-api · lcw/export-csv'));
-    assert.ok(status[1].endsWith('resets in 3d · -15% short'));
+    assert.ok(status[1].endsWith('resets in 3d · 15% over pace'));
     const plain = renderCard(buildView(inputsOf('Stalled')), { width });
     const text = strip(toAnsi(plain, 'dark', width)).split('\n');
     assert.ok(text[0].endsWith('≈ 12% of your week') || text[0].endsWith('3h 02m'));
@@ -379,10 +379,10 @@ test('the context bar is drawn as cells and printed as [bar N%]', () => {
 });
 
 test('the context bar is twenty cells where there is room, narrows with the terminal to ten, and is six in the narrow layout', () => {
-  // Fable 5.2 · xhigh and 38% of 1M take 29 cells; "resets in 3d · +42% spare" on the right takes 25, and two apart
+  // Fable 5.2 · xhigh and 38% of 1M take 29 cells; "resets in 3d · 42% spare" on the right takes 24, and two apart
   const input = { model: 'Fable 5.2', effort: 'xhigh', contextPercent: 38, contextWindow: '1M', repo: 'lcw', branch: 'main', weekUsedPercent: 29, weekElapsedPercent: 50, markPercent: 75 };
   const bar = width => renderStatusRows(input, { width })[0].filter(s => s.plain !== undefined).reduce((n, s) => n + s.t.length, 0);
-  assert.deepEqual([126, 76, 71, 66, 60, 44, 40].map(bar), [20, 20, 15, 10, 10, 10, 6]);
+  assert.deepEqual([126, 76, 71, 66, 60, 44, 40].map(bar), [20, 20, 16, 11, 10, 10, 6]);
   for (const width of [126, 76, 71, 66]) {
     const lines = strip(toAnsi(renderStatusRows(input, { width }), 'dark', width)).split('\n');
     assert.ok(lines.every(l => cols(l) === width), 'both rows are ' + width + ' wide: ' + lines.map(cols));
@@ -1092,7 +1092,7 @@ test('a long model name is shortened so row 1 keeps to the width', () => {
     const rows = renderStatusRows(input, { width });
     rows.forEach((r, i) => assert.ok(rowCells(r) <= width, width + ', row ' + (i + 1) + ': ' + toPlain([r])));
   }
-  assert.match(joined(renderStatusRows(input, { width: 44 })[0]), /^Sonnet 4\.5 \(… · medium {12} 38% of 1M$/);
+  assert.match(joined(renderStatusRows(input, { width: 44 })[0]), /^Sonnet 4\.5 \(1M contex… +38% of 1M$/);
   assert.match(joined(renderStatusRows(input, { width: 80 })[0]), /^Sonnet 4\.5 \(1M context\) · medium/);
 });
 
@@ -1103,8 +1103,8 @@ test('just after the weekly reset the week row gives no pace, until enough of th
   };
   assert.equal(right(20 / 60 / 168 * 100, 1), 'resets in 6d');
   assert.equal(right(4.9, 1), 'resets in 6d');
-  assert.equal(right(5, 1), 'resets in 6d · +80% spare');
-  assert.equal(right(50, 60), 'resets in 3d · -20% short');
+  assert.equal(right(5, 1), 'resets in 6d · 80% spare');
+  assert.equal(right(50, 60), 'resets in 3d · 20% over pace');
 });
 
 test("the lanes' heading keeps its wave cells to the room left, so none is cut while the lanes fit", () => {
