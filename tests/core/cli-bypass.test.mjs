@@ -178,6 +178,15 @@ test('a wave shipped before its final checks started is bypassed once per refusa
   assert.match(t.cli('status').out, /^bypasses: 2$/m)
 })
 
+test('a pull request GitHub shows merged is not replaced, even with --bypass', () => {
+  const t = shipped()
+  const r = t.gh('MERGED', 'wave', 'pr', '1', '6', '--bypass', 'the old one is stale')
+  assert.equal(r.code, 1, r.out)
+  assert.doesNotMatch(r.out, /--bypass/)
+  assert.doesNotMatch(t.ledger(), BYPASS)
+  assert.equal(t.wave().pr, 5)
+})
+
 test('status counts the bypasses in the ledger', () => {
   const t = planning()
   t.cli('ledger', 'the person asked what BYPASS, not standard LCW: means')

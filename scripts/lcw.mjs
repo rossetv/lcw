@@ -1241,6 +1241,7 @@ const commands = {
         const repo = githubRepo(s.repoRoot)
         let state = null
         try { if (repo) state = JSON.parse(gh(s.repoRoot, 'pr', 'view', String(wave.pr), '-R', repo, '--json', 'state')).state } catch {}
+        if (state === 'MERGED') fail(`Wave ${wave.n}'s pull request #${wave.pr} is merged on GitHub, so another cannot take its place. Nothing was changed.`)
         if (state !== 'CLOSED') block(`Wave ${wave.n} has pull request #${wave.pr} already${state ? `, ${state.toLowerCase()} on GitHub` : ''}; another takes its place only once GitHub shows it closed unmerged. Nothing was changed.`)
         note += `, in place of #${wave.pr}, ${state === 'CLOSED' ? 'which GitHub closed unmerged' : state ? `which GitHub shows ${state.toLowerCase()}` : 'whose state could not be read from GitHub'}`
       }
