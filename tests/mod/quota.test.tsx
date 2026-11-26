@@ -189,6 +189,21 @@ test('idle refresh retries a failed launch and does not suppress a replacement r
   expect(calls).toBe(3)
 })
 
+test('a refresh that keeps failing is retried once at once, then only every five minutes', async ($, on) => {
+  const files: Record<string, string> = { '/lcw/sessions/s1.json': JSON.stringify({ billing: 'subscription', quotaSelection: selection }), [QUOTA]: record() }
+  let calls = 0
+  const w = engine(on, files, { process: e => {
+    if (!e.argv[1]?.endsWith('/scripts/quota-refresh.mjs')) return
+    calls++
+    return { exitCode: 1, stdout: '', stderr: '' }
+  } })
+  await start($)
+  await w.clock.advance(290000)
+  expect(calls).toBe(2)
+  await w.clock.advance(30000)
+  expect(calls).toBe(3)
+})
+
 test('native measurement delegates gate changes so a newer external hold cannot be overwritten', async ($, on) => {
   const files: Record<string, string> = filesFor(false)
   files['/lcw/sessions/s1.json'] = JSON.stringify({ runDir: RUN, billing: 'subscription' })

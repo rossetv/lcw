@@ -87,7 +87,7 @@ const S = {
   wokeFor: null as string | number | null,
   quotaWaking: false,
   quotaRetry: { key: '', at: 0 },
-  quotaRefresh: { revision: '', at: -Infinity, busy: false },
+  quotaRefresh: { revision: '', at: -Infinity, busy: false, failed: false },
   proxyNotice: { host: '', file: '' },
   gateCheck: { key: '', at: -Infinity, busy: false },
   // The outside quota's reading for which the mod last asked for the run's gate to be written.
@@ -113,9 +113,10 @@ const S = {
   devCheckout: false,
   // The machine is a Mac (session.info's platform): the cleanup box names it.
   mac: false,
-  // This repository's key, from lcw where --json once per session; null outside a repository.
+  // This repository's key, from lcw where --json once per session (asked again every RUNS_EVERY_MS until it answers).
   repoKey: null as string | null,
   keyAsked: false,
+  keyAt: -Infinity,
   unfinished: null as BannerFacts['unfinished'],
   runsAt: 0,
   sleep: null as { canHold: boolean; heldByOther: boolean; kept: boolean } | null,
@@ -441,11 +442,14 @@ async function readQuota($: EngineInterface, session: any, mark: number, now: nu
     const due = !Number.isFinite(state.lastAttemptAt) || now - state.lastAttemptAt >= REFRESH_MS
     const claimed = state.claim?.revision === state.revision && now - state.claim.startedAt < CLAIM_MS
     if (due && !claimed && (last.revision !== state.revision || !last.busy && now - last.at >= REFRESH_MS)) {
-      const request = { revision: state.revision, at: now, busy: true }
+      // One quick retry after a failure; a second failure in a row waits the full interval.
+      const quick = last.revision !== state.revision || !last.failed
+      const request = { revision: state.revision, at: now, busy: true, failed: false }
       S.quotaRefresh = request
+      const failed = () => { request.failed = true; if (quick) request.at = now - REFRESH_MS + 5000 }
       void $.process.run(['node', `${$.plugin.root}/scripts/quota-refresh.mjs`], { timeoutMs: 35000, env: { LCW_HOME: home } })
-        .then((r) => { if (r.exitCode !== 0) request.at = now - REFRESH_MS + 5000 })
-        .catch(() => { request.at = now - REFRESH_MS + 5000 })
+        .then((r) => { if (r.exitCode !== 0) failed() })
+        .catch(failed)
         .finally(() => { request.busy = false })
     }
   }
@@ -887,10 +891,10 @@ async function slowFacts($: EngineInterface) {
   S.slowBusy = true
   try {
     const now = await $.clock.now()
-    // A run's folder names its repository's key; without one, lcw is asked once.
+    // A run's folder names its repository's key; without one, lcw is asked until it answers.
     const fromRun = /\/repos\/([\w.-]+)\/runs\/[^/]+$/.exec(S.run?.runDir ?? '')?.[1]
     if (fromRun) S.repoKey = fromRun
-    else if (!S.keyAsked) { S.keyAsked = true; await readKey($) }
+    else if (!S.keyAsked && now - S.keyAt >= RUNS_EVERY_MS) { S.keyAt = now; S.keyAsked = await readKey($) }
     if (S.run || !S.repoKey) S.unfinished = null
     else if (now - S.runsAt >= RUNS_EVERY_MS) { S.runsAt = now; await scanRuns($, now) }
     const run = S.run
@@ -906,13 +910,14 @@ async function slowFacts($: EngineInterface) {
   }
 }
 
-// The repository's key, as lcw computes it from the main checkout. No session is named, so the call binds nothing.
+// The repository's key, as lcw computes it from the main checkout; false when lcw gave none. No session is named, so the call binds nothing.
 async function readKey($: EngineInterface) {
   const r = await $.process.run(['node', lcwCli($), 'where', '--json'], { env: { CLAUDE_CODE_SESSION_ID: '' } }).catch(() => null)
   try {
     const key = JSON.parse(String(r?.stdout ?? '')).key
-    if (typeof key === 'string' && /^[\w.-]+$/.test(key)) S.repoKey = key
+    if (typeof key === 'string' && /^[\w.-]+$/.test(key)) { S.repoKey = key; return true }
   } catch {}
+  return false
 }
 
 // A run of this repository left halfway: open, shown by no session for 15 minutes, and its driver's Claude Code gone.

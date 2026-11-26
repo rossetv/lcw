@@ -403,6 +403,19 @@ test('a run left halfway shows to a session driving none; Resume takes it over a
   await band.unmount()
 })
 
+test('a failed lcw where is asked again half a minute later, so the run left halfway still shows', async ($, on) => {
+  let wheres = 0
+  const w = engine(on, leftHalfway(), { answer: (a) => (a.includes('where') && ++wheres <= 2 ? { exitCode: 1, stdout: '' } : undefined) })
+  await start($)
+  await w.clock.advance(32000)
+  expect(wheres).toBe(2)
+  await w.clock.advance(32000)
+  expect(wheres).toBe(3)
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /stopped halfway: old-run\./ })).toBeDefined()
+  await band.unmount()
+})
+
 test('Resume pressed seconds after the session started hands Claude the run once, with no reopen prompt on top', async ($, on) => {
   const w = engine(on, leftHalfway(), {
     answer: (a) => { if (a[2] === 'take') w.files['/lcw/sessions/s1.json'] = JSON.stringify({ billing: 'subscription', runDir: OLD }); return undefined },
