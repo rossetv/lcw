@@ -207,3 +207,23 @@ test('health that is longer than the card shows, or names waves by number, is sa
   assert.match(t.cli('set', 'health=waves 4 and 5 finish review; then the screens of 6').out, /names waves by number.*what the card cannot/)
   assert.equal(t.cli('set', 'health=The importer is in review. Live next: exports by email.').out.trim(), 'set health')
 })
+
+test('worktree whose folder git refuses leaves no branch behind, and outside a git repository says it needs one', () => {
+  const t = started()
+  const dir = `${t.repo}/.claude/worktrees/demo`
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(`${dir}/stray.txt`, 'x')
+  assert.equal(t.cli('worktree').code, 1)
+  assert.equal(git(t.repo, 'branch', '--list', 'lcw/demo'), '')
+  fs.rmSync(`${dir}/stray.txt`)
+  assert.equal(t.cli('worktree').code, 0)
+
+  const home = tmp('home')
+  const plain = tmp('plain')
+  const o = { home, cwd: plain, session: 's1' }
+  assert.equal(lcw(['start', 'demo', '--title', 'x'], o).code, 0)
+  const r = lcw(['worktree'], o)
+  assert.equal(r.code, 1)
+  assert.match(r.out, /needs a git repository/)
+  assert.doesNotMatch(r.out, /fatal/)
+})

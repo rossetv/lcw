@@ -2276,7 +2276,7 @@ test('merge of a pull request GitHub closed unmerged says to open a new one firs
   const r = lcw(['merge', '1'], { ...t.o, env: fakeGh({ GH_STATE: 'CLOSED', GH_BASE: 'lcw/tidy' }).env })
   assert.equal(r.code, 1)
   assert.match(r.out, /closed without being merged/)
-  assert.match(r.out, /new pull request.*lcw wave pr 1 <number>.*again.*lcw\/tidy still exists/)
+  assert.match(r.out, /new pull request.*lcw wave pr 1 <number>.*only if its base branch lcw\/tidy still exists, reopen #12.*run lcw merge 1 again/)
   assert.doesNotMatch(r.out, /retarget/)
   assert.equal(t.state().sweep.waves[0].merged, false)
 })
@@ -2289,9 +2289,36 @@ test('merge given a pull request number says it takes a wave number, and names t
   assert.match(hit.out, /takes a wave number/)
   assert.match(hit.out, /PR 13 is wave 2's: lcw merge 2/)
   const miss = lcw(['merge', '99'], { ...t.o, env: gh.env })
-  assert.match(miss.out, /takes a wave number/)
-  assert.doesNotMatch(miss.out, /is wave/)
+  assert.match(miss.out, /No wave 99\. The waves are 1, 2\. Nothing was changed/)
+  assert.doesNotMatch(miss.out, /pull request number|is wave/)
   t.edit((s) => s.sweep.waves.push({ n: 3, fixes: 1, status: 'shipped', branch: 'lcw/tidy-wave-3', pr: null, empty: true, dropped: 1, fixed: 0 }))
   assert.doesNotMatch(lcw(['merge', '0'], { ...t.o, env: gh.env }).out, /is wave/, 'a wave with no pull request has none numbered 0')
   assert.deepEqual(gh.calls(), [])
+})
+
+test('a wave start whose worktree git refuses leaves no branch behind, so the retry works', () => {
+  const t = hunting()
+  t.cli('wave', 'add', '3')
+  const dir = `${t.repo}/.claude/worktrees/tidy-wave-1`
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(`${dir}/stray.txt`, 'x')
+  assert.equal(t.start().code, 1)
+  assert.equal(git(t.repo, 'branch', '--list', 'lcw/tidy-wave-1'), '', 'the branch the failed add made is deleted')
+  fs.rmSync(`${dir}/stray.txt`)
+  assert.equal(t.start().code, 0)
+})
+
+test('merge of a number that is neither a wave nor a wave\'s pull request says there is no such wave and lists the waves', () => {
+  const t = sweep()
+  t.cli('set', 'sweep.prs=merged')
+  assert.match(t.cli('merge', '4').out, /No wave 4\. The sweep has no waves yet\. Nothing was changed/)
+})
+
+test('merge --wait on a pull request GitHub closed unmerged says so at once and never waits for checks', () => {
+  const t = shippedWaves()
+  const gh = fakeGh({ GH_STATE: 'CLOSED', GH_BASE: 'main', GH_CHECKS: 'pending', LCW_CHECKS_MINUTE_MS: '5000' })
+  const r = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: gh.env })
+  assert.equal(r.code, 1)
+  assert.match(r.out, /closed without being merged/)
+  assert.doesNotMatch(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /waiting up to/)
 })
