@@ -161,7 +161,7 @@ test('a press on a box that has changed since it was drawn does nothing and says
   const w = engine(on, bound(paused))
   await start($)
   const band = await $.ui.mount(BAND)
-  w.files[RUN + '/state.json'] = JSON.stringify({ ...JSON.parse(w.files[RUN + '/state.json']), pausedAt: '2026-11-20T04:00:00Z' })
+  w.files[RUN + '/state.json'] = JSON.stringify({ ...JSON.parse(w.files[RUN + '/state.json']!), pausedAt: '2026-11-20T04:00:00Z' })
   await band.press({ key: 'banner:mark:r90' })
   expect(lcwCalls(w.runs, 'mark')).toEqual([])
   expect(w.toasts).toEqual(['That box changed before the click, so nothing was done.'])
@@ -455,7 +455,7 @@ test('Resume pressed seconds after the session started hands Claude the run once
   await band.unmount()
 })
 
-test('Abandon runs lcw abandon and says what it did: the worktree removed or kept and why, and the branch kept', async ($, on) => {
+test('Abandon runs lcw abandon and says in sentences what it did: the worktree removed or kept and why, and the branch kept', async ($, on) => {
   const said = (stdout: string) => (a: string[]) => (a[2] === 'abandon' ? { exitCode: 0, stdout } : undefined)
   const kept = engine(on, leftHalfway(), { answer: said('abandoned r2: stopped for good\nworktree kept: /repo/.claude/worktrees/old-run, because it has uncommitted or untracked files\nbranch kept: lcw/old-run') })
   await start($)
@@ -463,7 +463,7 @@ test('Abandon runs lcw abandon and says what it did: the worktree removed or kep
   const band = await $.ui.mount(BAND)
   await band.press({ key: 'banner:unfinished:abandon' })
   expect(lcwCalls(kept.runs, 'abandon')).toEqual(['abandon r2 --session s1'])
-  expect(kept.toasts.join(' ')).toMatch(/stopped for good.*worktree kept.*because it has uncommitted or untracked files.*branch kept: lcw\/old-run/)
+  expect(kept.toasts).toEqual(['old-run is stopped for good. Its worktree is kept, because it has uncommitted or untracked files. Its branch lcw/old-run is kept.'])
   await band.unmount()
 })
 
@@ -473,8 +473,7 @@ test('Abandon says the worktree was removed when lcw removed it', async ($, on) 
   await w.clock.advance(2000)
   const band = await $.ui.mount(BAND)
   await band.press({ key: 'banner:unfinished:abandon' })
-  expect(w.toasts.join(' ')).toMatch(/worktree removed/)
-  expect(w.toasts.join(' ')).not.toMatch(/kept/)
+  expect(w.toasts).toEqual(['old-run is stopped for good. Its worktree is removed.'])
   await band.unmount()
 })
 
@@ -550,7 +549,7 @@ test('Clean Up says it has started and returns at once; the removal runs after t
   expect(w.lasts.at(-1)).toBe(10000)
   await w.clock.advance(1000)
   expect(w.runs.filter(apply).length).toBe(1)
-  expect(w.toasts.join('|')).toMatch(/removed branch a/)
+  expect(w.toasts.join('|')).toMatch(/Branch a is removed\./)
   await w.clock.advance(4000)
   expect(await band.find({ type: 'Text', text: /Two branches look done with/ })).toBeUndefined()
   await band.unmount()

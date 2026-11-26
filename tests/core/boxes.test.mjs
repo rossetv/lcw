@@ -88,9 +88,15 @@ test('a raise with no run only sets the mark and resumes nothing', () => {
 })
 
 test('a raise with no run says the new mark in a sentence, as a share of the week or in dollars', () => {
-  assert.equal(press({ now: NOW, usage: { usedPercent: 80, markPercent: 75, atMark: true } }, 'r100').toast, 'This session now runs up to 100% of the week.')
+  const share = press({ now: NOW, usage: { usedPercent: 80, markPercent: 75, atMark: true } }, 'r100')
+  assert.equal(share.toast({ stdout: 'mark 100%\nweek: 80% used\nok' }), 'This session now runs up to 100% of the week.')
   const money = { now: NOW, billing: 'payg', usage: { spentUsd: 3050, capUsd: 4000, markUsd: 3000, atMark: true } }
-  assert.equal(press(money, 'r90').toast, `This session now runs up to ${dollars(3600)}.`)
+  assert.equal(press(money, 'r90').toast({ stdout: 'mark set to $3,600' }), `This session now runs up to ${dollars(3600)}.`)
+})
+
+test('a raise with no run that the quota check still holds says that new work is still held', () => {
+  const plan = press({ now: NOW, usage: { usedPercent: 80, markPercent: 75, atMark: true } }, 'r100')
+  assert.match(plan.toast({ stdout: 'mark 100%\nexternal week: 97% used\nnew work held' }), /^This session now runs up to 100% of the week, but .*(holds new work|new work .*held)/)
 })
 
 test('Keep it awake says what it did, in a sentence', () => {
@@ -105,7 +111,7 @@ test('only a box that waits on a choice from the person rings, once per occurren
   const later = bannerFor({ now: NOW, run: runFact({ ...pausedRun, pausedAt: '2026-11-21T03:00:00Z' }), usage: { usedPercent: 76, markPercent: 75, resetsAt: '2026-11-22T14:00:00Z' } })
   assert.notEqual(ringKey(later), ringKey(mark), 'a later pause at the mark is a new occurrence')
   assert.equal(ringKey({ kind: 'mark', key: 'q', options: [['wait', 'Wait']] }), null, 'a box that offers only waiting asks nothing')
-  for (const kind of ['question', 'approve', 'answer']) assert.equal(ringKey({ kind, key: 'k', options: [['a', 'A'], ['later', 'Later']] }), kind + ':k')
+  for (const kind of ['approve', 'answer']) assert.equal(ringKey({ kind, key: 'k', options: [['a', 'A'], ['later', 'Later']] }), kind + ':k')
   for (const kind of ['guide', 'cleanup', 'unfinished', 'awake', 'update']) assert.equal(ringKey({ kind, key: kind, options: [['a', 'A']] }), null, kind)
   assert.equal(ringKey(null), null)
 })
@@ -113,6 +119,23 @@ test('only a box that waits on a choice from the person rings, once per occurren
 test('a button the box does not offer does nothing', () => {
   const facts = { now: NOW, run: runFact(pausedRun), usage: { usedPercent: 92, markPercent: 75 } }
   assert.equal(press(facts, 'r90'), null)
+})
+
+test('the box of asks that hold nothing does not ring', () => {
+  const run = runFact({ id: 'r1', name: 'export-csv', status: 'running', stage: 'Build', tasks: [], asks: [{ n: 1, text: 'Look at the mock', at: 1, nowait: true }] })
+  const box = bannerFor({ now: NOW, advisorModel: 'fable', run })
+  assert.equal(box.forYou, true)
+  assert.equal(ringKey(box), null)
+})
+
+test("a sweep's question rings once, though an ask arriving while it is up changes the box", () => {
+  const sweep = (asks) => ({ now: NOW, advisorModel: 'fable', run: runFact({ ...asking([Q('Q1')]), asks }) })
+  const before = bannerFor(sweep([{ n: 1, text: 'Which remote?', at: NOW - MIN }]))
+  const after = bannerFor(sweep([{ n: 1, text: 'Which remote?', at: NOW - MIN }, { n: 2, text: 'And the tag?', at: NOW }]))
+  assert.equal(before.kind, 'question')
+  assert.notEqual(before.key, after.key)
+  assert.equal(ringKey(after), ringKey(before))
+  assert.notEqual(ringKey(bannerFor({ now: NOW, advisorModel: 'fable', run: runFact(asking([Q('Q2')])) })), ringKey(before), 'the next question rings')
 })
 
 const unfinished = (status) => unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000, state: { id: 'r2', name: 'old-run', status, stage: 'Build' } },
@@ -129,6 +152,40 @@ test('Resume takes the run over, resumes it only when it was paused, and hands C
   assert.deepEqual(argvs(taken), ['take r2 --session s1'])
   assert.match(taken.prompt.text, /stays paused/)
   assert.deepEqual(argvs(press({ now: NOW, unfinished: unfinished('running') }, 'abandon')), ['abandon r2 --session s1'])
+})
+
+test('Abandon says in sentences what lcw abandon did, by the run\'s name and with no paths', () => {
+  const told = (stdout) => press({ now: NOW, unfinished: unfinished('running') }, 'abandon').toast({ stdout })
+  assert.equal(told('abandoned r2: stopped for good\nworktree removed: /repo/.claude/worktrees/old-run\nbranch kept: lcw/old-run'),
+    'old-run is stopped for good. Its worktree is removed. Its branch lcw/old-run is kept.')
+  assert.equal(told('abandoned r2: stopped for good\nworktree kept: /repo/.claude/worktrees/old-run, because it has uncommitted or untracked files'),
+    'old-run is stopped for good. Its worktree is kept, because it has uncommitted or untracked files.')
+  assert.equal(told('abandoned r2: stopped for good\nno worktree to remove'), 'old-run is stopped for good. It had no worktree to remove.')
+  assert.equal(told('abandoned r2: stopped for good\nworktree /repo/.claude/worktrees/old-run was already gone'), 'old-run is stopped for good. Its worktree was already gone.')
+})
+
+test('Abandon on a sweep names each worktree by its folder, and lists the branches kept', () => {
+  const told = press({ now: NOW, unfinished: unfinished('running') }, 'abandon').toast({ stdout: [
+    'abandoned r2: stopped for good',
+    'worktree removed: /repo/.claude/worktrees/old-run-wave-2',
+    "worktree kept: /repo/.claude/worktrees/old-run-wave-3, because git would not remove it: '/repo/.claude/worktrees/old-run-wave-3' is locked",
+    'worktree removed: /repo/.claude/worktrees/old-run-latest',
+    'branches kept: lcw/old-run, lcw/old-run-wave-2, lcw/old-run-wave-3',
+    'a line lcw added later',
+  ].join('\n') })
+  assert.equal(told, "old-run is stopped for good. Its worktree old-run-wave-2 is removed. Its worktree old-run-wave-3 is kept, because git would not remove it: 'old-run-wave-3' is locked. Its worktree old-run-latest is removed. Its branches lcw/old-run, lcw/old-run-wave-2 and lcw/old-run-wave-3 are kept. a line lcw added later")
+})
+
+test('Clean Up says in sentences what it removed and what it kept and why, with no paths', () => {
+  const clean = press({ now: NOW, repoKey: 'repo-1', cleanup: { at: 5, title: 'Merged', bullets: [] } }, 'clean')
+  const told = clean.toast({ stdout: [
+    'removed worktree /repo/.claude/worktrees/done',
+    'removed branch lcw/done',
+    'skipped worktree /repo/.claude/worktrees/busy: it has uncommitted or untracked changes',
+    'skipped branch lcw/busy: it is still checked out in /repo/.claude/worktrees/busy',
+  ].join('\n') })
+  assert.equal(told, 'Worktree done is removed. Branch lcw/done is removed. Worktree busy is kept, because it has uncommitted or untracked changes. Branch lcw/busy is kept, because it is still checked out in busy.')
+  assert.equal(clean.toast({ stdout: 'No cleanup is recorded for this repository. Nothing was removed.\n' }), 'No cleanup is recorded for this repository. Nothing was removed.')
 })
 
 test('the never buttons write the notice the box is kept off by', () => {

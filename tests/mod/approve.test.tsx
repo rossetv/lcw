@@ -16,7 +16,7 @@ const approving = (approval: object = { go: ['Go (a)', 'Go (b)'], meaning: 'buil
   [RUN + '/state.json']: JSON.stringify({ id: 'r1', name: 'phone-rows', status: 'with-you', stage: 'Brainstorm', stageSince: NOW - 60000, tasks: [], asks: [], approval, ...over }),
 })
 
-function engine(on: any, files: Record<string, string>, opts: { draft?: string; fills?: boolean; kept?: Record<string, any> } = {}) {
+function engine(on: any, files: Record<string, string>, opts: { draft?: string; fills?: boolean; kept?: Record<string, any>; notify?: object[] } = {}) {
   const kept = opts.kept ?? {}
   const clock = mock.clock(on, { now: NOW })
   const prompts: string[] = []
@@ -43,7 +43,7 @@ function engine(on: any, files: Record<string, string>, opts: { draft?: string; 
   on('prompt.read', () => ({ value: { text: opts.draft ?? '', cursor: 0 } }))
   on('prompt.fill', (_: any, e: any) => { if (opts.fills === false) return { isFilled: false }; filled.push(e.text); return { isFilled: true } })
   on('ui.toast', (_: any, e: any) => { toasts.push(e.text); return { value: undefined } })
-  on('ui.notify', (_: any, e: any) => { notified.push(e.text); return { value: { isSent: true, channel: 'terminal_bell' } } })
+  on('ui.notify', (_: any, e: any) => { notified.push(e.text); return { value: opts.notify?.shift() ?? { isSent: true, channel: 'terminal_bell' } } })
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
   // $.state as a reload of the mod's code finds it: what the test put there, and what the mod writes.
@@ -173,6 +173,26 @@ test('the approval box rings once when it appears, and not again as it is drawn 
   await w.clock.advance(10000)
   expect(w.notified).toEqual(['Is this what you want built?'])
   await again.unmount()
+})
+
+test('a bell that could not go out yet rings on a later draw, and the box counts as rung once it went out', async ($, on) => {
+  const w = engine(on, approving(), { notify: [{ isSent: false, reason: 'no-surface' }] })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await w.clock.advance(30000)
+  expect(w.notified).toEqual(['Is this what you want built?', 'Is this what you want built?'])
+  expect(w.kept.rung?.value).toEqual(['approve:r1:' + (NOW - 1000)])
+  await band.unmount()
+})
+
+test('a bell no channel sounded is not counted as rung, and is not rung again on every draw', async ($, on) => {
+  const w = engine(on, approving(), { notify: [{ isSent: false, reason: 'no-channel' }] })
+  await start($)
+  const band = await $.ui.mount(BAND)
+  await w.clock.advance(30000)
+  expect(w.notified).toEqual(['Is this what you want built?'])
+  expect(w.kept.rung?.value ?? []).toEqual([])
+  await band.unmount()
 })
 
 test('a box that rang before a reload of the mod does not ring after it', async ($, on) => {

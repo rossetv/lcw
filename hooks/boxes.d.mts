@@ -49,7 +49,7 @@ export type Plan = {
   fillText?: string
   proxyQuotaChoice?: { host: string; choice: string }
   dismiss?: boolean
-  toast?: string
+  toast?: string | ((result: { stdout?: string; stderr?: string } | null) => string)
 }
 export function pressPlan(banner: Banner | null | undefined, option: string, facts: BannerFacts | null | undefined,
   ctx: { root: string; sessionId: string; repoKey?: string; cleanupPath?: string }): Plan | null
