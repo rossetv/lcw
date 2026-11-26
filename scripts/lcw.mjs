@@ -141,7 +141,7 @@ function change(run, note, fn, wave) {
   for (const refusal of passed.splice(0)) {
     const line = `BYPASS, not standard LCW: ${flags.bypass}; went past: ${refusal}`
     appendLedger(run.paths, line, about)
-    out(line)
+    out(`${line} (list it to the person at the end)`)
   }
 }
 
@@ -449,7 +449,7 @@ const commands = {
     const p = run.paths
     const lines = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean)
     const ledger = lines.slice(-15)
-    const bypasses = lines.filter((l) => l.includes(' BYPASS, not standard LCW: ')).length
+    const bypasses = lines.filter((l) => /^- \S+ BYPASS, not standard LCW: /.test(l)).length
     const money = readMoney({ sessionId: s.driver ?? sessionId, now: now() })
     const quota = readSessionQuota(s.driver ?? sessionId, now(), driverMark(s))
     out(
@@ -491,11 +491,11 @@ const commands = {
         const still = openWaves(run.state).filter((x) => x.status === 'running' && x.stage !== 'Ship')
         if (still.length) return out(`${stands}; no new round was started. The round that follows this early one starts once ${still.length > 1 ? 'waves' : 'wave'} ${still.map((x) => x.n).join(', ')} ${still.length > 1 ? 'hold' : 'holds'} in Ship`)
       }
+      if (!run.state.sweep.approvedAt) fail('The charter has not been put to the person yet: ask with lcw approval in Charter first. Nothing was changed.')
       const queued = run.state.sweep.waves.filter((x) => x.status === 'queued')
       if (queued.length) block(`Waves ${queued.map((x) => x.n).join(', ')} are still queued; a new hunt starts once none is. Nothing was changed.`)
       const unbuilt = openWaves(run.state).filter((x) => x.status === 'running' && !isBuilt(x))
       if (unbuilt.length) block(`${unbuilt.length > 1 ? 'Waves' : 'Wave'} ${unbuilt.map((x) => `${x.n} (${x.stage})`).join(', ')} ${unbuilt.length > 1 ? 'are' : 'is'} still being planned or built; a new hunt starts once every open wave is built and in Review. Nothing was changed.`)
-      if (!run.state.sweep.approvedAt) fail('The charter has not been put to the person yet: ask with lcw approval in Charter first. Nothing was changed.')
       const charter = `${run.dir}/charter.md`
       if (!fs.existsSync(charter) || !fs.readFileSync(charter, 'utf8').trim()) block('charter.md is empty: write the agreed charter there first. Nothing was changed.')
     }
@@ -1085,9 +1085,9 @@ const commands = {
     if (sub === 'files') return out(...changedFiles(s, openWaves(s)))
     if (sub === 'round') {
       const wave = mustRun(waveOf(s) || fail('No wave is open. Nothing was changed.'))
-      if (wave.stage !== 'Review') block(`Wave ${wave.n} is in ${wave.stage}; a review round is raised in Review. Nothing was changed.`)
       const to = words.length ? wholeNumber(words[0], 'lcw wave round') : (wave.round ?? 0) + 1
       if (to < 1) fail('A review round is 1 or more. Nothing was changed.')
+      if (wave.stage !== 'Review') block(`Wave ${wave.n} is in ${wave.stage}; a review round is raised in Review. Nothing was changed.`)
       // a number at or under the round it is at puts a mistaken raise right, and starts no round
       if (to > (wave.round ?? 0)) mustHoldRange(s, wave, 'another review round')
       change(run, `wave ${wave.n}: review round ${to}`, () => { wave.round = to; delete wave.waits }, wave)
@@ -1111,7 +1111,7 @@ const commands = {
       }
       if (step === 'final checks') {
         const running = (wave.tasks ?? []).filter((t) => t.status === 'running')
-        if (running.length) fail(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running; its final checks start on a settled head, once every worker has reported. Nothing was changed.`)
+        if (running.length) block(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running; its final checks start on a settled head, once every worker has reported. Nothing was changed.`)
         inOrder('its final checks')
         checked = tipOf(s, wave)
       }
@@ -1184,22 +1184,22 @@ const commands = {
       // a worker may still be committing to it
       const running = (wave.tasks ?? []).filter((t) => t.status === 'running')
       if (running.length) fail(`Wave ${wave.n}'s ${running.length > 1 ? 'tasks' : 'task'} ${running.map((t) => t.id).join(', ')} ${running.length > 1 ? 'are' : 'is'} still running; a wave ships once every worker has reported. Nothing was changed.`)
-      if (wave.stage !== 'Ship') block(`A wave ships in Ship; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
-      if (wave.step !== 'merging') block(`Wave ${wave.n}'s final checks have not passed${wave.step ? ` (it is at ${wave.step})` : ''}: lcw wave step "final checks" when they start, then lcw wave step merging. Nothing was changed.`)
       const before = w.waves.find((x) => x.n < wave.n && x.status !== 'shipped')
       if (before) fail(`Wave ${before.n} has not shipped yet, and waves land in order. Nothing was changed.`)
       // a verdict changed after the wave entered Ship would ship uncounted
       const unsettled = (wave.requirements ?? []).filter((r) => r.status === 'todo' || r.status === 'failing')
-      if (unsettled.length) block(`Wave ${wave.n} cannot ship with ${unsettled.map((r) => `${r.id} ${r.status}`).join(', ')}: send it back, lcw stage Build --wave ${wave.n}, or record each fix as it stands. Nothing was changed.`)
+      if (unsettled.length) fail(`Wave ${wave.n} cannot ship with ${unsettled.map((r) => `${r.id} ${r.status}`).join(', ')}: send it back, lcw stage Build --wave ${wave.n}, or record each fix as it stands. Nothing was changed.`)
       if (flags.pr !== undefined && s.sweep.prs === 'end') fail('The charter chose one pull request at the end, so a wave has no pull request of its own. Nothing was changed.')
       const pr = flags.pr === undefined ? null : prOf(flags.pr).number || fail(`--pr takes the pull request's number, not ${flags.pr}. Nothing was changed.`)
       const root = s.repoRoot
       const tip = tipOf(s, wave)
-      if (tip !== wave.checked) block(`${wave.branch} moved from ${wave.checked} to ${tip} since its final checks started, so they do not count; run them again on the settled head. Nothing was changed.`)
       // every fix dropped or parked: nothing to land, so no pull request and nothing for the waves after it to wait on
       const empty = Number(git(root, 'rev-list', '--count', `${s.branch}..${tip}`)) === 0
       if (empty && pr) fail(`${wave.branch} has no commits, so there is no pull request to record. Nothing was changed.`)
       try { git(root, 'merge-base', '--is-ancestor', s.branch, tip) } catch { fail(`${s.branch} has commits ${wave.branch} does not, so it cannot fast-forward to the wave. Nothing was changed.`) }
+      if (wave.stage !== 'Ship') block(`A wave ships in Ship; wave ${wave.n} is in ${wave.stage}. Nothing was changed.`)
+      if (wave.step !== 'merging') block(`Wave ${wave.n}'s final checks have not passed${wave.step ? ` (it is at ${wave.step})` : ''}: lcw wave step "final checks" when they start, then lcw wave step merging. Nothing was changed.`)
+      if (tip !== wave.checked) block(`${wave.branch} moved from ${wave.checked} to ${tip} since its final checks started, so they do not count; run them again on the settled head. Nothing was changed.`)
       // a sweep from before waves had worktrees of their own may keep one on its branch, and git moves a checked-out branch only there
       let oldOnBranch = false
       try { oldOnBranch = Boolean(s.worktree) && git(s.worktree, 'symbolic-ref', '-q', 'HEAD') === `refs/heads/${s.branch}` } catch {}

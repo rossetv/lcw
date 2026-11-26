@@ -22,7 +22,7 @@ function planning() {
   const waveLedger = () => fs.readFileSync(`${dir}/waves/1/ledger.md`, 'utf8')
   const wt = /^worktree: (.+)$/m.exec(cli('wave', 'start').out)[1]
   const state = () => readJson(`${dir}/state.json`)
-  return { o, dir, wt, cli, ledger, waveLedger, state, wave: () => state().sweep.waves[0] }
+  return { o, repo, dir, wt, cli, ledger, waveLedger, state, wave: () => state().sweep.waves[0] }
 }
 
 function commit(wt, file) {
@@ -56,7 +56,7 @@ test('a process refusal names --bypass, and with a reason the command goes ahead
   assert.equal(r.code, 0, r.out)
   assert.equal(t.wave().round, 1)
   const line = /BYPASS, not standard LCW: the review ran early by hand; went past: Wave 1 is in Plan; a review round is raised in Review\.$/m
-  assert.match(r.out, line)
+  assert.match(r.out, /BYPASS, not standard LCW: the review ran early by hand; went past: .* \(list it to the person at the end\)$/m)
   assert.match(t.ledger(), line)
   assert.match(t.waveLedger(), line)
 })
@@ -74,9 +74,37 @@ test('an empty bypass reason is refused and changes nothing', () => {
 
 test('a command that goes past a process refusal and then cannot work writes no bypass', () => {
   const t = planning()
-  const r = t.cli('wave', 'round', '0', '--bypass', 'testing')
+  // a folder that is not the hunt's sits where the next round's worktree goes
+  fs.mkdirSync(`${t.repo}/.claude/worktrees/tidy-latest`, { recursive: true })
+  fs.writeFileSync(`${t.repo}/.claude/worktrees/tidy-latest/notes.txt`, 'mine\n')
+  const r = t.cli('stage', 'Hunt', '--bypass', 'testing')
   assert.equal(r.code, 1)
+  assert.match(r.out, /not the hunt's/)
   assert.doesNotMatch(t.ledger(), BYPASS)
+})
+
+test('a hard refusal comes before a process one, so it never names --bypass', () => {
+  const t = planning()
+  commit(t.wt, 'b.txt')
+  t.cli('req', 'add', 'R2', 'the 409')
+  for (const flags of [[], ['--bypass', 'want it anyway']]) {
+    const r = t.cli('wave', 'shipped', ...flags)
+    assert.equal(r.code, 1)
+    assert.match(r.out, /cannot ship with R2 todo/)
+    assert.doesNotMatch(r.out, /--bypass/)
+  }
+  assert.equal(t.wave().status, 'running')
+})
+
+test('final checks start past a running task with --bypass', () => {
+  const t = planning()
+  t.cli('stage', 'Ship')
+  t.cli('task', 'add', 'T1', 'fix it')
+  t.cli('task', 'T1', 'running')
+  assert.match(t.cli('wave', 'step', 'final checks').out, /still running.*--bypass/)
+  const r = t.cli('wave', 'step', 'final checks', '--bypass', 'the worker only writes its report')
+  assert.equal(r.code, 0, r.out)
+  assert.equal(t.wave().step, 'final checks')
 })
 
 test('the refusals LCW keeps hard do not give way to --bypass', () => {
@@ -89,7 +117,7 @@ test('the refusals LCW keeps hard do not give way to --bypass', () => {
     ['set', 'markPercent=95'], // the usage mark moves only on the person's words
     ['merge', '1'], // the charter chose no merging as it goes
     // a worker may be committing to the wave
-    ['wave', 'take'], ['wave', 'step', 'final checks'], ['wave', 'shipped'],
+    ['wave', 'take'], ['wave', 'shipped'],
     ['req', 'R1', 'pass'], // the sweep counts it parked
   ]
   for (const c of cases) {
@@ -141,7 +169,8 @@ test('a wave shipped past its stage and final checks leaves a sweep that carries
 
 test('status counts the bypasses in the ledger', () => {
   const t = planning()
-  assert.doesNotMatch(t.cli('status').out, /bypasses:/)
+  t.cli('ledger', 'the person asked what BYPASS, not standard LCW: means')
+  assert.doesNotMatch(t.cli('status').out, /bypasses:/, 'a note that quotes one is not a bypass')
   t.cli('wave', 'round', '--bypass', 'the review ran early by hand')
   assert.match(t.cli('status').out, /^bypasses: 1$/m)
 })

@@ -2316,7 +2316,7 @@ test('merge of a number that is neither a wave nor a wave\'s pull request says t
 
 test('merge --wait on a pull request GitHub closed unmerged says so at once and never waits for checks', () => {
   const t = shippedWaves()
-  const gh = fakeGh({ GH_STATE: 'CLOSED', GH_BASE: 'lcw/tidy', GH_CHECKS: 'pending', LCW_CHECKS_MINUTE_MS: '5000' })
+  const gh = fakeGh({ GH_STATE: 'CLOSED', GH_BASE: 'main', GH_CHECKS: 'pending', LCW_CHECKS_MINUTE_MS: '5000' })
   const r = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: gh.env })
   assert.equal(r.code, 1)
   assert.match(r.out, /closed without being merged/)
