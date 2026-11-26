@@ -731,6 +731,27 @@ test('a collapsed orchestrator counts every agent under it', () => {
   assert.ok(rows.some(t => /3 more agents/.test(t)));
 });
 
+test('paused at a mark the week has already passed, the hint offers a step above what is used', () => {
+  const hint = (markPercent, percentUsed) => plain(renderCard(buildView({ state: { stage: 'Build', status: 'paused', pausedReason: 'mark', markPercent, name: 'd' },
+    usage: { sevenDay: { percentUsed, resetsAt: new Date(NOW + 36e5).toISOString() } }, ...at }), { width: 100, frame: true })).join('\n').match(/run up to (\d+)%/)?.[1];
+  assert.equal(hint(75, 40), '85');
+  assert.equal(hint(70, 85), '90');
+  assert.equal(hint(75, 92), '100');
+  assert.equal(hint(95, 20), '100');
+  assert.equal(hint(75, 100), undefined);
+});
+
+test('the placeholder zeros a spec and a plan start with are not drawn as figures', () => {
+  const drawn = (stage, more) => plain(renderCard(buildView({ state: { stage, status: 'running', name: 'd', ...more }, ...at }), { width: 100, frame: true })).join('\n');
+  assert.doesNotMatch(drawn('Spec', { spec: { requirements: 0, scenarios: 0 } }), /requirements|scenarios/);
+  assert.match(drawn('Spec', { spec: { requirements: 4, scenarios: 9 } }), /4 requirements.*9 scenarios/);
+  assert.doesNotMatch(drawn('Plan', { plan: { tasks: 0, atOnce: 0, models: {} } }), /0 tasks/);
+  assert.match(drawn('Plan', { plan: { tasks: 12, atOnce: 4, models: {} } }), /12 tasks.*up to 4 at once/);
+  const wave = tasks => ({ stage: 'Plan', shape: 'sweep', sweep: { waves: [{ n: 1, status: 'running', stage: 'Plan', plan: { tasks, atOnce: 0 } }] } });
+  assert.doesNotMatch(drawn('Plan', wave(0)), /0 tasks/);
+  assert.match(drawn('Plan', wave(7)), /7 tasks/);
+});
+
 test('paused at a 100% mark, the card offers no higher mark', () => {
   const rows = (markPercent) => plain(renderCard(buildView({ state: { stage: 'Build', status: 'paused', pausedReason: 'mark', markPercent, name: 'd' }, ...at }), { width: 100, frame: true })).join('\n');
   assert.doesNotMatch(rows(100), /run up to/);

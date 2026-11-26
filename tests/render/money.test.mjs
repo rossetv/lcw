@@ -108,6 +108,11 @@ test('a run paused at a dollar mark says so, when it tries again, and offers the
   assert.ok(rows.includes('say “run up to $3,400” to carry on now'));
 });
 
+test('the dollar hint is above the spend, even when the spend has passed the mark and a tenth of the cap', () => {
+  for (const [spentUsd, hint] of [[3020, '$3,400'], [3500, '$3,600'], [3700, '$4,000'], [4100, '$4,500']])
+    assert.ok(card(moneyOf('AtMark', { spentUsd })).includes(`say “run up to ${hint}” to carry on now`), `${spentUsd} offers ${hint}`);
+});
+
 test('after a try that found the spend still over the mark, the card says it tries again', () => {
   const row = card(moneyOf('AtMark', { retried: true, retryAt: Date.UTC(2026, 10, 20, 8, 0) })).find(r => r.includes('paused'));
   assert.match(row, /still over · tries again at 08:00$/);
