@@ -437,6 +437,13 @@ test('the stall prompt names the agent, how long, who launched it, and where to 
   for (const fact of ['2 agents', 'Build the w1', '21 minutes', 'second time', 'Build the w2', '15 minutes']) assert.ok(two.includes(fact), fact)
 })
 
+test('a stall notice can arrive after the agent has moved on, so it asks for action only if the agent is still stalled', () => {
+  const one = stallPrompt([{ ...stalling('w1', 16), times: 1 }], [])
+  assert.match(one, /16 minutes\. If it is still stalled, /)
+  const two = stallPrompt([{ ...stalling('w1', 21), times: 1 }, { ...stalling('w2', 15), times: 1 }], [])
+  assert.match(two, /15 minutes\. If they are still stalled, /)
+})
+
 // A sweep with wave 1 in Review, wave 2 in Build and wave 3 queued; over changes a wave by its number.
 const sweepOf = (over = {}) => ({
   id: 'run-1',
