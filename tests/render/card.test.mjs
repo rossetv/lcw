@@ -951,7 +951,7 @@ test('at 100 columns nothing is lost, at 80 the longer words go first, and below
   assert.match(long(115), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +round 3 · 61 fixed · 170 parked …$/);
   assert.match(long(80), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +…$/);
   // Too short for the counts beside the stages: the stages go and the counts stay.
-  assert.match(long(72), /^ {2}waves {3}▰{7}▱{2} {2}5 done · 2 queued +61 fixed · 170 parked …$/);
+  assert.match(long(71), /^ {2}waves {3}▰{7}▱{2} {2}5 done · 2 queued +61 fixed · 170 parked …$/);
   for (const board of Object.keys(LANES)) for (const w of [140, 100, 80, 70, 60, 50, 44, 43, 36, 30]) {
     laneRows(inputsOf(board), w).forEach(l => assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l));
   }
@@ -1948,4 +1948,30 @@ test('the lanes say their figures in one form, so their words stand in one colum
     assert.equal(new Set(said.map(s => /^\d+ of +\d+ [a-z]/.test(s))).size, 1, width + ': ' + said.join(' | '));
   }
   assert.equal(laneOf(laneRows(i, 80), 3).replace(/^.*[▰▱] {4}/, '').replace(/ +\d+m$/, ''), '3 of 9 done · 4 running');
+});
+
+test('a long sweep with a wave queued keeps its counts and totals beside the strip, and an empty cell in it', () => {
+  const i = inputsOf('24-lanes-one-wave-open');
+  i.state.sweep.waves = [...Array.from({ length: 29 }, (_, k) => ({ n: 100 + k, status: 'shipped', merged: true, pr: 200 + k })), ...i.state.sweep.waves];
+  const head = width => headOf(laneRows(i, width));
+  assert.match(head(80), /▰▱ {2}30 done · 1 queued +…$/);
+  assert.match(head(130), /▰▱ {2}30 done · 1 queued +round 1 · 12 fixed · 2 parked$/);
+});
+
+test('lanes short of room for what follows their figures keep the verb after it', () => {
+  const i = inputsOf('26-lanes-three-open');
+  i.state.sweep.waves[1] = { ...i.state.sweep.waves[1], round: 2, requirements: [...i.state.sweep.waves[1].requirements.slice(0, 6), { id: 'F9', name: 'the mark', status: 'failing' }] };
+  const said = (width, n) => laneOf(laneRows(i, width), n).replace(/^.*[▰▱] {4}/, '').replace(/ +\d+m$/, '');
+  for (const width of [66, 72]) {
+    assert.equal(said(width, 2), '6 of 7 pass …', String(width));
+    assert.equal(said(width, 3), '3 of 9 done …', String(width));
+  }
+});
+
+test('lanes too tight for the heading to keep its stages keep its counts and totals', () => {
+  for (const width of [61, 66, 71]) {
+    const rows = laneRows(inputsOf('06-build-wave-2-fixes-in-parallel'), width);
+    assert.match(headOf(rows), /1 done · (1 in progress · )?4 queued .*27 fixed/, width + '\n' + rows.join('\n'));
+    assert.ok(rows.every(l => cols(l) <= width), width + '\n' + rows.join('\n'));
+  }
 });
