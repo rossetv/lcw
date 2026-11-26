@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
 import { tmp, readJson, started, fakeClaude, CLI } from './helpers.mjs'
-import { othersHold } from '../../scripts/lib/awake.mjs'
+import { othersHold, canHold, startHold } from '../../scripts/lib/awake.mjs'
 
 // What `pmset -g assertions` printed on a Mac: macOS's own holders, Claude Code's 5-minute caffeinate holds, Amphetamine.
 const OWN = `Listed by owning process:
@@ -130,4 +130,26 @@ test('keep awake refuses without Claude Code\'s pid, or for a run that is not ru
   u.cli('pause', 'human')
   assert.equal(u.cli('awake').code, 1)
   for (const run of [t, u]) assert.equal(fs.existsSync(`${run.dir}/awake`), false)
+})
+
+test('a hold that dies at once is not reported as started', host, () => {
+  const bad = tmp('bad-inhibit')
+  fs.writeFileSync(`${bad}/systemd-inhibit`, '#!/bin/sh\nexit 1\n')
+  fs.chmodSync(`${bad}/systemd-inhibit`, 0o755)
+  const path = process.env.PATH
+  process.env.PATH = `${bad}:${path}`
+  try { assert.equal(startHold(tmp('run'), process.pid, 'x', 0, 'linux'), null) } finally { process.env.PATH = path }
+})
+
+test('a live hold is started and recorded', host, async () => {
+  const dir = tmp('run')
+  const hold = startHold(dir, process.pid, 'x', 0, process.platform)
+  assert.ok(hold && alive(hold.pid))
+  process.kill(-hold.pid, 'SIGTERM')
+  assert.ok(await gone(hold.pid))
+})
+
+test('WSL cannot hold off the computer\'s sleep', { skip: process.platform === 'win32' }, () => {
+  assert.equal(canHold('linux', { WSL_DISTRO_NAME: 'Ubuntu' }), false)
+  assert.equal(canHold('darwin', { WSL_DISTRO_NAME: 'Ubuntu' }), process.platform === 'darwin')
 })
