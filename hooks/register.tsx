@@ -955,7 +955,7 @@ async function driverOpen($: EngineInterface, driver: unknown) {
   const pid = Number((await readJson($, sessionFile(home, driver)))?.claudePid)
   if (!Number.isInteger(pid) || pid <= 1) return false
   if (pid === Number((await readJson($, sessionFile(home, id)))?.claudePid)) return false
-  const r = await $.process.run(['ps', '-ww', '-o', 'args=', '-p', String(pid)], { timeoutMs: 1000 }).catch(() => null)
+  const r = await $.process.run(['ps', '-ww', '-o', 'args=', '-p', String(pid)]).catch(() => null)
   return r?.exitCode === 0 && claudeCommand(String(r.stdout ?? ''))
 }
 
