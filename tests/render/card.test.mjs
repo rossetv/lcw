@@ -1184,7 +1184,7 @@ test('a cut that drops whole spans always shows "…", even where what is left e
 });
 
 test('a cut leaves no dangling "›" before its "…"', () => {
-  for (const [width, frame] of [[94, true], [90, false]]) {
+  for (const [width, frame] of [[81, true], [77, false]]) {
     const row = strip(toAnsi(card('StageSpec', { width, frame }), 'dark', width)).split('\n').find(l => l.includes('blind review  '));
     assert.ok(row.includes('…') && !/[›·]\s*…/.test(row), row);
   }
@@ -1233,7 +1233,7 @@ test('a cut never leaves a separator before its "…"', () => {
   const at = (board, width, start) => strip(toAnsi(card(board, { width, frame: false }), 'dark', width)).split('\n').find(l => l.startsWith(start));
   assert.match(at('RunningA', 44, 'tasks'), /▱  11 done · 3 running · 6 left$/);
   assert.match(toPlain(card('RunningA', { width: 44, frame: true })).split('\n').find(l => l.startsWith('│ tasks')), /3 running … │$/);
-  assert.match(at('StageSpec', 90, 'blind review'), /reviewer 1 · row…/);
+  assert.match(at('StageSpec', 77, 'blind review'), /reviewer 1 · row…/);
 });
 
 test('a cut inside a span ahead of a separator drops the separator too', () => {
@@ -1669,6 +1669,8 @@ test('a short blind review row keeps its label and both reviewers, giving up the
     const row = toPlain(card('StageSpec', { width, frame })).split('\n').find(l => l.includes('requirements'));
     assert.match(row, /^(│ )?blind review  ✓ (reviewer )?1\b.*› (reviewer )?2\b.*9 requirements/, `${width}${frame ? ', framed' : ''}: ${row}`);
   }
+  // "reviewing" goes before what a reviewer caught.
+  assert.match(toPlain(card('StageSpec', { width: 87 })), /reviewer 1 · row cap fixed  › reviewer 2 /);
 });
 
 test("a finished sweep's short row keeps how many are parked for the person", () => {
@@ -1695,5 +1697,19 @@ test('a row cut short leaves no comma or full stop before its "…"', () => {
       const hit = toPlain(renderCard(v, { width, frame })).split('\n').find(l => /[,;:.]…/.test(l));
       assert.equal(hit, undefined, `${name} at ${width}${frame ? ', framed' : ''}`);
     }
+  }
+});
+
+test('a short row keeps a word of what the person must act on: the pause, the decisions to check, the line being asked', () => {
+  const rowOf = (board, width, frame, has) => toPlain(card(board, { width, frame })).split('\n').find(l => l.includes(has));
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+    const at = `${width}${frame ? ', framed' : ''}`;
+    for (const board of ['Paused', '15-paused-at-your-usage-mark', '16-paused-by-you']) {
+      assert.match(rowOf(board, width, frame, G.paused), /▮▮ paused/, `${board} at ${at}`);
+      assert.match(rowOf(board, width, frame, 'nothing new starts'), /starts · \S/, `${board} at ${at}`);
+    }
+    assert.match(rowOf('Done', width, frame, 'requirements pass'), /pass · 2 decisions/, at);
+    assert.match(rowOf('StageBrainstorm', width, frame, 'questions open'), /intent .*› edge cases/, at);
+    assert.match(rowOf('01-charter-with-you', width, frame, 'question open'), /charter .*› PRs/, at);
   }
 });
