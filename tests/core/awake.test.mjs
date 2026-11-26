@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
 import { tmp, readJson, started, fakeClaude, CLI } from './helpers.mjs'
-import { othersHold, canHold, startHold } from '../../scripts/lib/awake.mjs'
+import { othersHold, canHold, startHold, inWsl } from '../../scripts/lib/awake.mjs'
 
 // What `pmset -g assertions` printed on a Mac: macOS's own holders, Claude Code's 5-minute caffeinate holds, Amphetamine.
 const OWN = `Listed by owning process:
@@ -63,6 +63,9 @@ fs.writeFileSync(`${stubs}/list`, process.platform === 'darwin' ? OWN : '')
 Object.assign(process.env, { PATH: `${stubs}:${process.env.PATH}`, STUB_WAIT_PID: String(process.pid), STUB_LIST: `${stubs}/list` })
 const host = process.platform === 'darwin' || process.platform === 'linux' ? {} : { skip: 'LCW holds off sleep only on macOS and Linux' }
 
+// canHold is false on WSL, so the tests that start a hold through the real environment cannot run there
+const real = host.skip ? host : inWsl(process.env) ? { skip: 'WSL cannot hold off the computer\'s sleep' } : {}
+
 const alive = (pid) => { try { process.kill(pid, 0); return true } catch { return false } }
 async function gone(pid) {
   for (let i = 0; i < 100 && alive(pid); i++) await new Promise((r) => setTimeout(r, 50))
@@ -82,7 +85,7 @@ function building() {
   return { ...t, check: () => JSON.parse(t.cli('awake', '--check').out) }
 }
 
-test('keep awake starts a hold that outlives the command, and pausing the run ends it', host, async () => {
+test('keep awake starts a hold that outlives the command, and pausing the run ends it', real, async () => {
   const t = building()
   assert.deepEqual(t.check(), { canHold: true, heldByOther: false, kept: false })
   // a hold still tied to lcw's output or process group would keep this waiting past the timeout
@@ -99,7 +102,7 @@ test('keep awake starts a hold that outlives the command, and pausing the run en
   assert.equal(t.check().kept, false)
 })
 
-test('a run going back to the person ends the hold', host, async () => {
+test('a run going back to the person ends the hold', real, async () => {
   const t = building()
   t.cli('awake')
   const hold = readJson(`${t.dir}/awake`)
@@ -145,6 +148,19 @@ test('a live hold is started and recorded', host, async () => {
   const dir = tmp('run')
   const hold = startHold(dir, process.pid, 'x', 0, process.platform)
   assert.ok(hold && alive(hold.pid))
+  process.kill(-hold.pid, 'SIGTERM')
+  assert.ok(await gone(hold.pid))
+})
+
+test('a hold is still recorded when ps itself fails', host, async () => {
+  const bad = tmp('bad-ps')
+  fs.writeFileSync(`${bad}/ps`, '#!/bin/sh\nexit 2\n')
+  fs.chmodSync(`${bad}/ps`, 0o755)
+  const path = process.env.PATH
+  process.env.PATH = `${bad}:${path}`
+  let hold
+  try { hold = startHold(tmp('run'), process.pid, 'x', 0, process.platform) } finally { process.env.PATH = path }
+  assert.ok(hold, 'a ps failure does not mean the hold died')
   process.kill(-hold.pid, 'SIGTERM')
   assert.ok(await gone(hold.pid))
 })

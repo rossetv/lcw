@@ -15,7 +15,7 @@ const onPath = (name) => (process.env.PATH || '').split(path.delimiter).some((di
 })
 
 // WSL: systemd-inhibit there holds only the Linux VM, so Windows would still sleep
-function inWsl(env) {
+export function inWsl(env) {
   if (env.WSL_DISTRO_NAME) return true
   try { return /microsoft/i.test(fs.readFileSync('/proc/version', 'utf8')) } catch { return false }
 }
@@ -24,9 +24,10 @@ function inWsl(env) {
 export const canHold = (platform = process.platform, env = process.env) =>
   !!PROGRAM[platform] && onPath(PROGRAM[platform]) && !(platform === 'linux' && inWsl(env))
 
-// ps shows a child that died and is not yet reaped as Z
+// ps shows a child that died and is not yet reaped as Z; exit status 1 is no such process. Any other ps failure
+// leaves it unknown, and an unknown hold counts as running: calling a live one dead would lose track of it.
 const running = (pid) => {
-  try { return !/^Z/.test(execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || 'Z') } catch { return false }
+  try { return !/^Z/.test(execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || 'Z') } catch (e) { return e.status !== 1 }
 }
 
 /** The hold for a run, as [program, args]: it holds off idle sleep until the process claudePid exits. */

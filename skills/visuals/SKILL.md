@@ -46,7 +46,7 @@ Before you write either kind, load the skills your client lists for designing ar
 **2. A local page, only when there is no Artifact tool, or a publish has failed or been refused.**
 
 - One HTML file with everything inside it: styles, scripts and pictures, nothing fetched from the network, so it opens anywhere.
-- Open it in the human's browser with the system's opener (`open` on macOS, `xdg-open` on Linux, `wslview` or `explorer.exe` on WSL, `start` on Windows) and give them the full path. Where nothing can open it, such as a remote session, give the path and say so.
+- Open it in the human's browser with the system's opener (`open` on macOS, `xdg-open` on Linux, `wslview`, or `explorer.exe` with the path from `wslpath -w`, on WSL, `start` on Windows) and give them the full path. Where nothing can open it, such as a remote session, give the path and say so.
 - Say why it is a local page, in a few words.
 
 **Either way, keep the source.** Save a copy of every picture's files in the run folder's `artifacts/` folder (`lcw start` printed it; `lcw where` prints the run folder). With no run, use a temporary folder outside the repository. Never save one in the repository; the one exception is a picture that belongs to a document the change itself adds or alters (see the `lcw:docs` skill). Write in brainstorm.md what each picture shows, its link or path, what the human said about it and what they approved.
