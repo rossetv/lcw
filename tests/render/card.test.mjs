@@ -187,7 +187,7 @@ const LANES = {
       "◆ LCW Sweep · backlog-sweep                                                                                  1h 31m",
       "● wave 1 in review, wave 2 building                                                              ≈ 12% of your week",
       "  waves   ✓ Plan  › Build  › Review  ○ Ship    ▰▰▱  1 queued                                     round 1 · 2 parked",
-      "▾ wave 1  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▱  ▱▱▱▱▱▱    18 of 23 fixes pass · 1 failing · round 2                        34m",
+      "▾ wave 1  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▱  ▱▱▱▱▱▱    18 of 23 fixes pass · 1 failing · review 2                       34m",
       "▾ wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱     7 of 12 tasks done · 3 running                                  22m",
     ],
     narrow: [
@@ -936,7 +936,7 @@ test('the paused row counts the running tasks of every open wave', () => {
 test('at 100 columns nothing is lost, at 80 the longer words go first, and below 60 the lanes are the narrow ones', () => {
   const at = (w) => laneRows(inputsOf('25-lanes-review-and-build'), w);
   const full = at(100);
-  assert.match(laneOf(full, 1), /18 of 23 fixes pass · 1 failing · round 2 +34m$/);
+  assert.match(laneOf(full, 1), /18 of 23 fixes pass · 1 failing · review 2 +34m$/);
   assert.match(headOf(full), /▰▰▱ {2}1 queued +round 1 · 2 parked$/);
   const eighty = at(80);
   // The later review round goes before the failing fix, the last to lose.
