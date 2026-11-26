@@ -1717,6 +1717,17 @@ test('a cut inside a path ends on a letter before its "…", never on a dot or a
   }
 });
 
+test('a question on rows of its own leaves no word alone on its last row', () => {
+  const i = inputsOf('RunningA');
+  i.state.asks = [{ n: 1, text: 'Wave 7 found the mark is shown twice; keep the dim one or the gate one?', at: NOW - 5 * 6e4 }];
+  const v = buildView(i);
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+    const rows = toPlain(renderCard(v, { width, frame })).split('\n').map(l => l.replace(/^│ | *│$/g, '').trim());
+    const asked = rows.slice(rows.findIndex(l => l.includes('needs you')) + 1, rows.findIndex(l => l.startsWith('answer in plain words')));
+    assert.ok(asked.length === 1 || asked.at(-1).includes(' '), `${width}${frame ? ', framed' : ''}\n` + asked.join('\n'));
+  }
+});
+
 test('a short row keeps a word of what the person must act on: the pause, the decisions to check, the line being asked', () => {
   const rowOf = (board, width, frame, has) => toPlain(card(board, { width, frame })).split('\n').find(l => l.includes(has));
   for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
