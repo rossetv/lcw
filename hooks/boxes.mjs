@@ -323,7 +323,8 @@ export function pressPlan(banner, option, facts, ctx) {
       const usage = facts?.usage ?? {}
       const money = facts?.billing === 'payg' && usage.capUsd > 0 && usage.markUsd > 0
       const share = option === 'r90' ? 0.9 : 1
-      const value = money ? Math.round(usage.capUsd * share) + 'usd' : String(share * 100)
+      const usd = Math.round(usage.capUsd * share)
+      const value = money ? usd + 'usd' : String(share * 100)
       const label = banner.options.find(([id]) => id === option)[1]
       const mark = { ...lcw('mark', value), halt: /at the mark\s*$/ }
       if (run) {
@@ -332,7 +333,7 @@ export function pressPlan(banner, option, facts, ctx) {
           promptFailed: 'LCW raised the mark and resumed the run. Say "carry on" to continue it.', dismiss: true,
         }
       }
-      return { steps: [mark], toast: 'output', dismiss: true }
+      return { steps: [mark], toast: `This session now runs up to ${money ? dollars(usd) : share * 100 + '% of the week'}.`, dismiss: true }
     }
     case 'spendfail':
       if (option === 'fix') return { prompt: { text: fixSpendPrompt(root, sessionId, facts?.spendFailing) }, dismiss: true }
@@ -340,7 +341,11 @@ export function pressPlan(banner, option, facts, ctx) {
     case 'unfinished': {
       const u = facts?.unfinished
       if (!u) return null
-      if (option === 'abandon') return { steps: [lcw('abandon', u.id)], toast: 'output', dismiss: true }
+      if (option === 'abandon') {
+        // lcw abandon keeps a worktree whose removal could lose work, or that a session is in.
+        const toast = [`${u.name} is stopped for good.`, u.worktree && 'Its worktree is removed, unless that could lose work or a session is in it.', u.branch && 'Its branch is kept.']
+        return { steps: [lcw('abandon', u.id)], toast: toast.filter(Boolean).join(' '), dismiss: true }
+      }
       // Paused at the mark it stays paused: only a Run up to press raises the mark.
       const resumed = u.status === 'paused' && u.pausedReason !== 'mark'
       return {
@@ -350,7 +355,7 @@ export function pressPlan(banner, option, facts, ctx) {
     }
     case 'awake':
       if (option === 'never') return { notices: { awake: 'never' }, dismiss: true }
-      return { steps: [lcw('awake')], toast: 'output', dismiss: true }
+      return { steps: [lcw('awake')], toast: 'LCW keeps this computer awake until the run pauses, finishes or stops.', dismiss: true }
     case 'restart':
       return close
     case 'update':

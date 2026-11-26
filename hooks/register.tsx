@@ -1116,7 +1116,7 @@ async function fillReply($: EngineInterface, text: string, setup?: Banner) {
         await refresh($).catch(() => {})
         const facts = await gather($, await $.clock.now())
         if (!sameBox(setup, S.interactive ? bannerFor(facts) : null, 'setup') || !facts.proxyQuota?.canSetup || watch?.changed || S.turnRunning || S.compacting || S.carry || S.owed) {
-          $.ui.toast('The draft, connection or session controls changed. Nothing was filled; try setup again when this session is idle.')
+          $.ui.toast('The draft, connection or session controls changed. Nothing was filled; try setup again when this session is idle.', { timeoutMs: 10000 })
           return false
         }
         if (pass === 0) typed = await draft($)
@@ -1151,7 +1151,7 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
   // A prompt still owed to the run (a reopen, a resume) is sent with it, not dropped for it.
   if (plan.owe && S.run) owe($, S.run.runDir, S.owed?.runDir === S.run.runDir ? S.owed.text + '\n\n' + plan.owe : plan.owe, 0)
   if (plan.prompt) {
-    if (!(await submit($, plan.prompt))) return $.ui.toast(plan.promptFailed ?? 'Clear the prompt or wait for the turn to end, then press it again.')
+    if (!(await submit($, plan.prompt))) return $.ui.toast(plan.promptFailed ?? 'Clear the prompt or wait for the turn to end, then press it again.', { timeoutMs: 10000 })
   }
   if (plan.notices) {
     const file = noticesFile(await lcwHome($))
@@ -1187,7 +1187,7 @@ async function carryOut($: EngineInterface, banner: Banner, plan: Plan) {
 async function pressBanner($: EngineInterface, id: string, drawn: Banner | null) {
   const [, kind = '', option = ''] = id.split(':')
   if (!drawn || drawn.kind !== kind) return
-  if (S.pressing) return $.ui.toast('LCW is still on the last button you pressed.')
+  if (S.pressing) return $.ui.toast('LCW is still on the last button you pressed.', { timeoutMs: 10000 })
   S.pressing = true
   let later = false
   try {
@@ -1198,7 +1198,7 @@ async function pressBanner($: EngineInterface, id: string, drawn: Banner | null)
     if (!sameBox(drawn, fresh, option)) {
       S.banner.shown = fresh
       S.dirty = true
-      return $.ui.toast('That box changed before the click, so nothing was done.')
+      return $.ui.toast('That box changed before the click, so nothing was done.', { timeoutMs: 10000 })
     }
     const plan = pressPlan(fresh, option, facts, {
       root: $.plugin.root, sessionId: await $.session.id(), repoKey: S.repoKey ?? undefined,

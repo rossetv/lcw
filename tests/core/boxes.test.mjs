@@ -87,6 +87,23 @@ test('a raise with no run only sets the mark and resumes nothing', () => {
   assert.equal(plan.prompt, undefined)
 })
 
+test('a raise with no run says the new mark in a sentence, as a share of the week or in dollars', () => {
+  assert.equal(press({ now: NOW, usage: { usedPercent: 80, markPercent: 75, atMark: true } }, 'r100').toast, 'This session now runs up to 100% of the week.')
+  const money = { now: NOW, billing: 'payg', usage: { spentUsd: 3050, capUsd: 4000, markUsd: 3000, atMark: true } }
+  assert.equal(press(money, 'r90').toast, `This session now runs up to ${dollars(3600)}.`)
+})
+
+test('Abandon and Keep it awake say what they did in sentences, naming what the run had', () => {
+  const left = (over) => unfinishedFact({ dir: '/runs/r2', shownAt: NOW - 3600000, state: { id: 'r2', name: 'old-run', status: 'running', stage: 'Build', ...over } }, '')
+  const bare = press({ now: NOW, unfinished: left({}) }, 'abandon').toast
+  assert.equal(bare, 'old-run is stopped for good.')
+  const full = press({ now: NOW, unfinished: left({ worktree: '/repo/.claude/worktrees/old-run', branch: 'lcw/old-run' }) }, 'abandon').toast
+  assert.match(full, /^old-run is stopped for good\. .*worktree.*\. Its branch is kept\.$/)
+  const awake = pressPlan({ kind: 'awake', key: 'r1:T', options: [['keep', 'Keep it awake'], ['never', 'Never']] }, 'keep', {}, CTX)
+  assert.deepEqual(argvs(awake), ['awake --session s1'])
+  assert.match(awake.toast, /^LCW keeps this computer awake .*\.$/)
+})
+
 test('a button the box does not offer does nothing', () => {
   const facts = { now: NOW, run: runFact(pausedRun), usage: { usedPercent: 92, markPercent: 75 } }
   assert.equal(press(facts, 'r90'), null)

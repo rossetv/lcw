@@ -30,6 +30,8 @@ function engine(on: any, files: Record<string, string>, opts: {
   const limits: Record<string, unknown> = {}
   const prompts: { text: string; asUser?: boolean }[] = []
   const toasts: string[] = []
+  // How long each toast stays, in the order said; the engine's own default is 4 s.
+  const lasts: number[] = []
   const filled: string[] = []
   const reads: string[] = []
   let fails = opts.submitFails ?? 0
@@ -75,10 +77,10 @@ function engine(on: any, files: Record<string, string>, opts: {
   on('turn.complete', (_: any, e: any) => ({ text: e.answer ?? '' }))
   on('prompt.read', () => ({ value: { text: (typeof opts.draft === 'function' ? opts.draft() : opts.draft) ?? '', cursor: 0 } }))
   on('prompt.fill', (_: any, e: any) => { if (opts.fills === false) return { isFilled: false }; filled.push(e.text); return { isFilled: true } })
-  on('ui.toast', (_: any, e: any) => { toasts.push(e.text); return { value: undefined } })
+  on('ui.toast', (_: any, e: any) => { toasts.push(e.text); lasts.push(e.timeoutMs ?? 4000); return { value: undefined } })
   on('agent.list', () => ({ value: [] }))
   on('config.list', () => ({ value: [] }))
-  return { clock, files, times, runs, limits, prompts, toasts, filled, reads }
+  return { clock, files, times, runs, limits, prompts, toasts, lasts, filled, reads }
 }
 
 const start = ($: any, isInteractive = true, surface: string | null = 'terminal') => $.session.start({ cwd: '/repo', surface, isInteractive })
@@ -155,6 +157,18 @@ test('Run up to 90% on a run paused at the mark raises the mark, resumes the run
   await band.unmount()
 })
 
+test('a press on a box that has changed since it was drawn does nothing and says so long enough to read', async ($, on) => {
+  const w = engine(on, bound(paused))
+  await start($)
+  const band = await $.ui.mount(BAND)
+  w.files[RUN + '/state.json'] = JSON.stringify({ ...JSON.parse(w.files[RUN + '/state.json']), pausedAt: '2026-11-20T04:00:00Z' })
+  await band.press({ key: 'banner:mark:r90' })
+  expect(lcwCalls(w.runs, 'mark')).toEqual([])
+  expect(w.toasts).toEqual(['That box changed before the click, so nothing was done.'])
+  expect(w.lasts).toEqual([10000])
+  await band.unmount()
+})
+
 test('a raise whose prompt the engine drops keeps the box and tells the person to carry on', async ($, on) => {
   const w = engine(on, bound(paused), { drops: 1 })
   await start($)
@@ -162,6 +176,7 @@ test('a raise whose prompt the engine drops keeps the box and tells the person t
   await band.press({ key: 'banner:mark:r90' })
   expect(w.prompts.length).toBe(0)
   expect(w.toasts).toEqual(['LCW raised the mark and resumed the run. Say "carry on" to continue it.'])
+  expect(w.lasts).toEqual([10000])
   expect(await band.find({ type: 'Text', text: /export-csv paused at your 75% mark\./ })).toBeDefined()
   await band.unmount()
 })
@@ -447,7 +462,7 @@ test('Abandon runs lcw abandon and says what it did', async ($, on) => {
   const band = await $.ui.mount(BAND)
   await band.press({ key: 'banner:unfinished:abandon' })
   expect(lcwCalls(w.runs, 'abandon')).toEqual(['abandon r2 --session s1'])
-  expect(w.toasts.join()).toMatch(/branch kept/)
+  expect(w.toasts).toEqual(['old-run is stopped for good.'])
   await band.unmount()
 })
 
@@ -520,6 +535,7 @@ test('Clean Up says it has started and returns at once; the removal runs after t
   expect(w.toasts.join('|')).toMatch(/Cleaning up/)
   await band.press({ key: 'banner:cleanup:clean' })
   expect(w.toasts.join('|')).toMatch(/still on the last button/)
+  expect(w.lasts.at(-1)).toBe(10000)
   await w.clock.advance(1000)
   expect(w.runs.filter(apply).length).toBe(1)
   expect(w.toasts.join('|')).toMatch(/removed branch a/)
