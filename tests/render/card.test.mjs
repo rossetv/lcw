@@ -231,7 +231,7 @@ const LANES = {
       "◆ backlog-sweep           waves ▰▰▱",
       "⚑ needs you · 12m",
       "Wave 1 cannot be pushed: GitHub…",
-      "● wave 1 waits on your answer;…",
+      "● wave 1 waits on your answer…",
       "wave 1  ▰▰▰ ▰▰▰ ▰▰▰ ▰▰▰  ⚑ waiting",
       "wave 2  ▰▰▰ ▰▰▰ ▱▱▱ ▱▱▱  Build",
     ],
@@ -1547,7 +1547,7 @@ const NARROWER = ['in', 'progress', 'waiting'];
 test('a short row gives up whole words, never part of one', () => {
   // Every word on a card that is cut to its width is a word of the same card drawn with room for everything.
   const words = rows => new Set(rows.filter(r => !r.some(s => /^more/.test(s.id ?? '')))
-    .flatMap(r => r.map(s => (s.r ? ' ' : '') + s.t).join('').split(/[\s·│╭╮╰╯├┤─]+/)).map(w => w.replace(/^…|[,;:]?…?$/g, '')).filter(w => w && !/^([▰▱]+|\d+)$/.test(w)));
+    .flatMap(r => r.map(s => (s.r ? ' ' : '') + s.t).join('').split(/[\s·│╭╮╰╯├┤─]+/)).map(w => w.replace(/^…|[,;:.]?…?$/g, '')).filter(w => w && !/^([▰▱]+|\d+)$/.test(w)));
   for (const name of Object.keys(fixtures)) {
     const v = buildView(inputsOf(name));
     for (const frame of [false, true]) {
@@ -1685,5 +1685,15 @@ test('a bar gives up cells before its counts go, and a failing requirement is th
     assert.match(rowOf('StageReview', width, frame, 'requirements'), /▱  (7 pass · )?1 failing/, at);
     assert.match(rowOf('RunningA', width, frame, 'tasks'), /[▰▱]  \d+ done/, at);
     if (width >= 52) assert.match(rowOf('03-hunt-round-1-probes-at-work', width, frame, 'areas'), /[▰▱]  14 hunted/, at);
+  }
+});
+
+test('a row cut short leaves no comma or full stop before its "…"', () => {
+  for (const name of Object.keys(fixtures)) {
+    const v = buildView(inputsOf(name));
+    for (let width = 36; width <= 130; width++) for (const frame of [false, true]) {
+      const hit = toPlain(renderCard(v, { width, frame })).split('\n').find(l => /[,;:.]…/.test(l));
+      assert.equal(hit, undefined, `${name} at ${width}${frame ? ', framed' : ''}`);
+    }
   }
 });
