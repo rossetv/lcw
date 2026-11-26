@@ -2271,12 +2271,12 @@ test('a worktree git refuses says why, not its progress line', () => {
   assert.doesNotMatch(r.out, /Preparing worktree/)
 })
 
-test('merge of a pull request GitHub closed unmerged says to open it again, not to retarget it', () => {
+test('merge of a pull request GitHub closed unmerged says to open a new one first, and to open it again only while its base branch exists', () => {
   const t = shippedWaves()
-  const r = lcw(['merge', '1'], { ...t.o, env: fakeGh({ GH_STATE: 'CLOSED' }).env })
+  const r = lcw(['merge', '1'], { ...t.o, env: fakeGh({ GH_STATE: 'CLOSED', GH_BASE: 'lcw/tidy' }).env })
   assert.equal(r.code, 1)
   assert.match(r.out, /closed without being merged/)
-  assert.match(r.out, /lcw wave pr 1 <number>/)
+  assert.match(r.out, /new pull request.*lcw wave pr 1 <number>.*again.*lcw\/tidy still exists/)
   assert.doesNotMatch(r.out, /retarget/)
   assert.equal(t.state().sweep.waves[0].merged, false)
 })

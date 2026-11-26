@@ -1249,7 +1249,7 @@ const commands = {
     if (view.state === 'MERGED' && view.baseRefName !== main) fail(`#${pr} was merged into ${view.baseRefName}, not the default branch ${main}, so its changes have not landed; it needs you. Nothing was recorded and its branch is kept.`)
     // merged earlier but never recorded: go on to the branch, do not merge twice
     if (view.state !== 'MERGED') {
-      if (view.state === 'CLOSED') fail(`#${pr} was closed without being merged. Open it again on GitHub, or open a new pull request for ${wave.branch} and record it with lcw wave pr ${n} <number>. Nothing was merged or recorded.`)
+      if (view.state === 'CLOSED') fail(`#${pr} was closed without being merged. Open a new pull request for ${wave.branch} and record it with lcw wave pr ${n} <number>; GitHub may refuse to open #${pr} again, so do that instead only if its base branch ${view.baseRefName} still exists. Nothing was merged or recorded.`)
       // the next wave's pull request is opened on this wave's branch, and GitHub retargets it only when that branch is deleted
       if (view.baseRefName !== main) fail(`#${pr} is based on ${view.baseRefName}, not the default branch ${main}; retarget it to ${main} first (gh pr edit ${pr} -R ${repo} --base ${main}). Nothing was merged or recorded.`)
       let state, readied = false, back = ''
