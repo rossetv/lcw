@@ -157,3 +157,28 @@ test('no wave is judged while an agent\'s wave is still being read, and an agent
   expect(sitting(w).length).toBe(1)
   expect(sitting(w)[0]).toMatch(/One agent is at work whose wave LCW could not read/)
 })
+
+const BAND = {
+  plugin: 'lcw', surface: 'terminal', component: 'AbovePrompt',
+  props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 30, bodyColumns: 110, scroll: { offset: 0, bodyRows: 29 }, view: {} },
+} as const
+
+test('the card says no agent is at work under a wave that has sat ten minutes, and says what was recorded instead when a reason is set', async ($, on) => {
+  const w = engine(on, sweep(), { list: [worker('a2', 'Build the importer for wave 2')] })
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  await start($)
+  await w.pass(9)
+  let band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /no agent at work/ })).toBeUndefined()
+  await band.unmount()
+  await w.pass(2)
+  band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /no agent at work/ })).toBeDefined()
+  await band.unmount()
+  w.set(sweep({}, [wave(1, 'Review', { waits: 'ships after the importer' }), wave(2, 'Build')]))
+  await w.pass(1)
+  band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /no agent at work/ })).toBeUndefined()
+  expect(await band.find({ type: 'Text', text: /ships after the importer/ })).toBeDefined()
+  await band.unmount()
+})
