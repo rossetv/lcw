@@ -58,7 +58,7 @@ function commit(wt, file, text) {
  * A gh on PATH that writes each call's arguments to a log. GH_STATE is what each pr view shows in turn, comma separated,
  * the last one again once they run out (open, then merged, by default); GH_DRAFT and GH_BASE are the rest of what it shows,
  * and the repository's default branch is main. GH_FAIL is the subcommand that fails, GH_API_ERROR what a failing api call says,
- * GH_SLEEP how many seconds pr merge takes.
+ * GH_SLEEP how many seconds pr merge takes, GH_LIST what pr list shows.
  */
 function fakeGh(more = {}) {
   const bin = tmp('bin')
@@ -85,6 +85,7 @@ if [ "$1 $2" = "pr checks" ]; then
   echo "$out"
   case "$out" in *pending*) exit 8;; *fail*) exit 1;; esac
 fi
+if [ "$1 $2" = "pr list" ]; then echo "\${GH_LIST:-[]}"; fi
 if [ "$1 $2" = "repo view" ]; then echo '{"defaultBranchRef":{"name":"main"}}'; fi
 if [ "$1" = "api" ] && [ -n "$GH_API_ERROR" ]; then echo "$GH_API_ERROR" >&2; exit 1; fi
 exit 0
@@ -696,12 +697,13 @@ test('merge readies a draft, merges it with a merge commit on the GitHub remote,
     'pr ready 12 -R acme/widgets',
     'pr merge 12 -R acme/widgets --merge',
     'pr view 12 -R acme/widgets --json state',
+    'pr list -R acme/widgets --base lcw/tidy-wave-1 --state open --json number',
     'api -X DELETE repos/acme/widgets/git/refs/heads/lcw/tidy-wave-1',
   ])
   assert.deepEqual(t.state().sweep.waves.map((w) => w.merged), [true, false])
   assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1 merged/)
   assert.equal(lcw(['merge', '1'], { ...t.o, env: gh.env }).code, 1, 'merged already')
-  assert.equal(gh.calls().length, 6)
+  assert.equal(gh.calls().length, 7)
 })
 
 const checks = (...buckets) => JSON.stringify(buckets.map((bucket, i) => ({ name: `job${i}`, bucket })))
@@ -856,6 +858,24 @@ test('merge deletes the remote wave branch through the api and leaves the local 
   assert.equal(git(wt, 'rev-parse', '--abbrev-ref', 'HEAD'), 'lcw/tidy-wave-1')
   assert.ok(fs.existsSync(wt))
   assert.equal(t.state().sweep.waves[0].merged, true)
+})
+
+test('merge moves a pull request based on the wave branch onto the default branch before deleting it, and keeps the branch when it cannot', () => {
+  const t = shippedWaves()
+  const gh = fakeGh({ GH_LIST: '[{"number":13}]' })
+  const r = lcw(['merge', '1'], { ...t.o, env: gh.env })
+  assert.equal(r.code, 0, r.out)
+  const calls = gh.calls()
+  const edit = calls.indexOf('pr edit 13 -R acme/widgets --base main')
+  assert.ok(edit > -1 && edit < calls.indexOf('api -X DELETE repos/acme/widgets/git/refs/heads/lcw/tidy-wave-1'), calls.join('\n'))
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1 merged.*#13 moved onto main, its remote branch deleted/)
+  const u = shippedWaves()
+  const stuck = fakeGh({ GH_LIST: '[{"number":13}]', GH_FAIL: 'pr edit' })
+  const kept = lcw(['merge', '1'], { ...u.o, env: stuck.env })
+  assert.equal(kept.code, 0, kept.out)
+  assert.match(kept.out, /remote branch lcw\/tidy-wave-1 is left: a pull request based on it could not be moved onto main/)
+  assert.ok(!stuck.calls().some((c) => c.startsWith('api -X DELETE')), stuck.calls().join('\n'))
+  assert.equal(u.state().sweep.waves[0].merged, true)
 })
 
 test('merge records a branch GitHub already deleted as deleted', () => {
@@ -1069,7 +1089,7 @@ test('a wave with no commits ships empty with no pull request, and the waves aft
   assert.ok(gh.calls().includes('pr merge 9 -R acme/widgets --merge'))
 })
 
-test('wave pr records the pull request of a shipped wave that has none, as a number or a URL, once', () => {
+test('wave pr records the pull request of a shipped wave that has none, as a number or a URL, and replaces only one GitHub closed unmerged', () => {
   const t = shipping(1)
   commit(t.wt, 'b.txt', 'fix\n')
   assert.equal(t.cli('wave', 'pr', '1', '3').code, 1, 'still running')
@@ -1078,8 +1098,16 @@ test('wave pr records the pull request of a shipped wave that has none, as a num
   assert.equal(t.cli('wave', 'pr', '2', '3').code, 1, 'no such wave')
   assert.equal(t.cli('wave', 'pr', '1', 'https://github.com/acme/widgets/pull/31').code, 0)
   assert.equal(t.state().sweep.waves[0].pr, 31)
-  assert.equal(t.cli('wave', 'pr', '1', '32').code, 1, 'it has one')
+  for (const GH_STATE of ['OPEN', 'MERGED']) {
+    const r = lcw(['wave', 'pr', '1', '32'], { ...t.o, env: fakeGh({ GH_STATE }).env })
+    assert.equal(r.code, 1, `it has one, ${GH_STATE}`)
+    assert.match(r.out, new RegExp(GH_STATE.toLowerCase()))
+  }
   assert.equal(t.state().sweep.waves[0].pr, 31)
+  const closed = lcw(['wave', 'pr', '1', '32'], { ...t.o, env: fakeGh({ GH_STATE: 'CLOSED' }).env })
+  assert.equal(closed.code, 0, closed.out)
+  assert.equal(t.state().sweep.waves[0].pr, 32, 'one GitHub closed unmerged gives way to the one opened again')
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1: PR #32, in place of #31, which GitHub closed unmerged/)
   const u = shipping(1, 'bare')
   commit(u.wt, 'b.txt', 'fix\n')
   u.ship()
