@@ -61,14 +61,19 @@ test("once Claude Code's agent rows are hidden under a question box and the card
   await clock.advance(2100)
   await first.unmount()
   const byHeight: [number, unknown][] = []
+  // With Claude Code's rows hidden the card is the only place the agents are listed: an agent's row, or the row that counts them.
+  const unlisted: number[] = []
   for (let maxRows = 10; maxRows <= 40; maxRows++) {
     const b = await $.ui.mount(band(maxRows))
+    const listed = await b.find({ type: 'Text', text: /more agents?|Hunt the (waves|run|mod|instruction)|Run the final checks/ })
     await b.unmount()
     const row = await $.ui.mount({ plugin: 'lcw', surface: 'terminal', component: 'AgentRow', requestId: 'p0', props: AGENTS[0] } as any)
     await row.unmount()
     byHeight.push([maxRows, hidden])
+    if (hidden === true && !listed) unlisted.push(maxRows)
   }
   const from = byHeight.findIndex(([, h]) => h === true)
   expect(from).toBeGreaterThan(-1)
   expect(byHeight.slice(from).filter(([, h]) => h !== true)).toEqual([])
+  expect(unlisted).toEqual([])
 })

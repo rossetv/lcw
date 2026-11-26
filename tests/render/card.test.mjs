@@ -1364,7 +1364,7 @@ test('the rows that say why a wave waits come out of the rows the agents may tak
   assert.match(tight.join('\n'), /2 more agents/);
 });
 
-test('a framed card that fits its height keeps the agents under its lanes, and one a row too tall is cut as before', () => {
+test('a framed card that fits its height keeps the agents under its lanes', () => {
   const two = [['a', 'Build the importer', 3], ['b', 'Review the export fix', 2]];
   for (const agents of [two.slice(0, 1), two]) {
     for (const frame of [true, false]) {
@@ -1372,9 +1372,25 @@ test('a framed card that fits its height keeps the agents under its lanes, and o
       assert.deepEqual(underLanes(agents, { frame, maxRows: free.length }), free, `${agents.length} agents, frame ${frame}`);
     }
   }
-  // a row short, the agents give way and nothing says how many: the card is two rows shorter, as it was
-  const free = underLanes(two, { frame: true });
-  assert.equal(underLanes(two, { frame: true, maxRows: free.length - 1 }).length, free.length - 2);
+});
+
+test('a card with agents says how many it holds at every height it has room for a row, the run\'s words giving up their second row and the rule above the count going', () => {
+  const words = 'Hunting again over what the fixes changed. Live next: the card and mod fixes, once their final test run passes, and then the last round of hunting over the merged waves before the pull request.';
+  const agents = [['a', 'Build the importer', 3], ['b', 'Review the export fix', 2]];
+  const edit = s => { s.health = words; };
+  const base = underLanes([], { frame: true, edit }).length, free = underLanes(agents, { frame: true, edit }).length;
+  for (let maxRows = base; maxRows <= free; maxRows++) {
+    const rows = underLanes(agents, { frame: true, edit, maxRows });
+    assert.ok(rows.length <= maxRows, `${maxRows} rows allowed, ${rows.length} drawn`);
+    assert.ok(rows.some(l => /more agents|→ /.test(l)), `at ${maxRows} rows no agent is listed and none is counted\n${rows.join('\n')}`);
+  }
+  // a row short of what the lanes need with the count: the card is as it was, its words in two rows
+  const short = underLanes(agents, { frame: true, edit, maxRows: base - 1 });
+  assert.equal(short.length, base);
+  assert.doesNotMatch(short.join('\n'), /more agents/);
+  const bare = underLanes(agents, { frame: true, edit, maxRows: base });
+  assert.equal(bare.filter(l => l.startsWith('├')).length, 1, 'the rule above the count is the one that goes');
+  assert.match(bare.join('\n'), /…/);
 });
 
 test("every wave's lane starts with an arrow that is a button: down while its agents are listed, to the side once folded", () => {
