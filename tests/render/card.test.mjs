@@ -95,7 +95,7 @@ const SWEEP = {
   "14-needs-you-two-questions": [
     "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 38m ─╮",
     "⚑ needs you · 2",
-    "1  The Fleet tests need Docker, and no Docker daemon is running here. Start it, or shall I park Fleet’s 10 fix…   41m",
+    "1  The Fleet tests need Docker, and no Docker daemon is running here. Start it, or shall I park Fleet’s 10…       41m",
     "2  The Billing fixes need a Stripe test key, and none is set. Add one, or shall I park them?                       9m",
     "answer in plain words below, e.g. “1 yes, 2 UTC”",
     "● 2 areas wait on your answers; Panel carries on                                                   ≈ 12% of your week",
@@ -230,8 +230,8 @@ const LANES = {
     narrow: [
       "◆ backlog-sweep           waves ▰▰▱",
       "⚑ needs you · 12m",
-      "Wave 1 cannot be pushed: GitHub re…",
-      "● wave 1 waits on your answer; wav…",
+      "Wave 1 cannot be pushed: GitHub…",
+      "● wave 1 waits on your answer;…",
       "wave 1  ▰▰▰ ▰▰▰ ▰▰▰ ▰▰▰  ⚑ waiting",
       "wave 2  ▰▰▰ ▰▰▰ ▱▱▱ ▱▱▱  Build",
     ],
@@ -261,7 +261,7 @@ const LANES = {
     ],
     narrow: [
       "◆ backlog-sweep           waves ▰▰▰",
-      "● hunting again, round 2; wave 3 i…",
+      "● hunting again, round 2; wave 3…",
       "wave 3   ▰▰▰ ▰▰▰ ▰▰▰ ▰▰▰  checks",
       "round 2  ▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱  Hunt",
     ],
@@ -1176,7 +1176,7 @@ test('a cut on the edge of a span leaves no dangling dot and says it cut', () =>
 test('a cut that drops whole spans always shows "…", even where what is left ends on a word', () => {
   for (const width of [65, 77]) {
     const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), width).find(l => l.includes('areas '));
-    assert.match(row, /14 hunt.*…\s+23 findings so far/, width + ': ' + row);
+    assert.match(row, /(▱|14 hunted)…\s+23 findings so far/, width + ': ' + row);
     assert.ok(!row.includes('16 left'), row);
   }
   const plain = strip(toAnsi(card('03-hunt-round-1-probes-at-work', { width: 61 }), 'dark', 61)).split('\n').find(l => l.startsWith('areas '));
@@ -1242,7 +1242,7 @@ test('a cut inside a span ahead of a separator drops the separator too', () => {
       for (const l of lines) {
         // A dim " …" after the lanes, waves or totals marks parts dropped, and keeps its space; a clipped word does not.
         assert.ok(!/[·›] ?…/.test(l), board + ' at ' + w + ': ' + l);
-        assert.ok(!/\S\s+…/.test(l.replace(/(\d+ \w+|queued|fixed|done|waves?) …/g, '$1…')), board + ' at ' + w + ': ' + l);
+        assert.ok(!/\S\s+…/.test(l.replace(/^│ /, '').replace(/(\d+ \w+|queued|fixed|done|waves?) …/g, '$1…')), board + ' at ' + w + ': ' + l);
         assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l);
       }
     }
@@ -1527,5 +1527,42 @@ test('the slow pulse starts at the level nearest where the fade gave way, and st
     // four steps a second apart and back where it began: bright, half way, dim, half way
     assert.equal(pulse[4], pulse[0]);
     for (let k = 0; k < 4; k++) assert.equal(Math.abs(pulse[k + 1] - pulse[k]), 25, `from tick ${from}: ${pulse}`);
+  }
+});
+
+// ---------------------------------------------------------------- what a row gives up where it is short
+
+test('a stage strip too wide for the card keeps the stage the run is at, and gives up the stages done first', () => {
+  for (const board of ['StageReview', 'RunningA', 'StageSpec']) {
+    const v = buildView(inputsOf(board));
+    for (let width = 44; width <= 80; width++) for (const frame of [false, true]) {
+      const row = toPlain(renderCard(v, { width, frame })).split('\n').find(l => l.includes(G.stageNow + ' ' + v.stage) || /[✓○] (Brainstorm|Spec|Plan|Build)/.test(l));
+      assert.ok(row.includes(G.stageNow + ' ' + v.stage), `${board} at ${width}: ${row}`);
+    }
+  }
+});
+
+const NARROWER = ['in', 'progress', 'waiting'];
+test('a short row gives up whole words, never part of one', () => {
+  // Every word on a card that is cut to its width is a word of the same card drawn with room for everything.
+  const words = rows => new Set(rows.filter(r => !r.some(s => /^(view|toggle|more)/.test(s.id ?? '')))
+    .flatMap(r => r.map(s => (s.r ? ' ' : '') + s.t).join('').split(/[\s·│╭╮╰╯├┤─]+/)).map(w => w.replace(/^…|[,;:]?…?$/g, '')).filter(w => w && !/^([▰▱]+|\d+)$/.test(w)));
+  for (const name of Object.keys(fixtures)) {
+    const v = buildView(inputsOf(name));
+    for (const frame of [false, true]) {
+      // and the words only a narrower layout uses
+      const all = new Set([...words(renderCard(v, { width: 400, frame })), ...NARROWER]);
+      for (let width = 44; width <= 130; width += 2) {
+        const lost = [...words(renderCard(v, { width, frame }))].filter(w => !all.has(w));
+        assert.deepEqual(lost, [], `${name} at ${width}${frame ? ', framed' : ''}`);
+      }
+    }
+  }
+});
+
+test('the hint under several questions keeps its example whole, or leaves it out', () => {
+  for (let width = 44; width <= 70; width++) for (const frame of [false, true]) {
+    const hint = toPlain(card('SeveralAsks', { width, frame })).split('\n').find(l => l.includes('answer in plain words below'));
+    assert.match(hint, /below(, e\.g\. “1 yes, 2 UTC”)? *│?$/, width + ': ' + hint);
   }
 });
