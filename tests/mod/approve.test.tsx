@@ -144,7 +144,7 @@ test('a reply sent before a reload of the mod keeps the box away after it', asyn
 test('a prompt the person sends ends the box', async ($, on) => {
   const w = engine(on, approving())
   await start($)
-  await $.prompt.submit({ text: 'Go (a)' })
+  await $.prompt.submit({ text: 'Go (a)', wait: false, origin: { kind: 'composer' } })
   await w.clock.advance(2000)
   const band = await $.ui.mount(BAND)
   expect(await band.find({ type: 'Text', text: /Is this what you want built\?/ })).toBeUndefined()

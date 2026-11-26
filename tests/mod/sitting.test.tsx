@@ -73,7 +73,7 @@ test('a wave of a sweep with no agent at work for ten minutes is put to the main
   await w.pass(2)
   expect(sitting(w).length).toBe(1)
   for (const fact of [/No agent is at work for wave 1 \(in Review, 1\d minutes\)\./, /start now whatever can run/, /lcw set waits="<why>" --wave <n>/]) expect(sitting(w)[0]).toMatch(fact)
-  expect(/wave 2/.test(sitting(w)[0])).toBe(false)
+  expect(/wave 2/.test(sitting(w)[0]!)).toBe(false)
   // nothing has changed since: it is not asked again
   await w.pass(45)
   expect(sitting(w).length).toBe(1)
