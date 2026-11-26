@@ -41,6 +41,8 @@ export interface OpenWave {
 export interface SweepView {
   /** Waves that have merged, and waves still queued. */
   round: number; shipped: number; queued: number;
+  /** True while the run hunts in an early round, one entered with a wave short of Ship, which cannot end the sweep. */
+  early: boolean;
   /** The open waves, in wave order: each has a lane while there is one. */
   open: OpenWave[];
   /** How long the sweep's hunt has stood at Hunt, else ''. */

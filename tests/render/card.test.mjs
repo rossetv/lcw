@@ -1759,3 +1759,16 @@ test('a merging wave names its pull request, or the earlier wave it lands after'
   i.state.sweep.waves[0].merged = true;
   assert.match(laneOf(laneRows(i), 2), /▰{6} {4}merging +22m$/);
 });
+
+test("an early hunt round says it cannot end the sweep, where there is room for it", () => {
+  const early = board => { const i = inputsOf(board); i.state.sweep = { ...i.state.sweep, early: [3] }; return i; };
+  const round = rows => rows.find(l => /^ {2}round 2 /.test(l));
+  assert.match(round(laneRows(early('29-lanes-hunt-and-final-checks'), 140)), /4 findings so far · early · can't end the sweep +5m$/);
+  // Short of room it goes, and the lane keeps every word it had.
+  assert.deepEqual(laneRows(early('29-lanes-hunt-and-final-checks'), 115), laneRows(inputsOf('29-lanes-hunt-and-final-checks'), 115));
+  // With no lanes it stands beside the stages.
+  assert.match(laneRows(early('03-hunt-round-1-probes-at-work'), 115).find(l => l.startsWith('✓ Charter')), /○ Ship +early · can't end the sweep$/);
+  // Once the run has left Hunt the round is over.
+  const built = early('25-lanes-review-and-build');
+  assert.doesNotMatch(laneRows(built, 140).join('\n'), /early/);
+});
