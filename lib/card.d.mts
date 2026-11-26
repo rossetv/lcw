@@ -43,6 +43,8 @@ export interface SweepView {
   round: number; shipped: number; queued: number;
   /** True while the run hunts in an early round, one entered with a wave short of Ship, which cannot end the sweep. */
   early: boolean;
+  /** The front queued wave, which starts next, and the fixes it holds; null with none queued. */
+  next: { n: number; fixes: number } | null;
   /** The open waves, in wave order: each has a lane while there is one. */
   open: OpenWave[];
   /** How long the sweep's hunt has stood at Hunt, else ''. */
