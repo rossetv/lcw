@@ -1913,11 +1913,11 @@ test('a wave with no agent at work for ten minutes says so under its lane, until
   }
 });
 
-test("the run's sentence keeps to one row where it fits alone, and the share takes the second", () => {
+test("the share keeps the top right when the run's sentence splits, and leaves no word alone on its second row", () => {
   for (const width of [64, 68, 70, 74]) {
-    const rows = laneRows(inputsOf('06-build-wave-2-fixes-in-parallel'), width);
-    assert.match(rows[1], /building side by side$/, width + '\n' + rows.join('\n'));
-    assert.match(rows[2], /^ +≈ 12% of your week$/, width + '\n' + rows.join('\n'));
+    const rows = laneRows(inputsOf('06-build-wave-2-fixes-in-parallel'), width), at = width + '\n' + rows.join('\n');
+    assert.match(rows[1], /≈ 12% of your week$/, at);
+    assert.match(rows[2], /^ +\S+ \S+/, at);
   }
 });
 
