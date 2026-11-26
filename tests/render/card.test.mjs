@@ -1854,19 +1854,12 @@ test('the state row counts the bypasses of standard LCW', () => {
   assert.match(stateRow(50, { bypasses: 1 }), / {2}1 bypass · ≈ 9% of your week$/);
 });
 
-test('the bypasses show at every width from the narrowest that has room for them, the run\'s sentence split or not', () => {
+test("the bypasses take a row the run's sentence leaves room on, and never a row of their own", () => {
   const i = inputsOf('06-build-wave-2-fixes-in-parallel');
-  i.state.bypasses = 3;
-  const v = buildView(i);
-  for (const frame of [false, true]) {
-    const shown = [];
-    for (let width = 44; width <= 130; width++) {
-      const rows = strip(toAnsi(renderCard(v, { width, frame }), 'dark', width)).split('\n');
-      if (rows.some(l => l.includes('3 bypasses'))) shown.push(width);
-    }
-    assert.ok(shown[0] <= 56, frame + ': ' + shown.join(' '));
-    assert.equal(shown.length, 131 - shown[0], frame + ': ' + shown.join(' '));
-  }
+  const rows = (bypasses, width, frame) => strip(toAnsi(renderCard(buildView({ ...i, state: { ...i.state, bypasses } }), { width, frame }), 'dark', width)).split('\n');
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) assert.equal(rows(3, width, frame).length, rows(0, width, frame).length, width + ' ' + frame);
+  // Where the sentence splits, its second row has the room.
+  for (const [width, frame] of [[52, false], [56, true]]) assert.ok(rows(3, width, frame).some(l => /side by side +3 bypasses/.test(l)), rows(3, width, frame).join('\n'));
 });
 
 test('an agent that waits, or has reported and not ended, says so and holds still; one long reported is not called stalled', () => {
