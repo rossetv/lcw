@@ -992,7 +992,7 @@ test('a hunt round beside open waves has its lane before any area is recorded', 
 
 test('a wave whose stage has no start time draws no clock', () => {
   const held = { status: 'shipped', merged: false, pr: 41, stage: 'Review', step: null, stageSince: undefined };
-  assert.match(laneOf(laneRows(withWave1(held, { prs: 'merged' })), 1), /▰{6} {4}merging$/);
+  assert.match(laneOf(laneRows(withWave1(held, { prs: 'merged' })), 1), /▰{6} {4}merging #41$/);
 });
 
 test("a sweep's waves row keeps to 24 cells however many waves are queued", () => {
@@ -1746,4 +1746,16 @@ test('the bar of a progress row never grows as the card gets narrower', () => {
       }
     }
   }
+});
+
+test('a merging wave names its pull request, or the earlier wave it lands after', () => {
+  const i = inputsOf('25-lanes-review-and-build');
+  const [w1, w2, w3] = i.state.sweep.waves;
+  i.state.sweep.waves = [{ ...w1, status: 'shipped', merged: false, pr: 41 }, { ...w2, stage: 'Ship', step: 'merging' }, w3];
+  const rows = laneRows(i);
+  assert.match(laneOf(rows, 1), /▰{6} {4}merging #41 +34m$/);
+  assert.match(laneOf(rows, 2), /▰{6} {4}merging after wave 1 +22m$/);
+  // With wave 1 merged, wave 2 is next to land, and has no pull request yet.
+  i.state.sweep.waves[0].merged = true;
+  assert.match(laneOf(laneRows(i), 2), /▰{6} {4}merging +22m$/);
 });

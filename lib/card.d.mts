@@ -35,6 +35,8 @@ export interface OpenWave {
   since: string;
   /** Running tasks, passing fixes counted once at Ship (0 for a wave shipped already), and dropped fixes (0 likewise). */
   running: number; passing: number; dropped: number;
+  /** Its pull request's number, else 0; and, while merging, the open wave before it that it lands after, else 0. */
+  pr: number; after: number;
 }
 export interface SweepView {
   /** Waves that have merged, and waves still queued. */
