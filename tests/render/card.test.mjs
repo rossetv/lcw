@@ -1717,6 +1717,16 @@ test('a cut inside a path ends on a letter before its "…", never on a dot or a
   }
 });
 
+test('a slash dropped before the "…" counts against no word the cut would give up', () => {
+  const i = inputsOf('SeveralAsks');
+  i.state.asks[0].text = 'explain README, then CHANGELOG, then docs/ Include archived rows?';
+  const v = buildView(i);
+  for (let width = 57; width <= 63; width++) for (const frame of [false, true]) {
+    const row = toPlain(renderCard(v, { width, frame })).split('\n').find(l => l.includes('README'));
+    assert.match(row, /then (docs|docs\/ Include)… /, `${width}${frame ? ', framed' : ''}`);
+  }
+});
+
 test('a question on rows of its own leaves no word alone on its last row', () => {
   const i = inputsOf('RunningA');
   i.state.asks = [{ n: 1, text: 'Wave 7 found the mark is shown twice; keep the dim one or the gate one?', at: NOW - 5 * 6e4 }];
