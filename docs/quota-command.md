@@ -23,7 +23,7 @@ Within 30 seconds, exit successfully and print one JSON object (values here are 
 ```
 
 - `accountKey`: a stable 64-character lowercase hex digest, optionally prefixed `sha256:`, never a raw identifier.
-- `percentUsed`: 0 to 100. `resetsAt`: the provider's real next weekly reset, never an invented one: an ISO 8601 date-time ending in `Z` or an offset, in the future.
+- `percentUsed`: 0 to 100. `resetsAt`: the provider's real next weekly reset, never an invented one: a date-time like `2026-12-01T12:00:00Z` or `2026-12-01T13:00:00+01:00` (seconds required, optional fraction, then `Z` or an offset with a colon), in the future.
 - `blocked`: required, `true` or `false`.
 - On failure, print `{"v":1,"status":"unavailable","code":"no-weekly-window"}`, or `"status":"refused","code":"provider-refused"`. Other codes: `auth`, `network`, `timeout`, `invalid-response`, `ambiguous-weekly-window`, `account-changed`, `command-failed`.
 

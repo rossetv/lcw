@@ -27,7 +27,7 @@ Coverage is not a goal. Ten tests that each guard something beat a hundred that 
 
 ## Prove it can fail
 
-- **See it fail.** Write the test first and watch it fail for the right reason. For a test written after the code, break the line it guards, watch it go red, and put the line back. A test you have never seen fail is unproven.
+- **See it fail.** Write the test first and watch it fail for the right reason. For a test written after the code, break the line it guards, watch it go red, and put the line back. A test you have never seen fail is unproven. An LCW worker follows its own instructions (agents/worker.md) on this: where the fix is already written, it does not put the old code back, and says in its report that the test was not seen failing.
 - **Name the break.** For each test, say which mistake would make it fail. If you cannot, delete it.
 - **One behaviour per test,** named as a sentence about the behaviour ("a paused run is not woken by the reset"), so that a failure reads as a fact.
 - **Check outcomes, not insides:** what came back, what was written, what the person sees.
