@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { fnv1a32hex, repoKey } from '../../lib/key.mjs'
+import { inWsl } from '../../scripts/lib/awake.mjs'
 import { spawn } from 'node:child_process'
 import { tmp, makeRepo, git, lcw, readJson, started, fakeClaude, CLI } from './helpers.mjs'
 
@@ -176,7 +177,7 @@ test('finish stores no dollars for a session that is not billed per token', () =
   assert.ok(!('usd' in t.state().totals))
 })
 
-test('awake holds only for a Claude Code process on record, not any live process with that pid', { skip: process.platform === 'darwin' || process.platform === 'linux' ? false : 'LCW holds off sleep only on macOS and Linux' }, () => {
+test('awake holds only for a Claude Code process on record, not any live process with that pid', { skip: process.platform !== 'darwin' && process.platform !== 'linux' ? 'LCW holds off sleep only on macOS and Linux' : inWsl(process.env) ? 'WSL cannot hold off the computer\'s sleep' : false }, () => {
   // stand-ins that end at once, so no test holds off this computer's sleep
   const stubs = tmp('stubs')
   for (const f of ['caffeinate', 'systemd-inhibit']) fs.writeFileSync(`${stubs}/${f}`, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
