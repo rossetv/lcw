@@ -1364,6 +1364,19 @@ test('the rows that say why a wave waits come out of the rows the agents may tak
   assert.match(tight.join('\n'), /2 more agents/);
 });
 
+test('a framed card that fits its height keeps the agents under its lanes, and one a row too tall is cut as before', () => {
+  const two = [['a', 'Build the importer', 3], ['b', 'Review the export fix', 2]];
+  for (const agents of [two.slice(0, 1), two]) {
+    for (const frame of [true, false]) {
+      const free = underLanes(agents, { frame });
+      assert.deepEqual(underLanes(agents, { frame, maxRows: free.length }), free, `${agents.length} agents, frame ${frame}`);
+    }
+  }
+  // a row short, the agents give way and nothing says how many: the card is two rows shorter, as it was
+  const free = underLanes(two, { frame: true });
+  assert.equal(underLanes(two, { frame: true, maxRows: free.length - 1 }).length, free.length - 2);
+});
+
 test("every wave's lane starts with an arrow that is a button: down while its agents are listed, to the side once folded", () => {
   const lane = (rows, n) => rows.find(r => r.some(s => s.t === 'wave ') && r.some(s => s.t.trim() === String(n)));
   const open = underLanes([['a', 'Build the importer', 3]], { spans: true });
