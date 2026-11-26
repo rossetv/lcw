@@ -212,9 +212,15 @@ export const dismissKeys = (banner) => (String(banner.key) === banner.kind ? [ba
 /** The boxes that wait on the person's choice: each occurrence rings the terminal once. */
 const RINGS = ['question', 'approve', 'mark', 'answer']
 
-/** What a box rings under, kind and occurrence; null for one that needs no choice (a mark box that offers only Wait). */
-export const ringKey = (banner) =>
-  banner && RINGS.includes(banner.kind) && banner.options.some(([id]) => id !== 'wait' && id !== 'later') ? banner.kind + ':' + banner.key : null
+/**
+ * What a box rings under, kind and occurrence; null for one that needs no choice (a mark box that offers only Wait, the
+ * box of asks that hold nothing). A question rings under its own id: an ask arriving while it is up changes its key, not the question.
+ */
+export function ringKey(banner) {
+  if (!banner || !RINGS.includes(banner.kind) || banner.forYou || !banner.options.some(([id]) => id !== 'wait' && id !== 'later')) return null
+  const occurrence = banner.kind === 'question' ? String(banner.key).split(':')[0] + ':' + banner.questionId : banner.key
+  return banner.kind + ':' + occurrence
+}
 
 /**
  * Whether a box drawn earlier is still the one that applies: same kind and occurrence (for an ask's options, the same ask), and it still offers option
@@ -292,7 +298,7 @@ export function discussPrompt(root, cleanup, cleanupPath) {
  * - fillText: the reply put in an empty prompt, never sent (the person presses Enter);
  * - proxyQuotaChoice: saved in its host's notice file, only after a requested fill succeeds;
  * - dismiss: the box's occurrence is hidden for this session;
- * - toast: said at the end; 'output' says the last command's output.
+ * - toast: said at the end; 'output' says the last command's output, and a function what it makes of that output.
  * null when the box does not offer option. facts are those the box was chosen from; ctx: { root, sessionId, repoKey, cleanupPath }.
  */
 export function pressPlan(banner, option, facts, ctx) {
@@ -340,7 +346,10 @@ export function pressPlan(banner, option, facts, ctx) {
           promptFailed: 'LCW raised the mark and resumed the run. Say "carry on" to continue it.', dismiss: true,
         }
       }
-      return { steps: [mark], toast: `This session now runs up to ${money ? dollars(usd) : share * 100 + '% of the week'}.`, dismiss: true }
+      const upTo = `This session now runs up to ${money ? dollars(usd) : share * 100 + '% of the week'}`
+      // with a quota check, lcw mark can set the mark and still hold new work, which it says on its last line
+      const toast = (r) => (/new work held$/.test(String(r?.stdout ?? '').trim()) ? upTo + ', but its quota check still holds new work.' : upTo + '.')
+      return { steps: [mark], toast, dismiss: true }
     }
     case 'spendfail':
       if (option === 'fix') return { prompt: { text: fixSpendPrompt(root, sessionId, facts?.spendFailing) }, dismiss: true }
@@ -350,7 +359,7 @@ export function pressPlan(banner, option, facts, ctx) {
       if (!u) return null
       if (option === 'abandon') {
         // lcw abandon says itself whether it removed the worktree or kept it, and why: that is what the person is told.
-        return { steps: [lcw('abandon', u.id)], toast: 'output', dismiss: true }
+        return { steps: [lcw('abandon', u.id)], toast: (r) => abandonSaid(r, u.name), dismiss: true }
       }
       // Paused at the mark it stays paused: only a Run up to press raises the mark.
       const resumed = u.status === 'paused' && u.pausedReason !== 'mark'
@@ -373,7 +382,7 @@ export function pressPlan(banner, option, facts, ctx) {
     case 'cleanup':
       if (option === 'never') return { notices: { ['cleanup:' + repoKey]: 'never' }, dismiss: true }
       if (option === 'discuss') return { prompt: { text: discussPrompt(root, facts?.cleanup, cleanupPath) }, dismiss: true }
-      return { steps: [{ ...script('cleanup.mjs', 'apply'), timeoutMs: 120000 }], working: 'Cleaning up. LCW says here when it is done.', fail: 'LCW could not clean up: ', toast: 'output', dismiss: true }
+      return { steps: [{ ...script('cleanup.mjs', 'apply'), timeoutMs: 120000 }], working: 'Cleaning up. LCW says here when it is done.', fail: 'LCW could not clean up: ', toast: cleanupSaid, dismiss: true }
     case 'limits':
       if (option === 'never') return { notices: { limits: 'never' }, dismiss: true }
       return { steps: [script('setup.mjs', 'limits')], fail: 'LCW could not raise the limits: ', toast: 'output', dismiss: true }
@@ -396,5 +405,43 @@ export function pressPlan(banner, option, facts, ctx) {
   return null
 }
 
+const linesOf = (r) => [r?.stdout, r?.stderr].map((t) => String(t ?? '').trim()).filter(Boolean).join('\n').split('\n').map((l) => l.trim()).filter(Boolean)
+
 /** What a command said, for a toast: its output's lines joined, stdout first. */
-export const said = (r) => [r?.stdout, r?.stderr].map((t) => String(t ?? '').trim()).filter(Boolean).join('\n').split('\n').map((l) => l.trim()).filter(Boolean).join(' · ')
+export const said = (r) => linesOf(r).join(' · ')
+
+// A folder by its name alone: a full path is too long for a toast and says nothing more.
+const unpathed = (t) => t.replace(/(^|[\s'"(])\/(?:[^\s'",:/]+\/)*([^\s'",:/]+)/g, '$1$2')
+const listed = (names) => (names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])
+// Sentences joined; a line no formatter knew is kept as it came, set apart when it has no full stop.
+const sentences = (parts) => parts.reduce((all, p) => (all ? all + (/[.!?]$/.test(all) ? ' ' : ' · ') : '') + p, '')
+
+/** What lcw abandon printed, said in sentences by the run's name; a line it does not know passes unchanged. */
+function abandonSaid(r, name) {
+  const lines = linesOf(r)
+  // a sweep has several worktrees, so each is named by its folder; a build's one is just "its worktree"
+  const several = lines.filter((l) => /^worktree /.test(l)).length > 1
+  const tree = (path) => 'Its worktree' + (several ? ' ' + path.split('/').filter(Boolean).at(-1) : '')
+  return sentences(lines.map((l) => {
+    let m
+    if ((m = /^abandoned (\S+): stopped for good$/.exec(l))) return `${name || m[1]} is stopped for good.`
+    if (l === 'no worktree to remove') return 'It had no worktree to remove.'
+    if ((m = /^worktree removed: (.+)$/.exec(l))) return `${tree(m[1])} is removed.`
+    if ((m = /^worktree kept: (.+?), because (.+)$/.exec(l))) return `${tree(m[1])} is kept, because ${unpathed(m[2])}.`
+    if ((m = /^worktree (.+) was already gone$/.exec(l))) return `${tree(m[1])} was already gone.`
+    if ((m = /^branch kept: (\S+)$/.exec(l))) return `Its branch ${m[1]} is kept.`
+    if ((m = /^branches kept: (.+)$/.exec(l))) return `Its branches ${listed(m[1].split(', '))} are kept.`
+    return l
+  }))
+}
+
+/** What cleanup.mjs apply printed, said in sentences; a line it does not know passes unchanged. */
+function cleanupSaid(r) {
+  const item = (type, what) => (type === 'branch' ? 'Branch ' + what : 'Worktree ' + what.split('/').filter(Boolean).at(-1))
+  return sentences(linesOf(r).map((l) => {
+    let m
+    if ((m = /^removed (branch|worktree) (.+)$/.exec(l))) return `${item(m[1], m[2])} is removed.`
+    if ((m = /^skipped (branch|worktree) (.+?): (.+)$/.exec(l))) return `${item(m[1], m[2])} is kept, because ${unpathed(m[3])}.`
+    return l
+  }))
+}

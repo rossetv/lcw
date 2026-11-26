@@ -314,6 +314,18 @@ test('the pace reads "over pace" or "spare" with no sign', () => {
   assert.doesNotMatch(row2(80) + row2(20), /[+-]\d+%/)
 })
 
+test('the week gauge keeps four cells at 44 columns, however far over pace: the pace text gives way, "resets in" stays', () => {
+  const second = (width) => toAnsi(renderStatusRows({ model: 'Opus 5.5', effort: 'xhigh', contextPercent: 100, contextWindow: '200k', weekUsedPercent: 100, weekElapsedPercent: 5, markPercent: 100 }, { width }), 'dark', width).replace(/\x1b\[[0-9;]*m/g, '').split('\n')[1]
+  for (const width of [44, 45, 46, 50, 60]) {
+    const row = second(width)
+    assert.ok([...row].length <= width, width + ' columns')
+    assert.ok([...row.match(/^100% (\S+) 100%/)[1]].length >= 4, 'gauge cells at ' + width + ': ' + row)
+    assert.match(row, /resets in 6d/, width + ' columns')
+  }
+  assert.match(second(44), /1900% over$/)
+  assert.match(second(60), /1900% over pace$/)
+})
+
 test('where the row is short the effort goes before the model name is clipped', () => {
   const first = (width) => toAnsi(renderStatusRows({ model: 'Haiku 5.5', effort: 'low', contextPercent: 38, contextWindow: '1M', weekUsedPercent: 40, weekElapsedPercent: 50, markPercent: 75 }, { width }), 'dark', width).replace(/\x1b\[[0-9;]*m/g, '').split('\n')[0]
   for (const width of [20, 22, 25]) assert.match(first(width), /^Haiku 5\.5\b(?!…)/, width + ' columns')
