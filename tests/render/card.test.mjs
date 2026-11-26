@@ -4,6 +4,7 @@ import { buildView, foldKey, renderCard, weekOf, weekShare } from '../../lib/car
 import { renderStatusRows } from '../../lib/status.mjs';
 import { toPlain, toAnsi } from '../../lib/paint.mjs';
 import { glyphs as G, hex } from '../../lib/theme.mjs';
+import { len } from '../../lib/format.mjs';
 import { inputsOf, fixtures, NOW } from './boards.mjs';
 
 // A sweep's card in each of its states, and a build's beside them, as approved: every row but the agents', the rules
@@ -1482,4 +1483,49 @@ test('a running run with words of its own is the dot and the words; with none it
   const row = health => toPlain(renderCard(buildView({ ...i, state: { ...i.state, health } }), { width: 100 })).split('\n')[1].split('   ||   ')[0];
   assert.equal(row('on track'), '● on track');
   assert.equal(row(''), '● running');
+});
+
+// ---------------------------------------------------------------- an agent's row: its words, its chip
+
+// A card of the agents given, each [description, minutes it has run, its chip: 'stalled', 'quiet' or none].
+const agentCard = (list, opts = {}) => {
+  const i = inputsOf('RunningA');
+  i.agents = list.map(([description, minutes, chip], k) => ({ id: 'a' + k, description, model: 'claude-opus-5-5', effort: 'high', tokens: 1200,
+    startTime: NOW - minutes * 6e4, status: 'running', quietMs: chip === 'stalled' ? 20 * 6e4 : chip === 'quiet' ? 6 * 6e4 : 0, spark: [1, 2] }));
+  return renderCard(buildView(i), { width: 126, ...opts });
+};
+const agentRows = rows => rows.filter(r => r.some(s => /^view:/.test(s.id ?? '')));
+
+test("a newline or a tab in an agent's description stays on the agent's one row", () => {
+  const split = toPlain(agentCard([['Fix the importer\nand\tthe export', 5]]));
+  assert.equal(split, toPlain(agentCard([['Fix the importer and the export', 5]])));
+});
+
+test("a stalled agent's chip of an hour or a day keeps the figures of every agent in the same columns", () => {
+  const rows = agentRows(agentCard([['Build the importer', 75, 'stalled'], ['Review the export', 5], ['Check the mail', 26 * 60, 'quiet']]));
+  const ends = rows.map(r => len(r.slice(0, r.findIndex(s => s.c === 'text' && /\dk?$/.test(s.t) && s.t.trim().length <= 6) + 1).map(s => s.t).join('')));
+  assert.equal(new Set(ends).size, 1, toPlain(rows));
+  assert.equal(new Set(rows.map(r => len(r.map(s => s.t).join('')))).size, 1, toPlain(rows));
+});
+
+test("the stalled chip's words keep their contrast through its pulse", () => {
+  const chip = opts => agentCard([['Build the importer', 75, 'stalled']], opts).flat().find(s => s.bg).bg;
+  for (const opts of [...Array(28).keys()].map(tick => ({ tick })).concat([0, 1, 2, 3].map(beat => ({ beat })))) {
+    const at = Number(chip(opts).split('@')[1] ?? 100);
+    assert.ok(at >= 70, JSON.stringify(opts) + ': ' + chip(opts));
+  }
+});
+
+test('the slow pulse starts at the level nearest where the fade gave way, and steps evenly from there', () => {
+  const view = buildView(inputsOf('NeedsYou'));
+  const at = c => Number(c.split('@')[1] ?? 100);
+  const frame = opts => at(renderCard(view, { width: 100, frame: true, ...opts })[0][0].c);
+  for (let from = 0; from < 56; from += 2) {
+    const b = Math.floor(from / 10), was = frame({ tick: from });
+    const pulse = [0, 1, 2, 3, 4].map(k => frame({ beat: b + k, beatFrom: from }));
+    assert.ok(Math.abs(pulse[0] - was) <= 15, `from tick ${from}: the fade was at ${was}, the pulse starts at ${pulse[0]}`);
+    // four steps a second apart and back where it began: bright, half way, dim, half way
+    assert.equal(pulse[4], pulse[0]);
+    for (let k = 0; k < 4; k++) assert.equal(Math.abs(pulse[k + 1] - pulse[k]), 25, `from tick ${from}: ${pulse}`);
+  }
 });
