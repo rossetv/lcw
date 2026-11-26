@@ -941,7 +941,8 @@ test('at 100 columns nothing is lost, at 80 the longer words go first, and below
   const eighty = at(80);
   // The later review round goes before the failing fix, the last to lose.
   assert.match(laneOf(eighty, 1), /18 of 23 pass · 1 failing … +34m$/);
-  assert.match(laneOf(eighty, 2), /7 of 12 done … +22m$/);
+  // A lane with room for more than the form every lane fits says it.
+  assert.match(laneOf(eighty, 2), /7 of 12 done · 3 running +22m$/);
   const fifty = at(50);
   assert.match(headOf(fifty), /^waves {3}▰▰▱ {2}2 in progress · 1 queued/);
   assert.equal(fifty.find(l => l.startsWith('wave 1 ')), 'wave 1  ▰▰▰ ▰▰▰ ▰▰▰ ▱▱▱  Review', 'a narrow lane has no arrow');
@@ -949,7 +950,9 @@ test('at 100 columns nothing is lost, at 80 the longer words go first, and below
   const long = (w) => headOf(laneRows(inputsOf('28-lanes-a-long-sweep'), w));
   assert.match(long(115), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +round 3 · 61 fixed · 170 parked …$/);
   assert.match(long(80), /Ship {4}▰{7}▱{2} {2}5 done · 2 queued +…$/);
-  assert.match(long(72), /Ship {4}▰{7}▱{2} {2}… +61 fixed …$/);
+  // Too short for the counts beside the stages: the waves row of the narrow layout keeps them.
+  assert.match(long(72), /Ship {4}▰{3} {2}5 done · 2 queued {2}…$/);
+  assert.match(long(71), /^waves {3}▰{7}▱{2} {2}5 done · 2 in progress · 2 queued +61 fixed …$/);
   for (const board of Object.keys(LANES)) for (const w of [140, 100, 80, 70, 60, 50, 44, 43, 36, 30]) {
     laneRows(inputsOf(board), w).forEach(l => assert.ok(cols(l) <= w, board + ' at ' + w + ': ' + l));
   }
@@ -1113,9 +1116,9 @@ test("the lanes' heading keeps its wave cells to the room left, so none is cut w
   const state = { name: 'sweep-x', shape: 'sweep', stage: 'Ship', status: 'running', createdAt: NOW - 3e6, stageSince: NOW - 1e6,
     sweep: { round: 1, fixed: 3, parked: 1, dropped: 2, prs: 'stacked', waves: [{ n: 1, status: 'shipped', pr: 5 },
       { n: 2, status: 'running', stage: 'Ship', step: 'merging', stageSince: NOW - 6e5, requirements: [], tasks: [] }, ...queued] } };
-  for (const width of [60, 62, 64, 66]) {
+  for (const width of [74, 76, 78, 80]) {
     const rows = laneRows({ state, now: NOW }, width);
-    assert.match(headOf(rows), /^ {2}waves {3}✓ Plan {2}✓ Build {2}✓ Review {2}› Ship {4}▰+▱+(?: {2}…)?$/, width + ': ' + rows.join('\n'));
+    assert.match(headOf(rows), /^ {2}waves {3}✓ Plan {2}✓ Build {2}✓ Review {2}› Ship {4}▰+▱+ {2}1 done · 20 queued(?: +…)?$/, width + ': ' + rows.join('\n'));
     assert.equal(headOf(rows).length, width);
     assert.match(laneOf(rows, 2), / {4}merging +10m$/);
   }
@@ -1204,13 +1207,14 @@ test('no row of any board is wider than the card, at any width from 20 to 200', 
 
 test('a lane or heading that drops what it said ends in "…", and a row that fits whole has none', () => {
   const rows = (board, width, frame) => strip(toAnsi(card(board, { width, frame }), 'dark', width)).split('\n');
-  for (const width of [62, 70]) {
+  for (const width of [72, 74]) {
     assert.match(laneOf(rows('06-build-wave-2-fixes-in-parallel', width, false), 2), /9 of 28( done)? … +22m$/, String(width));
   }
   assert.ok(!laneOf(rows('06-build-wave-2-fixes-in-parallel', 80, false), 2).includes('…'));
   for (const width of [60, 70]) {
-    assert.match(headOf(rows('28-lanes-a-long-sweep', width, false)), /▰▱*  …/, String(width));
+    assert.match(headOf(rows('28-lanes-a-long-sweep', width, false)), /queued( …)? +61 fixed …$/, String(width));
   }
+  assert.match(headOf(rows('28-lanes-a-long-sweep', 80, false)), /2 queued +…$/);
   assert.match(rows('28-lanes-a-long-sweep', 44, true).find(l => l.startsWith('│ waves ')), /2 queued …/);
 });
 
@@ -1722,10 +1726,10 @@ test("an agent's description cut short gives up a few cells at most to end on a 
   for (const name of Object.keys(fixtures)) {
     const v = buildView(inputsOf(name));
     for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
-      // The description is the agent's text padded to its column.
+      // The description is the agent's text padded to its column; two cells more go where they spare a word cut one or two letters short.
       for (const s of renderCard(v, { width, frame }).flat().filter(s => /^view:/.test(s.id ?? '') && len(s.t) > 2)) {
         const kept = s.t.trimEnd();
-        if (kept.endsWith('…')) assert.ok(len(kept) >= len(s.t) - 6, `${name} at ${width}${frame ? ', framed' : ''}: "${kept}" in ${len(s.t)} cells`);
+        if (kept.endsWith('…')) assert.ok(len(kept) >= len(s.t) - 8, `${name} at ${width}${frame ? ', framed' : ''}: "${kept}" in ${len(s.t)} cells`);
       }
     }
   }
@@ -1773,9 +1777,9 @@ test("an early hunt round says so beside its name at every width the lanes are d
     assert.equal(round(laneRows(early('29-lanes-hunt-and-final-checks'), width)).replace(/ · early  [▰▱]+/, ''), plain.replace(/  [▰▱]+/, ''));
   }
   assert.match(laneRows(early('29-lanes-hunt-and-final-checks'), 56).find(l => /^round 2 /.test(l)), /▱ {2}Hunt · early$/);
-  // With no lanes it stands beside the stages, whole or as one word.
-  assert.match(laneRows(early('03-hunt-round-1-probes-at-work'), 115).find(l => l.startsWith('✓ Charter')), /○ Ship +early · can't end the sweep$/);
-  assert.match(laneRows(early('03-hunt-round-1-probes-at-work'), 70).find(l => l.startsWith('✓ Charter')), /○ Ship +early$/);
+  // With no lanes it stands beside Hunt in the stage row, and why on the right where there is room.
+  assert.match(laneRows(early('03-hunt-round-1-probes-at-work'), 115).find(l => l.startsWith('✓ Charter')), /› Hunt · early  ○ Plan .*○ Ship +can't end the sweep$/);
+  assert.match(laneRows(early('03-hunt-round-1-probes-at-work'), 70).find(l => l.startsWith('✓ Charter')), /› Hunt · early  ○ Plan .*○ Ship$/);
   // Once the run has left Hunt the round is over.
   const built = early('25-lanes-review-and-build');
   assert.doesNotMatch(laneRows(built, 140).join('\n'), /early/);
@@ -1874,5 +1878,60 @@ test('a wave with no agent at work for ten minutes says so under its lane, until
     assert.ok(rows.length >= was, maxRows + ': ' + rows.length);
     if (rows.length <= maxRows) assert.ok(rows.some(l => /no agent at work/.test(l)), maxRows + ': ' + rows.join('\n'));
     was = rows.length;
+  }
+});
+
+test('lanes too tight for the heading to keep its counts take the narrow layout, which keeps them and the totals', () => {
+  for (const width of [61, 66, 71]) {
+    const rows = laneRows(inputsOf('06-build-wave-2-fixes-in-parallel'), width);
+    assert.match(headOf(rows), /1 done · (1 in progress · )?4 queued .*27 fixed/, width + '\n' + rows.join('\n'));
+    assert.ok(rows.every(l => cols(l) <= width), width + '\n' + rows.join('\n'));
+  }
+  assert.match(headOf(laneRows(inputsOf('28-lanes-a-long-sweep'), 66)), /5 done · 2 in progress · 2 queued +61 fixed …$/);
+});
+
+test('a lane keeps as many of its words as its own row has room for, whatever the other lanes give up', () => {
+  const i = inputsOf('26-lanes-three-open');
+  i.state.sweep.waves[1] = { ...i.state.sweep.waves[1], round: 2, requirements: [...i.state.sweep.waves[1].requirements.slice(0, 6), { id: 'F9', name: 'the mark', status: 'failing' }] };
+  const said = (width, n) => laneOf(laneRows(i, width), n).replace(/^.*[▰▱] {4}/, '').replace(/ +\d+m$/, '');
+  for (const width of [66, 72]) {
+    assert.equal(said(width, 2), '6 of 7 …');
+    assert.equal(said(width, 3), '3 of 9 done …');
+  }
+  assert.equal(said(80, 3), '3 of 9 done · 4 running');
+});
+
+test("the run's sentence keeps to one row where it fits alone, and the share takes the second", () => {
+  for (const width of [64, 68, 70, 74]) {
+    const rows = laneRows(inputsOf('06-build-wave-2-fixes-in-parallel'), width);
+    assert.match(rows[1], /building side by side$/, width + '\n' + rows.join('\n'));
+    assert.match(rows[2], /^ +≈ 12% of your week$/, width + '\n' + rows.join('\n'));
+  }
+});
+
+test('with no lanes an early round says so beside Hunt in the stage row at every width, framed or not', () => {
+  const i = inputsOf('03-hunt-round-1-probes-at-work');
+  i.state.sweep = { ...i.state.sweep, early: [3] };
+  const v = buildView(i);
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+    const rows = strip(toAnsi(renderCard(v, { width, frame }), 'dark', width)).split('\n');
+    const stages = rows.find(l => /› Hunt/.test(l)) ?? '';
+    assert.match(stages, /› Hunt · early/, width + ' ' + frame + ': ' + stages);
+    assert.ok(cols(stages) <= width, width + ' ' + frame + ': ' + stages);
+  }
+});
+
+test('a cut never ends a word one or two letters short of its end', () => {
+  const i = inputsOf('26-lanes-three-open');
+  i.state.asks = [{ n: 1, text: 'Should the sweep stop after round 3 or keep hunting until a reviewer finds nothing in the charter?', at: NOW - 61 * 6e4 }];
+  i.agents = i.agents.map((a, k) => ({ ...a, description: ['review the building against its charter and recipes', 'card visibility fixes for the narrow layout', 'fix a test that still says round 2'][k % 3] }));
+  const v = buildView(i), words = JSON.stringify(i).match(/[A-Za-z']+/g), whole = new Set(words);
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+    const card = strip(toAnsi(renderCard(v, { width, frame }), 'dark', width));
+    for (const [, x] of card.matchAll(/([A-Za-z']+)…/g)) {
+      if (whole.has(x)) continue;
+      const short = words.find(w => w.startsWith(x) && w.length - x.length <= 2);
+      assert.equal(short, undefined, width + ' ' + frame + ': "' + x + '…" of ' + short);
+    }
   }
 });
