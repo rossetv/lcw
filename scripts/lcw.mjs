@@ -135,6 +135,8 @@ function change(run, note, fn, wave) {
   const s = run.state
   if (s.status === 'running' && was !== 'running') s.runningSince = new Date(now()).toISOString()
   if (s.status !== 'running') releaseHold(run.dir)
+  // kept beside the ledger's lines, for the card, which reads no ledger
+  if (passed.length) s.bypasses = (Number(s.bypasses) || 0) + passed.length
   save(run.paths, s)
   const about = wave === undefined ? ledgerWave(s) : wave
   appendLedger(run.paths, note, about)

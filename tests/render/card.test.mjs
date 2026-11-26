@@ -1795,3 +1795,25 @@ test('an ask names the wave it is about, where its row has room', () => {
   long.state.asks[0].text = 'x'.repeat(130);
   assert.doesNotMatch(laneRows(long, 140).find(l => l.startsWith('1  ')), /wave 2/);
 });
+
+// The first row of a running card, with its week's figure and the run's state changed.
+const stateRow = (used, state = {}, width = 100) => {
+  const i = inputsOf('RunningA');
+  i.usage.sevenDay.percentUsed = used;
+  Object.assign(i.state, { weekAtStart: used - 9, ...state });
+  return laneRows(i, width)[1];
+};
+
+test('the state row shows the usage mark once the week comes within ten points of it', () => {
+  assert.match(stateRow(65), /on track · last commit 3m ago +75% mark · ≈ 9% of your week$/);
+  assert.doesNotMatch(stateRow(64), /mark/);
+  // Short of room the mark goes, and the run's own words keep their one row.
+  assert.equal(stateRow(65, {}, 55), stateRow(50, {}, 55));
+});
+
+test('the state row counts the bypasses of standard LCW, giving way before the mark', () => {
+  assert.match(stateRow(50, { bypasses: 1 }), / {2}1 bypass · ≈ 9% of your week$/);
+  assert.match(stateRow(65, { bypasses: 3 }), / {2}3 bypasses · 75% mark · ≈ 9% of your week$/);
+  assert.match(stateRow(65, { bypasses: 3 }, 70), /last commit 3m ago +75% mark · ≈ 9% of your week$/);
+  assert.equal(stateRow(50, { bypasses: 3 }, 55), stateRow(50, {}, 55));
+});

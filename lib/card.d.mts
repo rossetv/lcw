@@ -64,6 +64,8 @@ export interface View {
   frame: 'needsYou' | 'caution' | 'ok' | 'hairline';
   /** share is a percent of the week, or on pay-per-token billing of the weekly cap (it colours the row); runUsd, when not null, is what the row says: "≈ $86 this run". */
   health: string; share: number | null; runUsd: number | null; mark: number | null;
+  /** The week's figure, and how many times the run went past a rule of LCW's process with --bypass (state.bypasses). */
+  used: number; bypasses: number;
   /** Pay-per-token billing, else null: the mark and the "run up to" figure as text, and when a paused run tries again ("08:00", or '' when unknown). */
   money: { mark: string; hint: string; retryAt: string; retried: boolean } | null;
   quota: import('./quota.mjs').QuotaView | null;
