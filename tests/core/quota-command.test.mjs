@@ -234,23 +234,24 @@ test('the adapter group remains bounded when its runner is killed abruptly', asy
   let watcher
   const ready = new Promise((resolve, reject) => {
     timer = setTimeout(() => reject(new Error('adapter did not start')), 30000)
-    watcher = fs.watch(home, () => {
+    // Polled, not fs.watch: macOS can drop the one event the pid file makes under load.
+    watcher = setInterval(() => {
       try {
         pids = JSON.parse(fs.readFileSync(pidFile, 'utf8'))
         if (pids.length === 2) resolve()
       } catch {}
-    })
+    }, 20)
   })
   const runner = spawn(process.execPath, [runnerFile], { stdio: 'ignore', env: { ...process.env, LCW_HOME: home, LCW_NOW: String(at + 300000) } })
   t.after(() => {
     clearTimeout(timer)
-    watcher.close()
+    clearInterval(watcher)
     try { runner.kill('SIGKILL') } catch {}
     for (const pid of pids) { try { process.kill(pid, 'SIGKILL') } catch {} }
   })
   await ready
   clearTimeout(timer)
-  watcher.close()
+  clearInterval(watcher)
   const exited = once(runner, 'exit', { signal: AbortSignal.timeout(10000) })
   runner.kill('SIGKILL')
   await exited
