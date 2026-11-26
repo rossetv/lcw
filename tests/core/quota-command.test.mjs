@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { execFile, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { promisify } from 'node:util'
 import { configureQuota, disableQuota, readQuotaState, claimRefresh, recordQuotaResult, refreshQuota, runQuotaCommand } from '../../scripts/lib/quota-command.mjs'
@@ -255,7 +255,7 @@ test('the adapter group remains bounded when its runner is killed abruptly', asy
   runner.kill('SIGKILL')
   await exited
   const running = (pid) => {
-    try { return !fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1].startsWith('Z') } catch { return false }
+    try { return !/^Z/.test(execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || 'Z') } catch { return false }
   }
   const until = Date.now() + 5000
   while (pids.some(running) && Date.now() < until) await new Promise((r) => setImmediate(r))
@@ -304,7 +304,7 @@ test('runner kills descendants even when the shell exits with inherited pipes st
   assert.equal(result.status, 'ok')
   const pid = Number(fs.readFileSync(pidFile, 'utf8'))
   const running = () => {
-    try { return !fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1].startsWith('Z') } catch { return false }
+    try { return !/^Z/.test(execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || 'Z') } catch { return false }
   }
   const until = Date.now() + 250
   while (running() && Date.now() < until) await new Promise((r) => setImmediate(r))
