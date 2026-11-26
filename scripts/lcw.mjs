@@ -247,7 +247,7 @@ function githubRepo(root) {
 const gh = (cwd, ...a) => execFileSync('gh', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 const firstLine = (e) => String(e.stderr || e.message).trim().split('\n')[0]
 /** "; PR n is wave k's: lcw merge k" when a wave has that pull request number, else "". */
-const prWave = (w, n) => { const x = w.waves.find((v) => Number(v.pr) === n); return x ? `; PR ${n} is wave ${x.n}'s: lcw merge ${x.n}` : '' }
+const prWave = (w, n) => { const x = w.waves.find((v) => v.pr && Number(v.pr) === n); return x ? `; PR ${n} is wave ${x.n}'s: lcw merge ${x.n}` : '' }
 const wholeNumber = (text, what) => (/^\d+$/.test(String(text)) ? Number(text) : fail(`${what} takes a whole number, not ${text}. Nothing was changed.`))
 
 const QUESTION_KEYS = ['a', 'b', 'c']
