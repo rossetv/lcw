@@ -1783,3 +1783,15 @@ test('the waves row says which wave is next and how many fixes it holds, giving 
   one.state.sweep.waves = [{ n: 7, fixes: 1, status: 'queued' }];
   assert.match(headOf(laneRows(one)), /1 queued · next: wave 7, 1 fix /);
 });
+
+test('an ask names the wave it is about, where its row has room', () => {
+  const asked = (board, ...waves) => { const i = inputsOf(board); i.state.asks = i.state.asks.map((a, k) => ({ ...a, wave: waves[k] })); return i; };
+  assert.equal(laneRows(asked('27-lanes-one-waits-on-you', 1))[1], '⚑ needs you · 12m · wave 1');
+  const two = laneRows(asked('14-needs-you-two-questions', 2, 3), 140).filter(l => /^[12]  /.test(l));
+  assert.match(two[0], /^1  .* wave 2 · \d+m$/);
+  assert.match(two[1], /^2  .* wave 3 · \d+m$/);
+  // A question that would be cut for it keeps its words, and the wave goes.
+  const long = asked('14-needs-you-two-questions', 2);
+  long.state.asks[0].text = 'x'.repeat(130);
+  assert.doesNotMatch(laneRows(long, 140).find(l => l.startsWith('1  ')), /wave 2/);
+});

@@ -69,7 +69,7 @@ export interface View {
   quota: import('./quota.mjs').QuotaView | null;
   pausedBy: 'mark' | 'human'; resumesIn: string;   // 'human': paused by the human, no countdown
   /** The open asks that hold the run; forYou counts those that hold nothing (lcw ask --no-wait). */
-  asks: { n: number; text: string; age: string }[];
+  asks: { n: number; text: string; age: string; wave: number }[];   // wave: the wave it is about, else 0
   forYou: number;
   stages: { name: string; st: 'done' | 'now' | 'next' }[];
   detail: { k: string; [key: string]: unknown } | null;
