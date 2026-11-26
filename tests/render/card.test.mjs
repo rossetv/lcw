@@ -1168,15 +1168,15 @@ test("an agent row's effort is whole or absent when the card is narrow", () => {
 });
 
 test('a cut on the edge of a span leaves no dangling dot and says it cut', () => {
-  const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), 80).find(l => l.includes('areas '));
+  const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), 65).find(l => l.includes('areas '));
   assert.ok(row.includes('…') && !/·\s+23 findings/.test(row), row);
   assert.match(row, /…\s+23 findings so far/, row);
 });
 
 test('a cut that drops whole spans always shows "…", even where what is left ends on a word', () => {
-  for (const width of [65, 77]) {
+  for (const width of [61, 65]) {
     const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), width).find(l => l.includes('areas '));
-    assert.match(row, /(▱|14 hunted)…\s+23 findings so far/, width + ': ' + row);
+    assert.match(row, /(▱ |14 hunted |6 running )…\s+23 findings so far/, width + ': ' + row);
     assert.ok(!row.includes('16 left'), row);
   }
   const plain = strip(toAnsi(card('03-hunt-round-1-probes-at-work', { width: 61 }), 'dark', 61)).split('\n').find(l => l.startsWith('areas '));
@@ -1231,7 +1231,8 @@ test('a totals group that drops a part ends in "…", and one that fits whole ha
 
 test('a cut never leaves a separator before its "…"', () => {
   const at = (board, width, start) => strip(toAnsi(card(board, { width, frame: false }), 'dark', width)).split('\n').find(l => l.startsWith(start));
-  assert.match(at('RunningA', 55, 'tasks'), /3 running…$/);
+  assert.match(at('RunningA', 44, 'tasks'), /▱  11 done · 3 running · 6 left$/);
+  assert.match(toPlain(card('RunningA', { width: 44, frame: true })).split('\n').find(l => l.startsWith('│ tasks')), /3 running … │$/);
   assert.match(at('StageSpec', 90, 'blind review'), /reviewer 1 · row…/);
 });
 
@@ -1667,5 +1668,22 @@ test('a short blind review row keeps its label and both reviewers, giving up the
   for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
     const row = toPlain(card('StageSpec', { width, frame })).split('\n').find(l => l.includes('requirements'));
     assert.match(row, /^(│ )?blind review  ✓ (reviewer )?1\b.*› (reviewer )?2\b.*9 requirements/, `${width}${frame ? ', framed' : ''}: ${row}`);
+  }
+});
+
+test("a finished sweep's short row keeps how many are parked for the person", () => {
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+    const row = toPlain(card('17-finished-with-stacked-pull-requests', { width, frame })).split('\n').find(l => l.includes(' fixed'));
+    assert.match(row, /153 fixed · 14 parked/, `${width}${frame ? ', framed' : ''}: ${row}`);
+  }
+});
+
+test('a bar gives up cells before its counts go, and a failing requirement is the last count to go', () => {
+  const rowOf = (board, width, frame, start) => toPlain(card(board, { width, frame })).split('\n').find(l => l.replace(/^│ /, '').startsWith(start));
+  for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
+    const at = `${width}${frame ? ', framed' : ''}`;
+    assert.match(rowOf('StageReview', width, frame, 'requirements'), /▱  (7 pass · )?1 failing/, at);
+    assert.match(rowOf('RunningA', width, frame, 'tasks'), /[▰▱]  \d+ done/, at);
+    if (width >= 52) assert.match(rowOf('03-hunt-round-1-probes-at-work', width, frame, 'areas'), /[▰▱]  14 hunted/, at);
   }
 });
