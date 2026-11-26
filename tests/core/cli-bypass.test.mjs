@@ -176,6 +176,8 @@ test('a wave shipped before its final checks started is bypassed once per refusa
   assert.equal(lines.length, 2, lines.join('\n'))
   assert.doesNotMatch(t.ledger(), /moved from null/)
   assert.match(t.cli('status').out, /^bypasses: 2$/m)
+  // The state keeps the count, for the card.
+  assert.equal(t.state().bypasses, 2)
 })
 
 test('a pull request GitHub shows merged is not replaced, even with --bypass', () => {

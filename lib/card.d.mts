@@ -5,7 +5,7 @@ export interface AgentInput {
   id: string; description?: string; model?: string; effort?: string;
   tokens?: number | null;       // null or missing: shown as a dash (the card without the mod)
   startTime?: number; parentId?: string | null;
-  status?: string;              // "waiting" is never quiet, and stalled only once held; completed, done, failed, killed, stopped, cancelled are not shown
+  status?: string;              // "waiting" (on its own background work, a plan's approval or an agent) is never quiet; completed, done, failed, killed, stopped, cancelled are not shown
   quietMs?: number;             // how long its token count has not moved
   heldMs?: number;              // how long it has stayed listed since its turn ended, with no live agent of its own
   spark?: number[];             // tokens gained in each of its last 20-second spans, oldest first (the mod keeps them)
@@ -16,7 +16,10 @@ export interface AgentInput {
 }
 export interface AgentNode {
   id: string; desc: string; model: string; effort: string; tokens: number | null; spark: number[] | null; elapsed: string;
-  chip: 'quiet' | 'stalled' | null; expanded: boolean; kids: AgentNode[]; wave: number | null;
+  /** quiet and stalled: at work with no tokens moving; held: reported fifteen minutes ago or more and not ended. */
+  chip: 'quiet' | 'stalled' | 'held' | null; expanded: boolean; kids: AgentNode[]; wave: number | null;
+  /** Why a worker is not at work, said in its sparkline's place: it has reported and not ended, or it waits. */
+  rest: 'reported' | 'waiting' | null;
 }
 /** One open wave as its lane draws it: running, or shipped and waiting on its merge while the charter merges as it goes (then at Ship, step 'merging'). */
 export interface OpenWave {
@@ -29,16 +32,24 @@ export interface OpenWave {
   folded?: boolean;
   /** Why the wave has no agent at work, as the orchestrator recorded it, else ''; and whether none is at work for it now. */
   waits?: string; sits?: boolean;
+  /** True once it has had no agent at work for waveSitsAfterMinutes with no reason recorded: its lane says so. */
+  idle?: boolean;
   /** Its figure while at work: tasks in Build, fixes in Review, the plan in Plan; null otherwise. */
   d: { k: 'tasks' | 'reqs' | 'plan'; [key: string]: unknown } | null;
   /** How long it has stood at its stage. */
   since: string;
   /** Running tasks, passing fixes counted once at Ship (0 for a wave shipped already), and dropped fixes (0 likewise). */
   running: number; passing: number; dropped: number;
+  /** Its pull request's number, else 0; and, while merging, the open wave before it that it lands after, else 0. */
+  pr: number; after: number;
 }
 export interface SweepView {
   /** Waves that have merged, and waves still queued. */
   round: number; shipped: number; queued: number;
+  /** True while the run hunts in an early round, one entered with a wave short of Ship, which cannot end the sweep. */
+  early: boolean;
+  /** The front queued wave, which starts next, and the fixes it holds; null with none queued. */
+  next: { n: number; fixes: number } | null;
   /** The open waves, in wave order: each has a lane while there is one. */
   open: OpenWave[];
   /** How long the sweep's hunt has stood at Hunt, else ''. */
@@ -58,12 +69,14 @@ export interface View {
   frame: 'needsYou' | 'caution' | 'ok' | 'hairline';
   /** share is a percent of the week, or on pay-per-token billing of the weekly cap (it colours the row); runUsd, when not null, is what the row says: "≈ $86 this run". */
   health: string; share: number | null; runUsd: number | null; mark: number | null;
+  /** The week's figure, and how many times the run went past a rule of LCW's process with --bypass (state.bypasses). */
+  used: number; bypasses: number;
   /** Pay-per-token billing, else null: the mark and the "run up to" figure as text, and when a paused run tries again ("08:00", or '' when unknown). */
   money: { mark: string; hint: string; retryAt: string; retried: boolean } | null;
   quota: import('./quota.mjs').QuotaView | null;
   pausedBy: 'mark' | 'human'; resumesIn: string;   // 'human': paused by the human, no countdown
   /** The open asks that hold the run; forYou counts those that hold nothing (lcw ask --no-wait). */
-  asks: { n: number; text: string; age: string }[];
+  asks: { n: number; text: string; age: string; wave: number }[];   // wave: the wave it is about, else 0
   forYou: number;
   stages: { name: string; st: 'done' | 'now' | 'next' }[];
   detail: { k: string; [key: string]: unknown } | null;
@@ -85,6 +98,8 @@ export interface BuildInput {
   now?: number;
   /** folded: the waves whose agents the person folded away, by foldKey. */
   ui?: { expanded?: Record<string, boolean>; moreOpen?: boolean; folded?: Record<string, boolean> };
+  /** The mod's record of the waves with no agent at work, for the run it names: since when, by wave number. */
+  sat?: { run?: string; waves?: Record<string, { since: number }> } | null;
 }
 
 export function buildView(input?: BuildInput): View;

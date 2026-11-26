@@ -27,7 +27,7 @@ const SWEEP = {
   "04-hunt-sorted-the-queue-is-filled": [
     "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 31m ─╮",
     "● sorted against the charter                                                                       ≈ 12% of your week",
-    "waves ▱▱▱▱▱▱  6 queued                                                               round 1 · 14 parked · 21 dropped",
+    "waves ▱▱▱▱▱▱  6 queued · next: wave 1, 27 fixes                                      round 1 · 14 parked · 21 dropped",
     "✓ Charter  › Hunt  ○ Plan  ○ Build  ○ Review  ○ Ship",
     "findings  151 to fix · 14 parked · 21 dropped                                                          6 waves queued",
   ],
@@ -70,7 +70,7 @@ const SWEEP = {
   "11-ship-when-your-charter-lets-claude-merge": [
     "╭─ ◆ LCW Sweep · backlog-sweep ──────────────────────────────────────────────────────────────────────────────────── 6m ─╮",
     "● wave 2’s PR #42 merged: it met your charter’s rule                                               ≈ 12% of your week",
-    "waves ▰▰▱▱▱▱  2 done · 4 queued                                           round 1 · 54 fixed · 14 parked · 22 dropped",
+    "waves ▰▰▱▱▱▱  2 done · 4 queued · next: wave 3, 27 fixes                  round 1 · 54 fixed · 14 parked · 22 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  ✓ Build  ✓ Review  › Ship",
     "tasks ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰  27 done · 1 dropped",
   ],
@@ -149,7 +149,7 @@ const SWEEP = {
   "21-stopped": [
     "╭─ ◆ LCW Sweep · backlog-sweep ─────────────────────────────────────────────────────────────────────────────────── 12m ─╮",
     "■ stopped",
-    "waves ▰▰▰▱▱▱  3 done · 3 queued                                           round 1 · 81 fixed · 14 parked · 22 dropped",
+    "waves ▰▰▰▱▱▱  3 done · 3 queued · next: wave 4, 27 fixes                  round 1 · 81 fixed · 14 parked · 22 dropped",
     "✓ Charter  ✓ Hunt  ✓ Plan  › Build  ○ Review  ○ Ship",
     "tasks ▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  6 done · 20 left",
   ],
@@ -173,7 +173,7 @@ const LANES = {
     wide: [
       "◆ LCW Sweep · backlog-sweep                                                                                  1h 12m",
       "● wave 2 building                                                                                ≈ 12% of your week",
-      "  waves   ✓ Plan  › Build  ○ Review  ○ Ship    ▰▰▱  1 done · 1 queued                 round 1 · 12 fixed · 2 parked",
+      "  waves   ✓ Plan  › Build  ○ Review  ○ Ship    ▰▰▱  1 done · 1 queued · next: wave 3  round 1 · 12 fixed · 2 parked",
       "▾ wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    7 of 12 tasks done · 3 running                                   22m",
     ],
     narrow: [
@@ -186,8 +186,8 @@ const LANES = {
     wide: [
       "◆ LCW Sweep · backlog-sweep                                                                                  1h 31m",
       "● wave 1 in review, wave 2 building                                                              ≈ 12% of your week",
-      "  waves   ✓ Plan  › Build  › Review  ○ Ship    ▰▰▱  1 queued                                     round 1 · 2 parked",
-      "▾ wave 1  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▱  ▱▱▱▱▱▱    18 of 23 fixes pass · 1 failing · round 2                        34m",
+      "  waves   ✓ Plan  › Build  › Review  ○ Ship    ▰▰▱  1 queued · next: wave 3                      round 1 · 2 parked",
+      "▾ wave 1  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▱  ▱▱▱▱▱▱    18 of 23 fixes pass · 1 failing · review 2                       34m",
       "▾ wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱     7 of 12 tasks done · 3 running                                  22m",
     ],
     narrow: [
@@ -223,7 +223,7 @@ const LANES = {
       "on”, or name another remote.",
       "answer in plain words below",
       "● wave 1 waits on your answer; wave 2 carries on                                                 ≈ 12% of your week",
-      "  waves   ✓ Plan  › Build  ○ Review  › Ship    ▰▰▱  1 queued                          round 1 · 23 fixed · 2 parked",
+      "  waves   ✓ Plan  › Build  ○ Review  › Ship    ▰▰▱  1 queued · next: wave 3           round 1 · 23 fixed · 2 parked",
       "▾ wave 1  ▰▰▰▰▰▰  ▰▰▰▰▰▰▰  ▰▰▰▰▰▰▰▰  ▰▰▰▰▰▰    ⚑ waits on your answer                                           12m",
       "▾ wave 2  ▰▰▰▰▰▰  ▰▰▰▰▰▰▱  ▱▱▱▱▱▱▱▱  ▱▱▱▱▱▱    7 of 12 tasks done · 3 running                                   31m",
     ],
@@ -516,11 +516,11 @@ test('buildView: quiet, stalled and waiting agents', () => {
   assert.equal(buildView({ ...i, agents: [{ id: 'x', status: 'completed' }] }).agents.length, 0);
 });
 
-test('buildView: an agent held after its report is marked stalled at fifteen minutes, and not before', () => {
+test('buildView: an agent held after its report is marked held at fifteen minutes, and not before', () => {
   const i = inputsOf('RunningA');
   const mk = (heldMs) => buildView({ ...i, agents: [{ id: 'x', description: 'd', model: 'm', startTime: NOW, tokens: 1, status: 'waiting', quietMs: 0, heldMs }] }).agents[0].chip;
   assert.equal(mk(14 * 6e4), null);
-  assert.equal(mk(15 * 6e4), 'stalled');
+  assert.equal(mk(15 * 6e4), 'held');
 });
 
 test('buildView: states', () => {
@@ -936,8 +936,8 @@ test('the paused row counts the running tasks of every open wave', () => {
 test('at 100 columns nothing is lost, at 80 the longer words go first, and below 60 the lanes are the narrow ones', () => {
   const at = (w) => laneRows(inputsOf('25-lanes-review-and-build'), w);
   const full = at(100);
-  assert.match(laneOf(full, 1), /18 of 23 fixes pass · 1 failing · round 2 +34m$/);
-  assert.match(headOf(full), /▰▰▱ {2}1 queued +round 1 · 2 parked$/);
+  assert.match(laneOf(full, 1), /18 of 23 fixes pass · 1 failing · review 2 +34m$/);
+  assert.match(headOf(full), /▰▰▱ {2}1 queued · next: wave 3 +round 1 · 2 parked$/);
   const eighty = at(80);
   // The later review round goes before the failing fix, the last to lose.
   assert.match(laneOf(eighty, 1), /18 of 23 pass · 1 failing … +34m$/);
@@ -992,7 +992,7 @@ test('a hunt round beside open waves has its lane before any area is recorded', 
 
 test('a wave whose stage has no start time draws no clock', () => {
   const held = { status: 'shipped', merged: false, pr: 41, stage: 'Review', step: null, stageSince: undefined };
-  assert.match(laneOf(laneRows(withWave1(held, { prs: 'merged' })), 1), /▰{6} {4}merging$/);
+  assert.match(laneOf(laneRows(withWave1(held, { prs: 'merged' })), 1), /▰{6} {4}merging #41$/);
 });
 
 test("a sweep's waves row keeps to 24 cells however many waves are queued", () => {
@@ -1068,7 +1068,7 @@ test('outside the lanes the waves row keeps its label and cells, and its counts 
   const state = { name: 'sweep-x', shape: 'sweep', stage: 'Hunt', status: 'running', createdAt: NOW - 864e5, stageSince: NOW - 6e5,
     sweep: { round: 2, fixed: 14, parked: 3, dropped: 2, prs: 'stacked', hunt: { fix: 6, park: 1, drop: 2 }, waves } };
   const row = (width, s = state) => laneRows({ state: s, now: NOW }, width).find(l => l.startsWith('waves'));
-  for (let w = 44; w <= 90; w++) assert.match(row(w), /^waves ▰▰▰▱▱(  3 done( · 2 queued)?)?( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?( …)?$/, w + ': ' + row(w));
+  for (let w = 44; w <= 90; w++) assert.match(row(w), /^waves ▰▰▰▱▱(  3 done( · 2 queued( · next: wave 4)?)?)?( {2,}(round 2|\d+ (fixed|parked|dropped))( · [^·…]+)*)?( …)?$/, w + ': ' + row(w));
   assert.match(row(80), /^waves ▰▰▰▱▱  3 done · 2 queued +round 2 · 14 fixed · 3 parked · 2 dropped$/);
   // With no wave queued yet the totals give way too.
   const none = { ...state, sweep: { ...state.sweep, waves: [] } };
@@ -1268,6 +1268,8 @@ const underLanes = (agents, opts = {}) => {
   if (opts.folded) i.ui = { folded: Object.fromEntries(opts.folded.map(f => [foldKey(f.run ?? i.state.id, f.wave ?? f), true])) };
   // waits: why a wave has no agent at work, by its number; edit: any other change to the sweep's state
   for (const [n, why] of Object.entries(opts.waits ?? {})) i.state.sweep.waves.find(w => w.n === Number(n)).waits = why;
+  // sat: since when each wave has had no agent at work, by its number, as the mod keeps it for this run
+  if (opts.sat) i.sat = { run: i.state.id, waves: Object.fromEntries(Object.entries(opts.sat).map(([n, since]) => [n, { since }])) };
   opts.edit?.(i.state);
   if (opts.spans) return renderCard(buildView(i), { width: opts.width ?? 115 });
   const width = opts.width ?? 115;
@@ -1745,5 +1747,132 @@ test('the bar of a progress row never grows as the card gets narrower', () => {
         }
       }
     }
+  }
+});
+
+test('a merging wave names its pull request, or the earlier wave it lands after', () => {
+  const i = inputsOf('25-lanes-review-and-build');
+  const [w1, w2, w3] = i.state.sweep.waves;
+  i.state.sweep.waves = [{ ...w1, status: 'shipped', merged: false, pr: 41 }, { ...w2, stage: 'Ship', step: 'merging' }, w3];
+  const rows = laneRows(i);
+  assert.match(laneOf(rows, 1), /▰{6} {4}merging #41 +34m$/);
+  assert.match(laneOf(rows, 2), /▰{6} {4}merging after wave 1 +22m$/);
+  // With wave 1 merged, wave 2 is next to land, and has no pull request yet.
+  i.state.sweep.waves[0].merged = true;
+  assert.match(laneOf(laneRows(i), 2), /▰{6} {4}merging +22m$/);
+});
+
+test("an early hunt round says so beside its name at every width the lanes are drawn, and why where there is room", () => {
+  const early = board => { const i = inputsOf(board); i.state.sweep = { ...i.state.sweep, early: [3] }; return i; };
+  const round = rows => rows.find(l => /^ {2}round 2 /.test(l));
+  assert.match(round(laneRows(early('29-lanes-hunt-and-final-checks'), 140)), /› Hunt · early  ▰.* 4 findings so far · can't end the sweep +5m$/);
+  // Short of room the why goes; the lane keeps "early" and every word it had.
+  for (const width of [115, 90]) {
+    const plain = round(laneRows(inputsOf('29-lanes-hunt-and-final-checks'), width));
+    assert.match(round(laneRows(early('29-lanes-hunt-and-final-checks'), width)), /› Hunt · early  ▰/);
+    assert.equal(round(laneRows(early('29-lanes-hunt-and-final-checks'), width)).replace(/ · early  [▰▱]+/, ''), plain.replace(/  [▰▱]+/, ''));
+  }
+  assert.match(laneRows(early('29-lanes-hunt-and-final-checks'), 56).find(l => /^round 2 /.test(l)), /▱ {2}Hunt · early$/);
+  // With no lanes it stands beside the stages, whole or as one word.
+  assert.match(laneRows(early('03-hunt-round-1-probes-at-work'), 115).find(l => l.startsWith('✓ Charter')), /○ Ship +early · can't end the sweep$/);
+  assert.match(laneRows(early('03-hunt-round-1-probes-at-work'), 70).find(l => l.startsWith('✓ Charter')), /○ Ship +early$/);
+  // Once the run has left Hunt the round is over.
+  const built = early('25-lanes-review-and-build');
+  assert.doesNotMatch(laneRows(built, 140).join('\n'), /early/);
+});
+
+test('the waves row says which wave is next and how many fixes it holds, giving way before the totals', () => {
+  const rows = (board, width) => strip(toAnsi(card(board, { width }), 'dark', width)).split('\n').map(l => l.trimEnd());
+  assert.match(headOf(rows('04-hunt-sorted-the-queue-is-filled', 115)), /^waves ▱{6} {2}6 queued · next: wave 1, 27 fixes +round 1 · 14 parked · 21 dropped$/);
+  assert.match(headOf(rows('06-build-wave-2-fixes-in-parallel', 150)), /1 done · 4 queued · next: wave 3, 27 fixes +round 1 · 27 fixed · 14 parked · 22 dropped$/);
+  // Short of room it goes first, and the totals stay whole.
+  assert.match(headOf(rows('06-build-wave-2-fixes-in-parallel', 117)), /1 done · 4 queued +round 1 · 27 fixed · 14 parked · 22 dropped$/);
+  const one = inputsOf('04-hunt-sorted-the-queue-is-filled');
+  one.state.sweep.waves = [{ n: 7, fixes: 1, status: 'queued' }];
+  assert.match(headOf(laneRows(one)), /1 queued · next: wave 7, 1 fix /);
+});
+
+test('an ask names the wave it is about, where its row has room', () => {
+  const asked = (board, ...waves) => { const i = inputsOf(board); i.state.asks = i.state.asks.map((a, k) => ({ ...a, wave: waves[k] })); return i; };
+  assert.equal(laneRows(asked('27-lanes-one-waits-on-you', 1))[1], '⚑ needs you · 12m · wave 1');
+  const two = laneRows(asked('14-needs-you-two-questions', 2, 3), 140).filter(l => /^[12]  /.test(l));
+  assert.match(two[0], /^1  .* wave 2 · \d+m$/);
+  assert.match(two[1], /^2  .* wave 3 · \d+m$/);
+  // Every row names its wave or none does: a long question is cut a little more for it, and only where the
+  // questions would keep too few words do the waves go.
+  const long = asked('14-needs-you-two-questions', 2, 3);
+  long.state.asks[0].text = 'Merge wave 8 before wave 7 is reviewed, or hold it back until review ends?';
+  for (const width of [60, 90]) {
+    const rows = laneRows(long, width).filter(l => /^[12]  /.test(l));
+    assert.match(rows[0], /…\s+wave 2 · \d+m$/, width);
+    assert.match(rows[1], / wave 3 · \d+m$/, width);
+  }
+  const old = asked('14-needs-you-two-questions', 12, 13);
+  old.state.asks = old.state.asks.map(a => ({ ...a, at: NOW - 170 * 6e4 }));
+  const tight = laneRows(old, 44).filter(l => /^[12]  /.test(l));
+  assert.equal(tight.length, 2);
+  assert.ok(tight.every(l => !/wave 1\d/.test(l)), tight.join('\n'));
+});
+
+// The first row of a running card, with its week's figure and the run's state changed.
+const stateRow = (used, state = {}, width = 100) => {
+  const i = inputsOf('RunningA');
+  i.usage.sevenDay.percentUsed = used;
+  Object.assign(i.state, { weekAtStart: used - 9, ...state });
+  return laneRows(i, width)[1];
+};
+
+test('the state row shows the usage mark once the week comes within ten points of it', () => {
+  assert.match(stateRow(65), /on track · last commit 3m ago +week 65% · 75% mark · ≈ 9% of your week$/);
+  assert.doesNotMatch(stateRow(64), /mark/);
+  // Short of room the mark goes, and the run's own words keep their one row.
+  assert.equal(stateRow(65, {}, 55), stateRow(50, {}, 55));
+});
+
+test('the state row counts the bypasses of standard LCW, giving way before the mark', () => {
+  assert.match(stateRow(50, { bypasses: 1 }), / {2}1 bypass · ≈ 9% of your week$/);
+  assert.match(stateRow(65, { bypasses: 3 }), / {2}3 bypasses · week 65% · 75% mark · ≈ 9% of your week$/);
+  assert.match(stateRow(65, { bypasses: 3 }, 80), /last commit 3m ago +week 65% · 75% mark · ≈ 9% of your week$/);
+  assert.equal(stateRow(50, { bypasses: 3 }, 55), stateRow(50, {}, 55));
+});
+
+test('an agent that waits, or has reported and not ended, says so and holds still; one long reported is not called stalled', () => {
+  const i = inputsOf('RunningA');
+  const mk = (id, over) => ({ id, description: 'agent ' + id, model: 'Sonnet 5.5', effort: 'low', tokens: 9000, startTime: NOW - 30 * 6e4, status: 'running', quietMs: 0, spark: [1, 2, 3], ...over });
+  i.agents = [mk('work'), mk('wait', { status: 'waiting' }), mk('done', { status: 'waiting', held: true, heldMs: 20 * 6e4 })];
+  const v = buildView(i);
+  const rowOf = (rows, id) => rows.find(r => r.some(s => s.id === 'view:' + id));
+  const looks = id => [0, 3, 7, 11].map(tick => JSON.stringify(rowOf(renderCard(v, { width: 126, tick }), id).map(s => [s.c, s.bg])));
+  assert.notEqual(looks('work')[0], looks('work')[2], 'an agent at work pulses');
+  for (const id of ['wait', 'done']) assert.equal(new Set(looks(id)).size, 1, id + ' holds still');
+  const text = r => r.map(s => s.t).join('');
+  const words = id => text(rowOf(renderCard(v, { width: 126 }), id));
+  assert.match(words('wait'), /agent wait .* waiting +9k +30m$/);
+  assert.match(words('done'), new RegExp('agent done .* reported +9k +' + G.warn + ' 30m $'));
+  // Its chip is not the red one of an agent stalled at work.
+  assert.ok(!rowOf(renderCard(v, { width: 126 }), 'done').some(s => String(s.bg ?? '').startsWith('needsYou')));
+  // The narrow card says it too.
+  const first = id => renderCard(buildView({ ...i, agents: i.agents.filter(a => a.id === id) }), { width: 40 }).map(text).join('\n');
+  assert.match(first('wait'), /low · 9k · waiting · 30m/);
+  assert.match(first('done'), new RegExp('low · 9k · reported · ' + G.warn + ' 30m'));
+});
+
+test('a wave with no agent at work for ten minutes says so under its lane, until a reason is recorded', () => {
+  const sat = { 2: NOW - 10 * 6e4, 3: NOW - 9 * 6e4 };
+  assert.deepEqual(startsOf(underLanes([['a', 'Build the importer', 1]], { sat })), ['waves', 'wave 1', '  → Build the importer', 'wave 2', '  no agent at work', 'wave 3']);
+  assert.deepEqual(startsOf(underLanes([], { sat, waits: { 2: 'the TV parts need the screens' } })).slice(2, 4), ['wave 2', '  waits: the TV parts need the screens']);
+  // Not for a wave an agent is at work for, one folded or waiting on the person, nor from another run's record.
+  assert.doesNotMatch(underLanes([['a', 'Build the importer', 2]], { sat }).join('\n'), /no agent/);
+  assert.doesNotMatch(underLanes([], { sat, folded: [2] }).join('\n'), /no agent/);
+  assert.doesNotMatch(underLanes([], { sat, edit: s => { s.sweep.waves.find(w => w.n === 2).waiting = true; } }).join('\n'), /no agent/);
+  assert.doesNotMatch(underLanes([], { sat, edit: s => { s.id = 'another-run'; } }).join('\n'), /no agent/);
+  // It comes out of the rows the agents may take, and the card never gets shorter as its room grows.
+  const agents = ['a', 'b', 'c', 'd'].map(id => [id, 'Build part ' + id, 3]);
+  let was = 0;
+  for (let maxRows = 4; maxRows <= 16; maxRows++) {
+    const rows = underLanes(agents, { sat, maxRows, frame: true });
+    assert.ok(rows.length >= was, maxRows + ': ' + rows.length);
+    if (rows.length <= maxRows) assert.ok(rows.some(l => /no agent at work/.test(l)), maxRows + ': ' + rows.join('\n'));
+    was = rows.length;
   }
 });

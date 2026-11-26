@@ -66,7 +66,7 @@ test('the state the cli writes for two open waves is drawn as a lane for each, w
   assert.match(heading(r), /Ship {4}▰▰▱ {2}1 queued/)
   assert.match(heading(r), /Build.*Review/, 'both stages are marked')
   assert.equal(r.filter((l) => /^[▾▸] wave \d /.test(l)).length, 2, 'one lane for each open wave')
-  assert.match(lane(r, 1), /3 of 5 fixes pass · 1 failing · round 2/)
+  assert.match(lane(r, 1), /3 of 5 fixes pass · 1 failing · review 2/)
   assert.match(lane(r, 2), /2 of 4 tasks done · 1 running/)
   assert.equal(r.length, 3 + 2, 'three rows and one for each open wave')
 
