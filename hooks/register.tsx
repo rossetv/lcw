@@ -442,7 +442,7 @@ async function readQuota($: EngineInterface, session: any, mark: number, now: nu
     const due = !Number.isFinite(state.lastAttemptAt) || now - state.lastAttemptAt >= REFRESH_MS
     const claimed = state.claim?.revision === state.revision && now - state.claim.startedAt < CLAIM_MS
     if (due && !claimed && (last.revision !== state.revision || !last.busy && now - last.at >= REFRESH_MS)) {
-      // One quick retry after a failure; a second failure in a row waits the full interval.
+      // A runner that fails before it makes its claim is tried again in 5 seconds, once; a second failure in a row waits the full interval.
       const quick = last.revision !== state.revision || !last.failed
       const request = { revision: state.revision, at: now, busy: true, failed: false }
       S.quotaRefresh = request
