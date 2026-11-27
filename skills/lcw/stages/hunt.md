@@ -94,19 +94,18 @@ Before you report, settle the pull requests as the charter's PRs line says. Whic
 
 - **merged as it goes**: this is the last pass, with no next one to try again on. Where the criteria name GitHub's checks, `lcw merge <wave> --wait <minutes>` waits for them, in the background as stages/ship.md says, never a loop of looks; the whole end pass waits at most an hour, not an hour for each wave, so give each wave's `--wait` what is left of the hour. Checks that did not pass, were all skipped, never showed or were still running when its wait ran out are not passed.
 
-  Go through the shipped waves not yet merged, in order (a queued wave never ran and has no pull request), passing over a wave with no commits (`lcw status` shows it empty). For each:
+  Go through the shipped waves not yet merged (a queued wave never ran and has no pull request), passing over a wave with no commits (`lcw status` shows it empty). For each:
   1. If its push or pull request still waits on the human's answer, it stays open.
   2. If it falls short of any criterion other than the checks, it stays open.
   3. Otherwise `lcw merge <wave>`, where the criteria name checks with `--wait` as above, and act on what it says. Checks that are not passed leave it open; otherwise:
-     - **merged**: where the criteria name checks, `gh pr close <number>` and `gh pr reopen <number>` the next pull request, which is now against the default branch and has started none of its checks; then go on to the next wave.
+     - **merged**: go on to the next wave. Only a pull request that was based on this wave's branch was moved onto the default branch, which starts none of its checks: where the criteria name checks, `gh pr close <number>` and `gh pr reopen <number>` that one.
      - **based on another branch**: run the `gh pr edit` command it prints, close and reopen the pull request where the criteria name checks, and go back to step 2 for this wave; if `lcw merge` says so again, it stays open.
      - **not merged yet** (a merge queue, or GitHub waiting on checks): where the criteria name GitHub's checks, wait, within the same hour, with the Monitor tool (loaded first with ToolSearch, `select:Monitor`), an until-loop on `gh pr view <number> -R <repo> --json state` in waits of up to 10 minutes that ends when it shows it merged or GitHub takes it out of the queue, then go back to step 2 for this wave; `lcw merge <wave>` records it once GitHub shows it merged. Otherwise, or if the hour runs out first, it stays open, queued, and the report says so.
      - **gh could not merge**: if the ledger shows it failed so in an earlier pass, it stays open; if not, `lcw ledger "wave <n>: gh could not merge: <gh's words>"` and go back to step 2 for this wave, once.
      - **gh could not read #N**: treat it as gh could not merge.
-     - **wave <m> is not merged yet; waves merge in order**: merge wave <m> first; this pass goes in order, so it comes to it first anyway.
      - **merged into another branch**: its changes have not landed and it needs the human; it stays open.
 
-  The first wave that stays open ends the pass: it and every wave after it are left open for the human, each with its reason (gh's words where gh could not merge) for the report. Then `lcw finish`.
+  A wave that stays open is left open for the human, with its reason (gh's words where gh could not merge) for the report. Then `lcw finish`.
 - **one at the end**: if any wave shipped with commits (`git rev-list --count <default branch>..lcw/<name>` prints more than 0), push the sweep's branch (`git push -u origin lcw/<name>`), load the `lcw:pull-request` skill and write the one draft pull request for everything as it says, open it against the default branch (`gh pr create --draft --head lcw/<name> --base <default branch> --title "<title>" --body-file <file>`), and `lcw finish --pr <url>`. With no GitHub remote or no way to push, `lcw finish --branch lcw/<name>`, tell the human the work is on `lcw/<name>` and why there is no pull request, and put the text in the conversation, as stages/ship.md says. If none did, there is nothing to open: `lcw finish`, and the report says no pull request was opened because no wave changed anything.
 - **stacked**: `lcw finish`.
 

@@ -370,8 +370,9 @@ test('a third wave started beside two still being built is cut from where the fi
 })
 
 /** Waves 1 and 2 started: wave 1 with a commit, in Review; wave 2 cut from it, in Build. at(n, ...) runs a command for wave n. */
-function overlapping() {
+function overlapping(prs) {
   const t = hunting()
+  if (prs) t.cli('set', `sweep.prs=${prs}`)
   t.cli('wave', 'add', '1', '1')
   t.start()
   const wt1 = t.wt
@@ -449,6 +450,32 @@ function bothShipping() {
   commit(t.wt1, 'd.txt', 'closure\n')
   return t
 }
+
+test('merged as it goes, waves are cut from the sweep\'s branch and are reviewed, checked and shipped in any order with no take-in', () => {
+  const t = hunting()
+  t.cli('set', 'sweep.prs=merged')
+  t.cli('wave', 'add', '1', '1')
+  t.start()
+  const wt1 = t.wt
+  commit(wt1, 'b.txt', 'one\n')
+  const ok = (...a) => { const r = t.cli(...a); assert.equal(r.code, 0, `${a.join(' ')}\n${r.out}`); return r }
+  ok('stage', 'Review')
+  const base = git(t.repo, 'rev-parse', 'lcw/tidy')
+  assert.equal(t.start().code, 0)
+  const wt2 = t.wt
+  assert.equal(git(wt2, 'rev-parse', 'HEAD'), base, 'cut from the sweep\'s branch, not from wave 1')
+  commit(wt2, 'e.txt', 'two\n')
+  commit(wt1, 'c.txt', 'wave 1 review fix\n')
+  ok('stage', 'Review', '--wave', '2')
+  ok('stage', 'Ship', '--wave', '1')
+  ok('stage', 'Ship', '--wave', '2')
+  ok('wave', 'step', 'final checks', '--wave', '2')
+  ok('wave', 'step', 'merging', '--wave', '2')
+  ok('wave', 'shipped', '--wave', '2', '--pr', '20')
+  assert.equal(git(t.repo, 'rev-parse', 'lcw/tidy'), base, 'the sweep\'s branch follows the default branch, not the waves')
+  const ledger = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
+  assert.ok(!ledger.includes('BYPASS'), ledger)
+})
 
 test('final checks run one wave at a time, in wave order, on a head that holds the wave before it', () => {
   const t = bothShipping()
@@ -811,8 +838,7 @@ test('merge --wait waits for nothing that lcw merge refuses anyway, and takes 1 
   const t = shippedWaves()
   const gh = waiting(checks('pending'))
   for (const m of ['0', '61', 'soon']) assert.equal(lcw(['merge', '1', '--wait', m], { ...t.o, env: gh.env }).code, 1, m)
-  assert.match(lcw(['merge', '2', '--wait', '5'], { ...t.o, env: gh.env }).out, /Wave 1 is not merged yet/)
-  assert.ok(gh.calls().every((c) => c.startsWith('pr view') || c.startsWith('repo view')), 'only read GitHub, to see whether wave 2 landed already: ' + gh.calls().join('\n'))
+  assert.ok(gh.calls().length === 0, gh.calls().join('\n'))
   const based = waiting(checks('pending'), { GH_BASE: 'lcw/tidy-wave-0' })
   const b = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: based.env })
   assert.equal(b.code, 1, b.out)
@@ -960,10 +986,16 @@ test('merge leaves a pull request that is no longer a draft as it is', () => {
   assert.ok(!gh.calls().some((c) => c.startsWith('pr ready')))
 })
 
-test('merge is refused out of order, under another choice, and for a wave with no pull request, and writes nothing to GitHub', () => {
+test('merged as it goes, a later wave merges before an earlier one', () => {
+  const t = shippedWaves()
+  const r = lcw(['merge', '2'], { ...t.o, env: fakeGh().env })
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual(t.state().sweep.waves.map((w) => w.merged), [false, true])
+})
+
+test('merge is refused under another choice, and for a wave with no pull request, and writes nothing to GitHub', () => {
   const t = shippedWaves()
   const gh = fakeGh()
-  assert.equal(lcw(['merge', '2'], { ...t.o, env: gh.env }).code, 1, 'wave 1 is not merged')
   t.edit((s) => { s.sweep.waves[0].pr = null })
   assert.equal(lcw(['merge', '1'], { ...t.o, env: gh.env }).code, 1, 'no pull request')
   const u = shippedWaves('stacked')
@@ -979,19 +1011,15 @@ function landedOutOfOrder(head) {
   return { t, gh, merge: (...a) => lcw(['merge', ...a], { ...t.o, env: gh.env }) }
 }
 
-test('a pull request GitHub merged out of order is recorded as landed with --bypass, and merged by nothing', () => {
+test('a pull request GitHub merged ahead of an earlier wave is recorded, with no bypass, and merged by nothing', () => {
   const { t, gh, merge } = landedOutOfOrder()
-  const refused = merge('2')
-  assert.equal(refused.code, 1, refused.out)
-  assert.match(refused.out, /Wave 1 is not merged yet; waves merge in order\..*--bypass/s)
-  assert.equal(t.state().sweep.waves[1].merged, false)
-  const r = merge('2', '--bypass', 'merged by hand on its own green CI')
+  const r = merge('2')
   assert.equal(r.code, 0, r.out)
   assert.deepEqual(t.state().sweep.waves.map((w) => w.merged), [false, true])
   const ledger = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
-  assert.match(ledger, /wave 2 merged on GitHub outside LCW's order: PR #13 recorded as landed/)
-  assert.match(ledger, /BYPASS, not standard LCW: merged by hand on its own green CI; went past: Wave 1 is not merged yet/)
-  assert.ok(!gh.calls().some((c) => c.startsWith('pr merge') || c.startsWith('pr ready') || c.startsWith('api')), gh.calls().join('\n'))
+  assert.match(ledger, /wave 2 merged: PR #13/)
+  assert.ok(!ledger.includes('BYPASS'), ledger)
+  assert.ok(!gh.calls().some((c) => c.startsWith('pr merge') || c.startsWith('pr ready')), gh.calls().join('\n'))
 })
 
 test('a wave that never shipped is recorded from the pull request --pr names, and counted', () => {
@@ -1002,11 +1030,12 @@ test('a wave that never shipped is recorded from the pull request --pr names, an
   })
   const fixedBefore = t.state().sweep.fixed
   assert.match(merge('2').out, /lcw merge 2 --pr <number>/)
-  const r = merge('2', '--pr', '15', '--bypass', 'merged by hand')
+  const r = merge('2', '--pr', '15')
   assert.equal(r.code, 0, r.out)
   const w2 = t.state().sweep.waves[1]
   assert.deepEqual([w2.status, w2.pr, w2.merged, w2.fixed], ['shipped', 15, true, 1])
   assert.equal(t.state().sweep.fixed, fixedBefore + 1)
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /PR #15 recorded as landed at \w+; its final checks had not passed on that head \(it was in Ship, merging\)/)
 })
 
 test('a merged pull request is recorded for a wave whose branch was deleted after the merge', () => {
@@ -1020,7 +1049,8 @@ test('a merged pull request is recorded for a wave whose branch was deleted afte
 
 test('a merged pull request is not recorded when the wave holds commits beyond what GitHub merged', () => {
   const { t, merge } = landedOutOfOrder('0000000000000000000000000000000000000000')
-  const r = merge('2', '--bypass', 'merged by hand')
+  t.edit((s) => { Object.assign(s.sweep.waves[1], { status: 'running', stage: 'Ship', step: 'merging', pr: null }) })
+  const r = merge('2', '--pr', '13')
   assert.equal(r.code, 1, r.out)
   assert.match(r.out, /has not landed\. Nothing was recorded\./)
   assert.equal(t.state().sweep.waves[1].merged, false)
@@ -2140,20 +2170,19 @@ test('wave files lists a wave at merging whose review fix the next wave, cut bes
 
 const listed = (out) => out.split('\n').filter((l) => /^ {2}\S+ \(wave /.test(l))
 
-test('wave files and wave start list a late closure of a wave shipped and held for its merge that the next wave\'s cut lacks', () => {
-  const t = overlapping()
-  t.cli('set', 'sweep.prs=merged')
+test('merged as it goes, wave files and wave start list everything a wave shipped and held for its merge changes, since the next wave is cut without it', () => {
+  const t = overlapping('merged')
   t.at(2, 'stage', 'Review')
   commit(t.wt1, 'd.txt', 'closure\n')
   t.at(1, 'stage', 'Ship')
   t.at(1, 'wave', 'step', 'final checks')
   t.at(1, 'wave', 'step', 'merging')
   assert.equal(t.at(1, 'wave', 'shipped', '--pr', '12').code, 0)
-  assert.deepEqual(listed(t.cli('wave', 'files').out), ['  d.txt (wave 1)'])
+  assert.deepEqual(listed(t.cli('wave', 'files').out), ['  b.txt (wave 1)', '  d.txt (wave 1)'])
   t.cli('wave', 'add', '1')
   const r = t.start()
   assert.equal(r.code, 0, r.out)
-  assert.deepEqual(listed(r.out), ['  d.txt (wave 1)'])
+  assert.deepEqual(listed(r.out), ['  b.txt (wave 1)', '  d.txt (wave 1)'])
 })
 
 test('wave files lists only what the newest built wave lacks of an older wave at merging', () => {
