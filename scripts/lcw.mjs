@@ -1334,17 +1334,20 @@ function recordLanded(run, w, wave, open) {
   const pr = String(ref)
   let view, main
   try {
-    view = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state,baseRefName,headRefOid'))
+    view = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state,baseRefName,headRefOid,mergeCommit'))
     main = JSON.parse(gh(root, 'repo', 'view', repo, '--json', 'defaultBranchRef')).defaultBranchRef.name
   } catch (e) { fail(`gh could not read #${pr}: ${firstLine(e)}. Nothing was recorded.`) }
   if (view.state !== 'MERGED' || view.baseRefName !== main) fail(`${said} Nothing was changed.`)
-  const tip = tipOf(run.state, wave)
-  if (view.headRefOid && tip !== view.headRefOid) fail(`#${pr} was merged at ${view.headRefOid}, but ${wave.branch} is at ${tip}: what it holds beyond that has not landed. Nothing was recorded.`)
+  // a wave branch deleted after its merge holds nothing more; one moved on since must hold nothing the merge lacks
+  let tip = null
+  try { tip = tipOf(run.state, wave) } catch {}
+  const inMerge = () => { try { git(root, 'merge-base', '--is-ancestor', tip, view.mergeCommit?.oid ?? ''); return true } catch { return false } }
+  if (tip && view.headRefOid && tip !== view.headRefOid && !inMerge()) fail(`#${pr} was merged at ${view.headRefOid}, but ${wave.branch} is at ${tip}: what it holds beyond that has not landed. Nothing was recorded.`)
   if (wave.status !== 'shipped') block(`Wave ${n} has not shipped (it is in ${wave.stage}${wave.step ? `, ${wave.step}` : ''}), so its final checks may not have passed on the head GitHub merged. Nothing was changed.`)
   if (open.length) block(`Wave ${open[0].n} is not merged yet; waves merge in order. Nothing was changed.`)
   const fixed = (wave.requirements ?? []).filter((r) => r.status === 'pass').length
   const partial = (wave.requirements ?? []).filter((r) => r.status === 'partial').length
-  change(run, `wave ${n} merged on GitHub outside LCW's order: PR #${pr} recorded as landed at ${tip}`, (st) => {
+  change(run, `wave ${n} merged on GitHub outside LCW's order: PR #${pr} recorded as landed at ${view.headRefOid ?? tip}`, (st) => {
     if (wave.status !== 'shipped') {
       Object.assign(wave, { status: 'shipped', fixed, ...(partial ? { partial } : {}) })
       st.sweep.fixed += fixed

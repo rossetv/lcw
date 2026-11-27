@@ -1009,6 +1009,15 @@ test('a wave that never shipped is recorded from the pull request --pr names, an
   assert.equal(t.state().sweep.fixed, fixedBefore + 1)
 })
 
+test('a merged pull request is recorded for a wave whose branch was deleted after the merge', () => {
+  const t = shippedWaves()
+  t.edit((s) => { s.sweep.waves[0].merged = true; s.sweep.waves[1].pr = null })
+  const gh = fakeGh({ GH_STATE: 'MERGED' })
+  const r = lcw(['merge', '2', '--pr', '13'], { ...t.o, env: gh.env })
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual([t.state().sweep.waves[1].pr, t.state().sweep.waves[1].merged], [13, true])
+})
+
 test('a merged pull request is not recorded when the wave holds commits beyond what GitHub merged', () => {
   const { t, merge } = landedOutOfOrder('0000000000000000000000000000000000000000')
   const r = merge('2', '--bypass', 'merged by hand')
