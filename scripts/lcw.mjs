@@ -37,7 +37,7 @@ const now = () => (Number.isFinite(Number(process.env.LCW_NOW)) && process.env.L
 const COMMAND_FLAGS = {
   start: ['title', 'shape'], task: ['model', 'effort', 'wave'], req: ['wave'], set: ['wave'], stage: ['wave'], ledger: ['wave'], ask: ['waiting', 'wave', 'a', 'b', 'c', 'recommend'],
   approval: ['meaning', 'recommend'], finish: ['pr', 'branch'], stop: ['pr'],
-  hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr', 'wave'], checkpoint: ['keep'], question: ['text', 'why', 'a', 'b', 'c', 'recommend'], merge: ['wait'],
+  hunt: ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop'], wave: ['pr', 'wave'], checkpoint: ['keep'], question: ['text', 'why', 'a', 'b', 'c', 'recommend'], merge: ['wait', 'pr'],
 }
 // flags that take no value
 const SWITCHES = { where: ['json'], awake: ['check'], checkpoint: ['compact'], ask: ['no-wait'] }
@@ -61,13 +61,13 @@ const COMMANDS = 'start status stage set task req ask answer question approval l
 const USAGE = `lcw commands: ${COMMANDS}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
 In a sweep: set sweep.charter=<0-10> (charter lines settled), sweep.open=<n> (questions open now) and sweep.prs=stacked|merged|end; approval asks for the charter in Charter, and stage Hunt needs that asked, charter.md written, no wave queued and every open wave built (in Review, back in Build from it, or in Ship); a round entered with a wave short of Ship is an early one, which status shows and which cannot end the sweep; with waves open it makes .claude/worktrees/<name>-latest, detached, holding every open wave's work (the newest wave's tip alone if they conflict), which status prints as latest work while the round runs. worktree makes only the branch lcw/<name>; the session stays in the main checkout and each wave gets its own worktree.
-hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>); beside a wave still being planned or built it is cut from where that wave was cut, holds none of its work, and takes it in once it is built; any number of waves may be open at once; it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, listing, for a wave at merging or shipped and held for its merge, only what the point the next wave would be cut from lacks of it; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first, once the wave before it is built; stage Review, stage Ship and the final checks need all of them, and stage Ship, from any stage, needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round, and wave round <r> sets it. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one, or one opened again in place of a pull request GitHub closed unmerged. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged; merge <wave> --wait <minutes> first waits, up to that many minutes (at most 60), for the pull request's GitHub checks, and merges only once every one has passed or been skipped, with at least one passed; it ends, merging nothing, at the first failed check, and when the run is paused, stopped or finished. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
+hunt [--areas N] [--hunted N] [--running N] [--findings N] [--fix N] [--park N] [--drop N] records this round's hunt and its sorting. wave add <fixes> ... queues one wave for each number, while none is queued. wave start starts the front queued wave in Plan, on lcw/<name>-wave-<n> in its own worktree .claude/worktrees/<name>-wave-<n>, cut from the open wave before it (or lcw/<name>); beside a wave still being planned or built it is cut from where that wave was cut, holds none of its work, and takes it in once it is built; any number of waves may be open at once; it prints the worktree, its plan and the files the open waves have changed, which its fixes must not need. wave files prints those files, each wave's over its review range, listing, for a wave at merging or shipped and held for its merge, only what the point the next wave would be cut from lacks of it; wave defer <k> moves k of the wave's fixes to the next queued wave, queuing one if none is. wave take merges into it, in its worktree, the latest of the sweep's branch and of every earlier open wave that it lacks, oldest first, once the wave before it is built; stage Review, stage Ship and the final checks need all of them, and stage Ship, from any stage, needs every fix of the wave recorded pass, partial, parked or dropped. wave round raises the review round, and wave round <r> sets it. wave step closures (in Review), "final checks" (in Ship, once every earlier open wave is at merging on the head its checks passed on, and no task of the wave is running), merging (on the head its final checks started on, or with none for a wave that sits on the head the wave before it was checked on) or none says where the wave stands; a wave sent back from Ship clears the later waves' final checks. wave shipped [--pr <number>], at step merging and in wave order, fast-forwards lcw/<name> to it (a wave with no commits is recorded empty, with no pull request) and removes the worktrees of the waves shipped before it, unless one holds uncommitted or untracked files; wave pr <n> <number|url> records the pull request of a wave that shipped without one, or one opened again in place of a pull request GitHub closed unmerged. merge <wave> merges a shipped wave's pull request with a merge commit, in order, when sweep.prs is merged, and only at the head whose checks passed; a wave whose pull request GitHub already merged into the default branch, at the wave's tip, outside that order or before the wave shipped, is recorded as landed (--pr <number> names the pull request when none is recorded; the rules it went past need --bypass); merge <wave> --wait <minutes> first waits, up to that many minutes (at most 60), for the pull request's GitHub checks, and merges only once every one has passed or been skipped, with at least one passed; it ends, merging nothing, at the first failed check, and when the run is paused, stopped or finished. task <id> dropped drops a task; stop --pr <number|url> records the pull request a stopped sweep opened.
 --wave <n> names the wave that stage Plan|Build|Review|Ship, task, req, set plan.*, milestone or waits, ledger, ask and wave round|step|take|defer|shipped act on. Without it they act on the open wave whose worktree lcw runs in, else the only open wave; with several open they refuse, but ledger writes the run's ledger only and ask is the run's own, as they are during a hunt. ask --wave marks the wave waiting until its asks are answered. ledger --wave may name a shipped wave, and set takes --wave with any key. set waits="<why>" --wave <n> records, in a few words the person would understand, why an open wave has no agent at work: the card shows it under the wave, the wave's ledger keeps it, and it goes when the wave moves or one of its tasks starts; waits= with nothing after it takes it away. A flag and its value may be one word, --wave=<n>.
 req <id> rename "<name>" and req <id> drop change a requirement when what is built changes; in a sweep's running wave req <id> park takes a fix out of the wave for the person, and req <id> partial marks a fix that was built but leaves the charter's done line unmet: it is not counted as fixed. req <id> drop --wave <n> drops a fix a shipped wave parked.
 approval ["<Go label>" ...] [--meaning "<what Go builds>"] [--recommend <n>] puts the Brainstorm's question, Is this what you want built?, in LCW's box above the prompt, with Go (or each label given, at most 3 of up to 20 characters), Yes, but … and Something else; its buttons only fill the prompt. With several Go labels, --recommend <n> is needed: the one Claude recommends, which the box draws in pink. Asked again, it replaces the last; a new stage clears it.
 take <runId> makes this session take over a run of this repository that no session has shown for 15 minutes; abandon <runId> stops such a run for good and removes its worktree when nothing in it is uncommitted, keeping its branch.
 awake keeps this computer from idle sleep until the run pauses, finishes or stops, or Claude Code exits; awake --check prints {canHold, heldByOther, kept}. where --json prints {main, key, run}.
-flags: --session <id> (any command); --bypass "<why>" (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --no-wait --wave --a --b --c --recommend; approval --meaning --recommend; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; merge --wait; where --json; awake --check
+flags: --session <id> (any command); --bypass "<why>" (any command); start --title --shape; task --model --effort --wave; req --wave; set --wave; stage --wave; ledger --wave; ask --waiting --no-wait --wave --a --b --c --recommend; approval --meaning --recommend; finish --pr --branch; stop --pr; hunt --areas --hunted --running --findings --fix --park --drop; wave --pr --wave; merge --wait --pr; where --json; awake --check
 spend-command <command line> sets the command that prints your 7-day spend in dollars, spend-command off turns it off, spend-command alone says what is set. Everything after spend-command is the command line, joined with single spaces (quote it as one argument if it needs quotes, pipes or ;), and a final --session <id> is not part of it. The command must print the dollars spent in the last 7 days as one number, such as 1240.55 (a leading $ and thousands commas are fine), exit 0, and finish within 30 seconds. LCW runs it in the background every 5 minutes, once across all sessions; while it fails, the figure is its last reading, running down as that reading's days drop out of the 7 days, plus what LCW counted since, and lcw usage says what went wrong.
 quota-command <endpoint> <command line> sets an external weekly subscription source for sessions whose ANTHROPIC_BASE_URL matches that endpoint; quota-command alone inspects it, quota-command off disables it. Quote the command as one argument for shell syntax; a final --session <id> is not part of it. Keep credentials out of command text. Setup requires a successful v:1 quota JSON reading within 30 seconds; failed setup leaves the prior setting intact. Refreshes are shared every 5 minutes; failed, refused or expired readings hold new work, never supply dollar estimates. The source is account-wide, not this machine's spend.
 ask "<question>" [--waiting N] [--wave N] puts a question to the person in LCW's box, answered by number in plain words; ask "<what you want from them>" --no-wait does the same for something nothing waits on (a look at a mock, a try on their own device): no wave or task is held, and the card marks it until answer <n>; with --a "<label>: <meaning>" --b ... [--c ...] --recommend <a|b|c> its options are buttons too, the recommended one drawn in pink, and a press records the answer as answer <n> "<label>: <meaning>" does.
@@ -1267,16 +1267,15 @@ const commands = {
     if (w.prs !== 'merged') fail(`The charter's pull request choice is ${PR_CHOICES[w.prs] ?? 'not made yet'}, not merged as it goes, so the sweep merges nothing. Nothing was changed.`)
     const wave = w.waves.find((x) => x.n === n) || fail(`No wave ${n}. ${wavesOf(w, n)} Nothing was changed.`)
     if (wave.empty) fail(`Wave ${n} shipped with no commits, so it has no pull request to merge. Nothing was changed.`)
-    if (wave.status !== 'shipped' || !wave.pr) fail(`Wave ${n} is ${wave.status}${wave.pr ? '' : ' with no pull request'}; only a shipped wave's pull request is merged. Nothing was changed.`)
     if (wave.merged) fail(`Wave ${n}'s pull request #${wave.pr} is merged already. Nothing was changed.`)
     const open = w.waves.filter((x) => x.n < n && !x.merged && !x.empty) // an empty wave has nothing to land
-    if (open.length) fail(`Wave ${open[0].n} is not merged yet; waves merge in order. Nothing was changed.`)
+    if (wave.status !== 'shipped' || !wave.pr || open.length) return recordLanded(run, w, wave, open)
     const root = run.state.repoRoot
     const repo = githubRepo(root) || fail('lcw merge needs a GitHub remote named origin. Nothing was merged.')
     const pr = String(wave.pr)
     let view, main
     try {
-      view = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state,isDraft,baseRefName'))
+      view = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state,isDraft,baseRefName,headRefOid'))
       main = JSON.parse(gh(root, 'repo', 'view', repo, '--json', 'defaultBranchRef')).defaultBranchRef.name
     } catch (e) { fail(`gh could not read #${pr}: ${firstLine(e)}. Nothing was recorded.`) }
     // merged into an earlier wave's branch whose delete failed, so GitHub never retargeted it
@@ -1289,7 +1288,9 @@ const commands = {
       let state, readied = false, back = ''
       try {
         if (view.isDraft) { gh(root, 'pr', 'ready', pr, '-R', repo); readied = true }
-        try { gh(root, 'pr', 'merge', pr, '-R', repo, '--merge') } catch (e) {
+        // only the head whose checks passed: a commit pushed since would land on checks that never ran on it
+        const head = passedHead || view.headRefOid
+        try { gh(root, 'pr', 'merge', pr, '-R', repo, '--merge', ...(head ? ['--match-head-commit', head] : [])) } catch (e) {
           // a refused merge leaves it as it was; a queued one exits 0 and is not undone
           if (readied) try { gh(root, 'pr', 'ready', pr, '-R', repo, '--undo'); back = ' It is a draft again.' } catch { back = ' It is still marked ready for review, not a draft.' }
           throw e
@@ -1315,6 +1316,47 @@ const commands = {
     out(`merged wave ${n}: #${pr}${left}`)
   },
 }
+
+/**
+ * A wave whose pull request GitHub merged outside LCW's order (by hand, or before the wave shipped): records what GitHub
+ * says, so LCW's record does not drift from what landed. Only when GitHub merged it into the default branch at the
+ * wave's own tip, so no later commit is recorded as landed; the rules it went past need --bypass, and are listed.
+ */
+function recordLanded(run, w, wave, open) {
+  const n = wave.n
+  const order = open.length ? ` Wave ${open[0].n} is not merged yet; waves merge in order.` : ''
+  const unshipped = wave.status !== 'shipped' ? `Wave ${n} is ${wave.status}${wave.pr ? '' : ' with no pull request'}; only a shipped wave's pull request is merged.` : ''
+  const said = `${unshipped}${order}`.trim()
+  const ref = flags.pr === undefined ? wave.pr : prOf(String(flags.pr)).number || fail(`--pr takes the pull request's number, not ${flags.pr}. Nothing was changed.`)
+  if (!ref) fail(`${said} If GitHub has merged its pull request already, name it: lcw merge ${n} --pr <number>. Nothing was changed.`)
+  const root = run.state.repoRoot
+  const repo = githubRepo(root) || fail(`${said} Nothing was changed.`)
+  const pr = String(ref)
+  let view, main
+  try {
+    view = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'state,baseRefName,headRefOid'))
+    main = JSON.parse(gh(root, 'repo', 'view', repo, '--json', 'defaultBranchRef')).defaultBranchRef.name
+  } catch (e) { fail(`gh could not read #${pr}: ${firstLine(e)}. Nothing was recorded.`) }
+  if (view.state !== 'MERGED' || view.baseRefName !== main) fail(`${said} Nothing was changed.`)
+  const tip = tipOf(run.state, wave)
+  if (view.headRefOid && tip !== view.headRefOid) fail(`#${pr} was merged at ${view.headRefOid}, but ${wave.branch} is at ${tip}: what it holds beyond that has not landed. Nothing was recorded.`)
+  if (wave.status !== 'shipped') block(`Wave ${n} has not shipped (it is in ${wave.stage}${wave.step ? `, ${wave.step}` : ''}), so its final checks may not have passed on the head GitHub merged. Nothing was changed.`)
+  if (open.length) block(`Wave ${open[0].n} is not merged yet; waves merge in order. Nothing was changed.`)
+  const fixed = (wave.requirements ?? []).filter((r) => r.status === 'pass').length
+  const partial = (wave.requirements ?? []).filter((r) => r.status === 'partial').length
+  change(run, `wave ${n} merged on GitHub outside LCW's order: PR #${pr} recorded as landed at ${tip}`, (st) => {
+    if (wave.status !== 'shipped') {
+      Object.assign(wave, { status: 'shipped', fixed, ...(partial ? { partial } : {}) })
+      st.sweep.fixed += fixed
+      st.sweep.partial = (st.sweep.partial ?? 0) + partial
+      st.sweep.dropped += wave.dropped ?? 0
+    }
+    Object.assign(wave, { pr: Number(pr), merged: true })
+  }, wave)
+  return out(`recorded wave ${n} as merged: #${pr}`)
+}
+
+let passedHead = null // the pull request's head when its checks were read and passed, for lcw merge to pin
 
 /**
  * For lcw merge --wait: waits, outside the run's lock, until GitHub has settled the wave's pull request's checks, and
@@ -1364,6 +1406,9 @@ async function checksPass(run, pr, limit) {
     stillOn(run, pr)
     let checks = null
     let none = false
+    // read before the checks, so a pass is a pass of this head: one pushed between them shows its own checks pending
+    let head = null
+    try { head = JSON.parse(gh(root, 'pr', 'view', pr, '-R', repo, '--json', 'headRefOid')).headRefOid || null } catch {}
     try { checks = JSON.parse(gh(root, 'pr', 'checks', pr, '-R', repo, '--json', 'name,bucket')) } catch (e) {
       // gh exits non-zero while checks are pending or failed, with the list still on stdout
       try { checks = JSON.parse(String(e.stdout || '')) } catch {}
@@ -1379,6 +1424,7 @@ async function checksPass(run, pr, limit) {
     if (failed.length) fail(`#${pr}'s checks did not pass: ${failed.join(', ')}. Nothing was merged.`)
     if (checks?.length && !checks.some((c) => c.bucket === 'pending')) {
       if (!checks.some((c) => c.bucket === 'pass')) fail(`#${pr}'s checks were all skipped, so none passed. Nothing was merged.`)
+      passedHead = head
       return
     }
     const waited = (Date.now() - start) / minute

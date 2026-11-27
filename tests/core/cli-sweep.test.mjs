@@ -72,9 +72,9 @@ if [ "$1 $2" = "$GH_FAIL" ]; then echo "GraphQL: not mergeable" >&2; exit 1; fi
 if [ "$1 $2" = "pr merge" ] && [ -n "$GH_SLEEP" ]; then sleep "$GH_SLEEP"; fi
 if [ "$1 $2" = "pr view" ]; then
   states="\${GH_STATE:-OPEN,MERGED}"
-  state=$(echo "$states" | cut -d, -f"$(grep -c '^pr view' "${log}")")
+  state=$(echo "$states" | cut -d, -f"$(grep -c '^pr view.*state' "${log}")")
   [ -n "$state" ] || state=$(echo "$states" | awk -F, '{print $NF}')
-  echo "{\\"state\\":\\"$state\\",\\"isDraft\\":\${GH_DRAFT:-true},\\"baseRefName\\":\\"\${GH_BASE:-main}\\"}"
+  echo "{\\"state\\":\\"$state\\",\\"isDraft\\":\${GH_DRAFT:-true},\\"baseRefName\\":\\"\${GH_BASE:-main}\\",\\"headRefOid\\":\\"\${GH_HEAD:-abc123}\\"}"
 fi
 if [ "$1 $2" = "pr checks" ]; then
   out=$(printf '%s' "$GH_CHECKS" | cut -d'|' -f"$(grep -c '^pr checks' "${log}")")
@@ -737,10 +737,10 @@ test('merge readies a draft, merges it with a merge commit on the GitHub remote,
   const r = lcw(['merge', '1'], { ...t.o, env: gh.env })
   assert.equal(r.code, 0, r.out)
   assert.deepEqual(gh.calls(), [
-    'pr view 12 -R acme/widgets --json state,isDraft,baseRefName',
+    'pr view 12 -R acme/widgets --json state,isDraft,baseRefName,headRefOid',
     'repo view acme/widgets --json defaultBranchRef',
     'pr ready 12 -R acme/widgets',
-    'pr merge 12 -R acme/widgets --merge',
+    'pr merge 12 -R acme/widgets --merge --match-head-commit abc123',
     'pr view 12 -R acme/widgets --json state',
     'pr list -R acme/widgets --base lcw/tidy-wave-1 --state open --json number',
     'api -X DELETE repos/acme/widgets/git/refs/heads/lcw/tidy-wave-1',
@@ -762,7 +762,7 @@ test('merge --wait waits while a check is pending, notes the wait in the ledger 
   const r = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: gh.env })
   assert.equal(r.code, 0, r.out)
   assert.equal(gh.calls().filter((c) => c.startsWith('pr checks')).length, 2)
-  assert.ok(gh.calls().includes('pr merge 12 -R acme/widgets --merge'), gh.calls().join('\n'))
+  assert.ok(gh.calls().includes('pr merge 12 -R acme/widgets --merge --match-head-commit abc123'), gh.calls().join('\n'))
   assert.equal(t.state().sweep.waves[0].merged, true)
   assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1: waiting up to 5 minutes for the checks of #12/)
 })
@@ -812,7 +812,7 @@ test('merge --wait waits for nothing that lcw merge refuses anyway, and takes 1 
   const gh = waiting(checks('pending'))
   for (const m of ['0', '61', 'soon']) assert.equal(lcw(['merge', '1', '--wait', m], { ...t.o, env: gh.env }).code, 1, m)
   assert.match(lcw(['merge', '2', '--wait', '5'], { ...t.o, env: gh.env }).out, /Wave 1 is not merged yet/)
-  assert.deepEqual(gh.calls(), [], 'neither asked GitHub anything')
+  assert.ok(gh.calls().every((c) => c.startsWith('pr view') || c.startsWith('repo view')), 'only read GitHub, to see whether wave 2 landed already: ' + gh.calls().join('\n'))
   const based = waiting(checks('pending'), { GH_BASE: 'lcw/tidy-wave-0' })
   const b = lcw(['merge', '1', '--wait', '5'], { ...t.o, env: based.env })
   assert.equal(b.code, 1, b.out)
@@ -854,7 +854,7 @@ test('a pull request the merge only queued is not recorded and keeps its branch,
   const r = lcw(['merge', '1'], { ...t.o, env: queued.env })
   assert.equal(r.code, 1, r.out)
   assert.match(r.out, /not merged yet/)
-  assert.ok(queued.calls().includes('pr merge 12 -R acme/widgets --merge'), queued.calls().join('\n'))
+  assert.ok(queued.calls().includes('pr merge 12 -R acme/widgets --merge --match-head-commit abc123'), queued.calls().join('\n'))
   assert.ok(!queued.calls().some((c) => c.startsWith('api')), queued.calls().join('\n'))
   assert.equal(t.state().sweep.waves[0].merged, false)
   const later = fakeGh({ GH_STATE: 'MERGED' })
@@ -960,7 +960,7 @@ test('merge leaves a pull request that is no longer a draft as it is', () => {
   assert.ok(!gh.calls().some((c) => c.startsWith('pr ready')))
 })
 
-test('merge is refused out of order, under another choice, and for a wave with no pull request, and calls no gh', () => {
+test('merge is refused out of order, under another choice, and for a wave with no pull request, and writes nothing to GitHub', () => {
   const t = shippedWaves()
   const gh = fakeGh()
   assert.equal(lcw(['merge', '2'], { ...t.o, env: gh.env }).code, 1, 'wave 1 is not merged')
@@ -968,7 +968,53 @@ test('merge is refused out of order, under another choice, and for a wave with n
   assert.equal(lcw(['merge', '1'], { ...t.o, env: gh.env }).code, 1, 'no pull request')
   const u = shippedWaves('stacked')
   assert.equal(lcw(['merge', '1'], { ...u.o, env: gh.env }).code, 1, 'stacked')
-  assert.deepEqual(gh.calls(), [])
+  assert.ok(gh.calls().every((c) => c.startsWith('pr view') || c.startsWith('repo view')), gh.calls().join('\n'))
+})
+
+/** Shipped waves 1 and 2, wave 2's branch in the repository, and a gh that shows its pull request merged into main at the given head. */
+function landedOutOfOrder(head) {
+  const t = shippedWaves()
+  git(t.repo, 'branch', 'lcw/tidy-wave-2')
+  const gh = fakeGh({ GH_STATE: 'MERGED', GH_HEAD: head ?? git(t.repo, 'rev-parse', 'lcw/tidy-wave-2') })
+  return { t, gh, merge: (...a) => lcw(['merge', ...a], { ...t.o, env: gh.env }) }
+}
+
+test('a pull request GitHub merged out of order is recorded as landed with --bypass, and merged by nothing', () => {
+  const { t, gh, merge } = landedOutOfOrder()
+  const refused = merge('2')
+  assert.equal(refused.code, 1, refused.out)
+  assert.match(refused.out, /Wave 1 is not merged yet; waves merge in order\..*--bypass/s)
+  assert.equal(t.state().sweep.waves[1].merged, false)
+  const r = merge('2', '--bypass', 'merged by hand on its own green CI')
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual(t.state().sweep.waves.map((w) => w.merged), [false, true])
+  const ledger = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
+  assert.match(ledger, /wave 2 merged on GitHub outside LCW's order: PR #13 recorded as landed/)
+  assert.match(ledger, /BYPASS, not standard LCW: merged by hand on its own green CI; went past: Wave 1 is not merged yet/)
+  assert.ok(!gh.calls().some((c) => c.startsWith('pr merge') || c.startsWith('pr ready') || c.startsWith('api')), gh.calls().join('\n'))
+})
+
+test('a wave that never shipped is recorded from the pull request --pr names, and counted', () => {
+  const { t, merge } = landedOutOfOrder()
+  t.edit((s) => {
+    s.sweep.waves[0].merged = true
+    Object.assign(s.sweep.waves[1], { status: 'running', stage: 'Ship', step: 'merging', pr: null, fixed: 0, requirements: [{ id: 'F1', status: 'pass' }] })
+  })
+  const fixedBefore = t.state().sweep.fixed
+  assert.match(merge('2').out, /lcw merge 2 --pr <number>/)
+  const r = merge('2', '--pr', '15', '--bypass', 'merged by hand')
+  assert.equal(r.code, 0, r.out)
+  const w2 = t.state().sweep.waves[1]
+  assert.deepEqual([w2.status, w2.pr, w2.merged, w2.fixed], ['shipped', 15, true, 1])
+  assert.equal(t.state().sweep.fixed, fixedBefore + 1)
+})
+
+test('a merged pull request is not recorded when the wave holds commits beyond what GitHub merged', () => {
+  const { t, merge } = landedOutOfOrder('0000000000000000000000000000000000000000')
+  const r = merge('2', '--bypass', 'merged by hand')
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /has not landed\. Nothing was recorded\./)
+  assert.equal(t.state().sweep.waves[1].merged, false)
 })
 
 /** Starts lcw merge 1 in the background; once gh is in its pr merge, resolves to { done }, what the merge ends with. */
@@ -1025,7 +1071,7 @@ test('a merge GitHub refuses puts the pull request it readied back to draft, and
   const t = shippedWaves()
   const refused = fakeGh({ GH_FAIL: 'pr merge' })
   assert.equal(lcw(['merge', '1'], { ...t.o, env: refused.env }).code, 1)
-  assert.deepEqual(refused.calls().slice(2), ['pr ready 12 -R acme/widgets', 'pr merge 12 -R acme/widgets --merge', 'pr ready 12 -R acme/widgets --undo'])
+  assert.deepEqual(refused.calls().slice(2), ['pr ready 12 -R acme/widgets', 'pr merge 12 -R acme/widgets --merge --match-head-commit abc123', 'pr ready 12 -R acme/widgets --undo'])
   const open = fakeGh({ GH_FAIL: 'pr merge', GH_DRAFT: 'false' })
   assert.equal(lcw(['merge', '1'], { ...t.o, env: open.env }).code, 1)
   assert.ok(!open.calls().some((c) => c.startsWith('pr ready')), open.calls().join('\n'))
@@ -1131,7 +1177,7 @@ test('a wave with no commits ships empty with no pull request, and the waves aft
   const gh = fakeGh()
   const r = lcw(['merge', '2'], { ...t.o, env: gh.env })
   assert.equal(r.code, 0, r.out)
-  assert.ok(gh.calls().includes('pr merge 9 -R acme/widgets --merge'))
+  assert.ok(gh.calls().includes('pr merge 9 -R acme/widgets --merge --match-head-commit abc123'))
 })
 
 test('wave pr records the pull request of a shipped wave that has none, as a number or a URL, and replaces only one GitHub closed unmerged', () => {
