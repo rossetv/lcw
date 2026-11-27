@@ -35,7 +35,7 @@ export function makeRepo() {
 }
 
 export function run(script, args, { home, cwd, session, input, env: more = {} } = {}) {
-  const env = { ...process.env, ...gitEnv, LCW_HOME: home }
+  const env = { ...process.env, ...gitEnv, LCW_HOME: home, LCW_LOAD: '0' } // the machine's real load would add a line
   delete env.CLAUDE_CODE_SESSION_ID
   delete env.CLAUDE_PID // the hook would read the real Claude Code's command line
   if (session) env.CLAUDE_CODE_SESSION_ID = session

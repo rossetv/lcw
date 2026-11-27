@@ -14,7 +14,7 @@ Workers share the run's worktree, and a milestone's tasks own separate files; th
 A worker never saw the brainstorm, so its brief is all it knows of the intent. Give it:
 
 - what to build and why, in the words of the requirements it serves and anything from the brainstorm that bears on it;
-- what done means, and its own test command from plan.md, the only tests it runs. Never write a whole-suite command or "all suites pass" into a worker's brief, even where the repository's own instructions list the suites as checks: Review runs them. The one exception is a task whose own command plan.md gives as a suite, because the repository's runner can run nothing smaller;
+- what done means, and its own test command from plan.md, the only tests it runs. Never write a whole-suite command or "all suites pass" into a worker's brief, even where the repository's own instructions list the suites as checks: Review runs them. The one exception is a task whose own command plan.md gives as a suite, because the repository's runner can run nothing smaller. Never write a time limit for a test command into any brief (`timeout 1500 ...`): an agent's own limit ends a slow run near its end;
 - the run's worktree, its path copied exactly as `lcw status` prints it, and the files it owns, its tests included, as paths relative to it;
 - its task id, the full `lcw` command line and the commit convention from plan.md, because a worker commits its own files and marks its own task done;
 - the path of spec.md for reference.

@@ -7,6 +7,7 @@ import { compactChoice, tokensText, KEEP_UNDER } from '../lib/checkpoint.mjs'
 import { home, readJson, writeJson, writeAtomic, git, mainCheckout, saveState, appendLedger as appendRunLedger, loadState } from './lib/store.mjs'
 import { findRun, bindSession, unbindSession, listRuns, open, runOf, lastShown, machineRunCount } from './lib/runs.mjs'
 import { sessionFolders, hiddenEdit } from './lib/cleanup.mjs'
+import { machineBusy } from './lib/busy.mjs'
 import { canHold, inWsl, heldByOther, keptHold, startHold, releaseHold, alive, claudeAlive } from './lib/awake.mjs'
 import { readUsage, applyGate, atMark, sessionMark, setSessionMark, DEFAULT_MARK, driverMark } from './lib/gate.mjs'
 import { readMoney, readCap, writeCap, spendRecords } from './lib/money.mjs'
@@ -1710,6 +1711,9 @@ function checkClaim(run) {
   if (mine && mine.dir !== run.dir) fail(`This session drives run ${mine.state.id}. Nothing was changed.`)
 }
 
+const WHOLE_SUITE = /\b(full|whole|entire)\s+(test\s+)?suites?\b|\ball\s+(the\s+)?(tests|suites)\b/i
+const WHOLE_SUITE_NOTE = 'note: the whole suites run once, on the head the review settles on (in a sweep, in the wave\'s final checks); a milestone check runs the tests of the packages it touched (stages/plan.md). Keep this task only if nothing smaller can check it.'
+
 function listItem(cmd, field, statuses, make) {
   const run = need()
   // each started wave keeps its own lists; --wave may name a shipped one, whose fixes parked for the person can still be dropped
@@ -1724,6 +1728,7 @@ function listItem(cmd, field, statuses, make) {
     if (list.some((x) => x.id === id)) fail(`${id} exists`)
     if (cmd === 'task' && wave?.requirements?.some((r) => r.id === id)) fail(`${id} is one of wave ${wave.n}'s fixes; its tasks are T1, T2 and on, and its fix tasks X1, X2 and on. Nothing was changed.`)
     change(run, `${cmd} ${id} added: ${label}`, () => list.push(make(id, label)), of)
+    if (cmd === 'task' && WHOLE_SUITE.test(label)) return out(`${id} added`, WHOLE_SUITE_NOTE)
     return out(`${id} added`)
   }
   const [id, status, ...words] = rest
@@ -1906,6 +1911,8 @@ try {
   if (['stage', 'set', 'status'].includes(command)) {
     const ctx = contextOf(sessionId)
     if (compactChoice(ctx) === 'ask') out(`context ${tokensText(ctx.tokens)}: compact at your next checkpoint unless the work needs this context`)
+    const busy = machineBusy()
+    if (busy) out(busy)
   }
 } catch (e) {
   if (e instanceof Fail) console.log(e.message)
