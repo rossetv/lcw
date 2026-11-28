@@ -81,10 +81,11 @@ test('long output is cut to 80 characters, ending with an ellipsis', async () =>
 test('the signal handlers are installed before the command is spawned', async () => {
   const real = childProcess.spawn
   let at
+  const before = process.listenerCount('SIGTERM')
   childProcess.spawn = (...a) => { at = process.listenerCount('SIGTERM'); return real(...a) }
   syncBuiltinESMExports()
   try { await runCommand('echo 1') } finally { childProcess.spawn = real; syncBuiltinESMExports() }
-  assert.ok(at > 0, 'no SIGTERM handler when spawn ran')
+  assert.ok(at > before, 'no SIGTERM handler when spawn ran')
 })
 
 test('a command that cannot start leaves no signal handlers behind', async () => {
