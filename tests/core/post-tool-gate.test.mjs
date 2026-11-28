@@ -25,26 +25,18 @@ function setup() {
 const sh = (env, input = '{"tool":"x"}') => spawnSync('/bin/sh', ['-c', command], { env, input, encoding: 'utf8' })
 const silentSkip = (r) => { assert.equal(r.status, 0); assert.equal(r.stdout, ''); assert.equal(r.stderr, '') }
 
-test('with no after folder the gate exits 0 and starts no Node', () => {
-  const t = setup()
-  silentSkip(sh(t.env))
-  assert.equal(t.stubRan(), null)
-})
-
-test('an empty after folder starts no Node', () => {
-  const t = setup()
-  fs.mkdirSync(path.join(t.env.LCW_HOME, 'after'), { recursive: true })
-  silentSkip(sh(t.env))
-  assert.equal(t.stubRan(), null)
-})
-
-test('an empty marker file means down: no Node', () => {
-  const t = setup()
-  fs.mkdirSync(path.join(t.env.LCW_HOME, 'after'), { recursive: true })
-  fs.writeFileSync(path.join(t.env.LCW_HOME, 'after/s1'), '')
-  silentSkip(sh(t.env))
-  assert.equal(t.stubRan(), null)
-})
+for (const [name, prepare] of [
+  ['no after folder', () => {}],
+  ['an empty after folder', (after) => fs.mkdirSync(after, { recursive: true })],
+  ['only an empty marker (down)', (after) => { fs.mkdirSync(after, { recursive: true }); fs.writeFileSync(path.join(after, 's1'), '') }],
+]) {
+  test(`with ${name} the gate exits 0 silently and starts no Node`, () => {
+    const t = setup()
+    prepare(path.join(t.env.LCW_HOME, 'after'))
+    silentSkip(sh(t.env))
+    assert.equal(t.stubRan(), null)
+  })
+}
 
 test('a marker that is not empty starts the check and passes stdin through', () => {
   const t = setup()

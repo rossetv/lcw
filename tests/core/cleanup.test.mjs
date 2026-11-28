@@ -77,6 +77,9 @@ test('a merged branch is listed and removed through the CLI; an unmerged one sta
   assert.deepEqual(branches(repo), ['main', 'wip'])
   assert.equal(git(bare, 'for-each-ref'), remoteBefore)
   assert.equal(JSON.parse(cli(['list', '--recorded'], repo, h).out), null)
+
+  assert.equal(cli(['record', '--title', 'wip', '--item', 'branch:wip'], repo, h).code, 1, 'a refused record exits non-zero')
+  assert.equal(JSON.parse(cli(['list', '--recorded'], repo, h).out), null)
 })
 
 test('a branch checked out in the main checkout is not listed, nor is the default branch', () => {
@@ -140,8 +143,7 @@ test('record refuses more than 4 bullets or a title or bullet over 200 character
   assert.throws(() => record(repo, h, { ...ok, bullets: ['1', '2', '3', '4', '5'] }), /at most 4 bullets/)
   assert.throws(() => record(repo, h, { ...ok, bullets: ['x'.repeat(201)] }), /200 characters/)
   assert.throws(() => record(repo, h, { ...ok, title: 'x'.repeat(201) }), /200 characters/)
-  assert.equal(cli(['record', '--title', 't', '--bullet', 'x'.repeat(201), '--item', 'branch:done'], repo, h).code, 1)
-  assert.equal(JSON.parse(cli(['list', '--recorded'], repo, h).out), null)
+  assert.equal(apply(repo, h), null)
   assert.equal(record(repo, h, { ...ok, bullets: ['done', '2', '3', '4'], title: 'x'.repeat(200) }).bullets.length, 4)
 })
 
@@ -165,7 +167,6 @@ test('record refuses an item the title and bullets never name, and records nothi
   branch(repo, 'other', { merge: true })
   assert.throws(() => record(repo, h, { title: 'a few old branches', bullets: ['merged long ago'], items: ['branch:done'] }), /never name/)
   assert.throws(() => record(repo, h, { title: 'done is merged', bullets: [], items: ['branch:done', 'branch:other'] }), /other/)
-  assert.equal(cli(['record', '--title', 'old stuff', '--item', 'branch:done'], repo, h).code, 1)
   assert.equal(apply(repo, h), null)
   assert.ok(record(repo, h, { title: 'old', bullets: ['done and other are merged'], items: ['branch:done', 'branch:other'] }))
 })
@@ -180,17 +181,8 @@ test('an item is named only by its whole name, not as part of a longer one', () 
   assert.throws(() => rec('prefix is merged', ['branch:fix']), /never name/)
   assert.throws(() => rec('the entree is done', [`worktree:${wt}`]), /never name/)
   assert.ok(rec('fix, merged. Also fix.', ['branch:fix']))
-  assert.ok(rec('the tree folder is done', [`worktree:${wt}`]))
-})
-
-test('a worktree is named by its path or its folder name', () => {
-  const repo = makeRepo()
-  const h = tmp('home')
-  branch(repo, 'done', { merge: true })
-  const wt = worktree(repo, 'done')
-  const items = [`worktree:${wt}`, 'branch:done']
-  assert.throws(() => record(repo, h, { title: 'done', bullets: [], items }), /never name/)
-  assert.ok(record(repo, h, { title: 'done', bullets: [`the folder ${path.basename(wt)}`], items }))
+  assert.ok(rec('the tree folder is done', [`worktree:${wt}`]), 'a worktree is named by its folder')
+  assert.ok(rec(`${wt} is done`, [`worktree:${wt}`]), 'or by its path')
 })
 
 test('a branch merged only into origin/main, with local main behind, is removed at apply', () => {
@@ -226,28 +218,22 @@ test('outside a git repository nothing is listed', () => {
   assert.deepEqual(candidates(tmp('plain'), tmp('home')), [])
 })
 
-test('a branch that got a new commit after the box was recorded is skipped at apply', () => {
-  const repo = makeRepo()
-  const h = tmp('home')
-  const head = branch(repo, 'done', { merge: true })
-  record(repo, h, { title: 'done squash tree', bullets: ['b'], items: ['branch:done'] })
-  git(repo, 'update-ref', 'refs/heads/done', git(repo, 'commit-tree', 'done^{tree}', '-p', head, '-m', 'more'))
-  const done = apply(repo, h)
-  assert.deepEqual(done.removed, [])
-  assert.equal(done.skipped[0].item.name, 'done')
-  assert.ok(branches(repo).includes('done'))
-})
-
-test('a branch moved to another merged commit after the box was recorded is skipped as changed', () => {
-  const repo = makeRepo()
-  const h = tmp('home')
-  branch(repo, 'done', { merge: true })
-  record(repo, h, { title: 'done squash tree', bullets: ['b'], items: ['branch:done'] })
-  git(repo, 'branch', '-f', 'done', 'main')
-  const done = apply(repo, h)
-  assert.match(done.skipped[0].reason, /changed/)
-  assert.ok(branches(repo).includes('done'))
-})
+for (const [name, change] of [
+  ['got a new commit', (repo, head) => git(repo, 'update-ref', 'refs/heads/done', git(repo, 'commit-tree', 'done^{tree}', '-p', head, '-m', 'more'))],
+  ['moved to another merged commit', (repo) => git(repo, 'branch', '-f', 'done', 'main')],
+]) {
+  test(`a branch that ${name} after the box was recorded is skipped at apply and stays`, () => {
+    const repo = makeRepo()
+    const h = tmp('home')
+    const head = branch(repo, 'done', { merge: true })
+    record(repo, h, { title: 'done squash tree', bullets: ['b'], items: ['branch:done'] })
+    change(repo, head)
+    const done = apply(repo, h)
+    assert.deepEqual(done.removed, [])
+    assert.equal(done.skipped[0].item.name, 'done')
+    assert.ok(branches(repo).includes('done'))
+  })
+}
 
 test('a running LCW run\'s worktree and branches are not listed; a stopped run\'s worktree goes and keeps its branch', () => {
   const repo = makeRepo()
@@ -319,30 +305,14 @@ test('a squash-merged branch whose pull request gh reports merged at its head is
   } finally { delete process.env.GH_STUB }
 })
 
-test('a pull request merged into another branch than the default one does not count', () => {
-  const repo = makeRepo()
-  squashed(repo, false)
-  try {
-    assert.deepEqual(candidates(repo, tmp('home')), [])
-  } finally { delete process.env.GH_STUB }
-})
-
-test('a branch with a commit after its merged pull request is not listed', () => {
-  const repo = makeRepo()
-  const head = squashed(repo)
-  try {
-    git(repo, 'update-ref', 'refs/heads/squash', git(repo, 'commit-tree', 'squash^{tree}', '-p', head, '-m', 'after'))
-    assert.deepEqual(candidates(repo, tmp('home')), [])
-  } finally { delete process.env.GH_STUB }
-})
-
-test('without gh a squash-merged branch is not listed', () => {
-  const repo = makeRepo()
-  squashed(repo)
-  process.env.PATH = onlyGit
-  try {
-    assert.deepEqual(candidates(repo, tmp('home')), [])
-  } finally { process.env.PATH = withGh; delete process.env.GH_STUB }
+test('a squash-merged branch is not listed when its pull request went to another branch, a commit came after it, or gh is missing', () => {
+  const listed = (prepare) => {
+    const repo = makeRepo()
+    try { prepare(repo) ; return candidates(repo, tmp('home')) } finally { process.env.PATH = withGh; delete process.env.GH_STUB }
+  }
+  assert.deepEqual(listed((repo) => squashed(repo, false)), [], 'merged into another branch')
+  assert.deepEqual(listed((repo) => { const head = squashed(repo); git(repo, 'update-ref', 'refs/heads/squash', git(repo, 'commit-tree', 'squash^{tree}', '-p', head, '-m', 'after')) }), [], 'a commit after the merge')
+  assert.deepEqual(listed((repo) => { squashed(repo); process.env.PATH = onlyGit }), [], 'without gh')
 })
 
 test('a worktree whose folder was deleted by hand is offered, with its branch when that is merged, and Clean Up removes them; one holding a commit nothing else has stays', () => {

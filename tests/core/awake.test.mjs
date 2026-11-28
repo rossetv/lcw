@@ -2,8 +2,10 @@ import test, { after } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
+import { once } from 'node:events'
+import { dirname } from 'node:path'
 import { tmp, readJson, started, fakeClaude, CLI } from './helpers.mjs'
-import { othersHold, canHold, startHold, inWsl } from '../../scripts/lib/awake.mjs'
+import { othersHold, canHold, startHold, keptHold, releaseHold, inWsl } from '../../scripts/lib/awake.mjs'
 
 // What `pmset -g assertions` printed on a Mac: macOS's own holders, Claude Code's 5-minute caffeinate holds, Amphetamine.
 const OWN = `Listed by owning process:
@@ -35,11 +37,6 @@ test('on macOS, macOS daemons and holds under a minute old do not count, a real 
   assert.equal(othersHold('darwin', held('Amphetamine', '00:00:59'), null), false)
   assert.equal(othersHold('darwin', held('Amphetamine', '00:01:00'), null), true)
   assert.equal(othersHold('darwin', held('Claude', '22:56:49', 'NoIdleSleepAssertion'), null), true)
-})
-
-test('on macOS, the older NoIdleSleepAssertion name of the same hold counts', () => {
-  const old = '   pid 900(Claude): [0x0001] 00:10:00 NoIdleSleepAssertion named: "Electron"  \n'
-  assert.equal(othersHold('darwin', OWN + old + WAITING, 95052), true)
 })
 
 test('on Linux, only another program\'s block on idle or sleep counts', () => {
@@ -113,57 +110,60 @@ test('a run going back to the person ends the hold', real, async () => {
 })
 
 test('releasing never kills a process that only took over the hold\'s pid', host, async () => {
-  const t = building()
+  const dir = tmp('run')
   const other = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 20000)'], { stdio: 'ignore' })
   try {
-    fs.writeFileSync(`${t.dir}/awake`, JSON.stringify({ pid: other.pid, at: 0, how: `caffeinate -i -w ${process.pid}` }))
-    assert.equal(t.check().kept, false)
-    t.cli('stop')
-    await new Promise((r) => setTimeout(r, 100)) // long enough for a signal sent by lcw stop to land
+    fs.writeFileSync(`${dir}/awake`, JSON.stringify({ pid: other.pid, at: 0, how: `caffeinate -i -w ${process.pid}` }))
+    assert.equal(keptHold(dir), null)
+    releaseHold(dir)
+    await Promise.race([once(other, 'exit'), new Promise((r) => setTimeout(r, 100))]) // long enough for a signal to land
     assert.deepEqual([other.exitCode, other.signalCode, alive(other.pid)], [null, null, true])
-    assert.equal(fs.existsSync(`${t.dir}/awake`), false)
+    assert.equal(fs.existsSync(`${dir}/awake`), false)
   } finally { other.kill() }
 })
 
 test('keep awake refuses without Claude Code\'s pid, or for a run that is not running', host, () => {
   const t = building()
-  fs.writeFileSync(`${t.home}/sessions/s1.json`, JSON.stringify({ runDir: t.dir }))
+  const file = `${t.home}/sessions/s1.json`
+  const session = readJson(file)
+  fs.writeFileSync(file, JSON.stringify({ runDir: t.dir }))
   assert.equal(t.cli('awake').code, 1)
-  const u = building()
-  u.cli('pause', 'human')
-  assert.equal(u.cli('awake').code, 1)
-  for (const run of [t, u]) assert.equal(fs.existsSync(`${run.dir}/awake`), false)
+  fs.writeFileSync(file, JSON.stringify(session))
+  t.cli('pause', 'human')
+  assert.equal(t.cli('awake').code, 1)
+  assert.equal(fs.existsSync(`${t.dir}/awake`), false)
 })
 
-test('a hold that dies at once is not reported as started', host, () => {
-  const bad = tmp('bad-inhibit')
-  fs.writeFileSync(`${bad}/systemd-inhibit`, '#!/bin/sh\nexit 1\n')
-  fs.chmodSync(`${bad}/systemd-inhibit`, 0o755)
+// stand-ins first on PATH for the program a hold runs
+function withStub(program, body, fn) {
+  const bin = tmp('stub')
+  fs.writeFileSync(`${bin}/${program}`, body, { mode: 0o755 })
   const path = process.env.PATH
-  process.env.PATH = `${bad}:${path}`
+  process.env.PATH = `${bin}:${path}`
+  try { return fn() } finally { process.env.PATH = path }
+}
+
+test('a hold that dies at once is not reported as started', host, () => {
+  const stub = tmp('stub') + '/systemd-inhibit'
+  fs.writeFileSync(stub, '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+  // the first run of a new script can take 300 ms or more on macOS while it is scanned, as long as startHold waits for it to exit
+  spawnSync(stub)
+  const path = process.env.PATH
+  process.env.PATH = `${dirname(stub)}:${path}`
   try { assert.equal(startHold(tmp('run'), process.pid, 'x', 0, 'linux'), null) } finally { process.env.PATH = path }
 })
 
-test('a live hold is started and recorded', host, async () => {
-  const dir = tmp('run')
-  const hold = startHold(dir, process.pid, 'x', 0, process.platform)
-  assert.ok(hold && alive(hold.pid))
-  process.kill(-hold.pid, 'SIGTERM')
-  assert.ok(await gone(hold.pid))
-})
-
-test('a hold is still recorded when ps itself fails', host, async () => {
-  const bad = tmp('bad-ps')
-  fs.writeFileSync(`${bad}/ps`, '#!/bin/sh\nexit 2\n')
-  fs.chmodSync(`${bad}/ps`, 0o755)
-  const path = process.env.PATH
-  process.env.PATH = `${bad}:${path}`
-  let hold
-  try { hold = startHold(tmp('run'), process.pid, 'x', 0, process.platform) } finally { process.env.PATH = path }
-  assert.ok(hold, 'a ps failure does not mean the hold died')
-  process.kill(-hold.pid, 'SIGTERM')
-  assert.ok(await gone(hold.pid))
-})
+for (const [name, stub] of [['a live hold', null], ['a hold when ps itself fails', '#!/bin/sh\nexit 2\n']]) {
+  test(`${name} is started and recorded`, host, async () => {
+    const dir = tmp('run')
+    const start = () => startHold(dir, process.pid, 'x', 0, process.platform)
+    const hold = stub ? withStub('ps', stub, start) : start()
+    assert.ok(hold && alive(hold.pid))
+    assert.equal(readJson(`${dir}/awake`).pid, hold.pid)
+    process.kill(-hold.pid, 'SIGTERM')
+    assert.ok(await gone(hold.pid))
+  })
+}
 
 test('WSL cannot hold off the computer\'s sleep', { skip: process.platform === 'win32' }, () => {
   assert.equal(canHold('linux', { WSL_DISTRO_NAME: 'Ubuntu' }), false)

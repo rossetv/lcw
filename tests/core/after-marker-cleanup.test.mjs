@@ -19,49 +19,25 @@ const row = (home, id, claudePid) => {
 const body = (session, transcript = null) => JSON.stringify({ session, transcript, at: 1 })
 const start = (home, session = 'new-session') => run(START_HOOK, [], { home, cwd: tmp('cwd'), input: JSON.stringify({ session_id: session, source: 'startup', cwd: tmp('cwd') }), env })
 
-test('a crashed session\'s marker goes at the next start', () => {
-  const home = tmp('home')
-  const f = marker(home, 'dead', body('dead'))
-  row(home, 'dead', 2 ** 22 + 12345) // no such process
-  assert.equal(start(home).code, 0)
-  assert.equal(fs.existsSync(f), false)
-})
-
-test('a marker whose recorded Claude Code runs stays, found by the transcript name in its content', () => {
+test('a start removes the markers of sessions that are gone or empty or broken, and keeps a live one\'s and a recent one\'s', () => {
   const home = tmp('home')
   const child = fakeClaude()
   try {
-    const f = marker(home, 'sid', body('sid', 'transcript-1'), 3600_000)
+    const crashed = marker(home, 'dead', body('dead'))
+    row(home, 'dead', 2 ** 22 + 12345) // no such process
+    const old = marker(home, 'old', body('old'), 3600_000)
+    const idle = marker(home, 'idle', '')
+    const broken = marker(home, 'broken', '{not json', 3600_000)
+    fs.mkdirSync(`${home}/after/a-folder`)
+    const fresh = marker(home, 'fresh', body('fresh'))
+    const live = marker(home, 'sid', body('sid', 'transcript-1'), 3600_000) // found by the transcript name in its content
     row(home, 'transcript-1', child.pid)
-    assert.equal(start(home).code, 0)
-    assert.equal(fs.existsSync(f), true)
+    const r = start(home)
+    assert.equal(r.code, 0)
+    assert.match(r.out, /LCW is installed/, 'a broken marker does not fail the start')
+    for (const [name, f] of Object.entries({ crashed, old, idle, broken })) assert.equal(fs.existsSync(f), false, name)
+    for (const [name, f] of Object.entries({ fresh, live })) assert.equal(fs.existsSync(f), true, name)
   } finally { child.kill() }
-})
-
-test('an old marker with no sign of life goes, a recent one stays', () => {
-  const home = tmp('home')
-  const old = marker(home, 'old', body('old'), 3600_000)
-  const fresh = marker(home, 'fresh', body('fresh'))
-  start(home)
-  assert.equal(fs.existsSync(old), false)
-  assert.equal(fs.existsSync(fresh), true)
-})
-
-test('an empty marker goes', () => {
-  const home = tmp('home')
-  const f = marker(home, 'idle', '')
-  start(home)
-  assert.equal(fs.existsSync(f), false)
-})
-
-test('a broken marker and an unreadable one do not fail the start', () => {
-  const home = tmp('home')
-  const broken = marker(home, 'broken', '{not json', 3600_000)
-  fs.mkdirSync(`${home}/after/a-folder`, { recursive: true })
-  const r = start(home)
-  assert.equal(r.code, 0)
-  assert.match(r.out, /LCW is installed/)
-  assert.equal(fs.existsSync(broken), false)
 })
 
 test('only SessionEnd removes the marker, and only the ending session\'s own', () => {
