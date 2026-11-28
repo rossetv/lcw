@@ -218,9 +218,9 @@ test('outside a git repository nothing is listed', () => {
   assert.deepEqual(candidates(tmp('plain'), tmp('home')), [])
 })
 
-for (const [name, change] of [
-  ['got a new commit', (repo, head) => git(repo, 'update-ref', 'refs/heads/done', git(repo, 'commit-tree', 'done^{tree}', '-p', head, '-m', 'more'))],
-  ['moved to another merged commit', (repo) => git(repo, 'branch', '-f', 'done', 'main')],
+for (const [name, reason, change] of [
+  ['got a new commit', /changed/, (repo, head) => git(repo, 'update-ref', 'refs/heads/done', git(repo, 'commit-tree', 'done^{tree}', '-p', head, '-m', 'more'))],
+  ['moved to another merged commit', /changed/, (repo) => git(repo, 'branch', '-f', 'done', 'main')],
 ]) {
   test(`a branch that ${name} after the box was recorded is skipped at apply and stays`, () => {
     const repo = makeRepo()
@@ -231,6 +231,7 @@ for (const [name, change] of [
     const done = apply(repo, h)
     assert.deepEqual(done.removed, [])
     assert.equal(done.skipped[0].item.name, 'done')
+    assert.match(done.skipped[0].reason, reason)
     assert.ok(branches(repo).includes('done'))
   })
 }

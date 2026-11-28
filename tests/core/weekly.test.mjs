@@ -68,7 +68,7 @@ test('nothing due prints nothing, and outside git no repo folder is left behind'
 test('a newer version on the marketplace asks for the update check in one short line', () => {
   const m = machine('github', { latest: '1.1.0' })
   const out = update(m)
-  assert.match(out, /update check/)
+  assert.match(out, /lcw:weekly skill and run its update check/)
   assert.ok(out.length < 250, out)
   assert.equal(out.includes('\n'), false)
   assert.deepEqual(m.calls(), ['claude plugin marketplace update lcw'])
@@ -137,7 +137,7 @@ test('cleanup is asked only with a candidate, once a week, and the time is recor
   assert.equal(readJson(`${m.lcw}/repos/${repoKey(bare)}/checks.json`).cleanup, T0) // but the look is not repeated
   const repo = repoWithCandidate()
   const out = due(m, repo)
-  assert.match(out, /cleanup check/)
+  assert.match(out, /lcw:weekly skill and run its cleanup check/)
   assert.ok(out.length < 250, out)
   assert.equal(readJson(`${m.lcw}/repos/${repoKey(repo)}/checks.json`).cleanup, T0)
   assert.equal(due(m, repo, T0 + 3 * DAY), '')

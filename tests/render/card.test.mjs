@@ -1143,10 +1143,9 @@ test('a cut on the edge of a span leaves no dangling dot, says it cut, and shows
   for (const width of [61, 65]) {
     const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), width).find(l => l.includes('areas '));
     assert.ok(row.includes('…') && !/·\s+23 findings/.test(row), width + ': ' + row);
-    assert.match(row, /…\s+23 findings so far/, width + ': ' + row);
+    assert.match(row, /(▱ |14 hunted |6 running )…\s+23 findings so far/, width + ': ' + row);
     assert.ok(!row.includes('16 left'), row);
   }
-  assert.match(framedRows(inputsOf('03-hunt-round-1-probes-at-work'), 61).find(l => l.includes('areas ')), /(▱ |14 hunted |6 running )…\s+23 findings so far/);
   const plain = strip(toAnsi(card('03-hunt-round-1-probes-at-work', { width: 61 }), 'dark', 61)).split('\n').find(l => l.startsWith('areas '));
   assert.match(plain, /…\s+23 findings so far/, plain);
 });

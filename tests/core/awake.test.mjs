@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
-import { dirname } from 'node:path'
 import { tmp, readJson, started, fakeClaude, CLI } from './helpers.mjs'
 import { othersHold, canHold, startHold, keptHold, releaseHold, inWsl } from '../../scripts/lib/awake.mjs'
 
@@ -144,13 +143,11 @@ function withStub(program, body, fn) {
 }
 
 test('a hold that dies at once is not reported as started', host, () => {
-  const stub = tmp('stub') + '/systemd-inhibit'
-  fs.writeFileSync(stub, '#!/bin/sh\nexit 1\n', { mode: 0o755 })
   // the first run of a new script can take 300 ms or more on macOS while it is scanned, as long as startHold waits for it to exit
-  spawnSync(stub)
-  const path = process.env.PATH
-  process.env.PATH = `${dirname(stub)}:${path}`
-  try { assert.equal(startHold(tmp('run'), process.pid, 'x', 0, 'linux'), null) } finally { process.env.PATH = path }
+  withStub('systemd-inhibit', '#!/bin/sh\nexit 1\n', () => {
+    spawnSync('systemd-inhibit')
+    assert.equal(startHold(tmp('run'), process.pid, 'x', 0, 'linux'), null)
+  })
 })
 
 for (const [name, stub] of [['a live hold', null], ['a hold when ps itself fails', '#!/bin/sh\nexit 2\n']]) {
