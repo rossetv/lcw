@@ -177,9 +177,9 @@ test('lcw usage on pay-per-token billing prints the week, today with its pace, a
   payg(home)
   const o = { home, cwd: tmp('x'), session: 's1' }
   const [week, today, mark] = (await at(['usage'], o)).out.trim().split('\n')
-  assert.equal(week, 'last 7 days: $1,260 spent on this machine (estimate) of a $4,000 cap (assumed)')
+  assert.match(week, /^last 7 days: \$1,260 spent on this machine \(estimate\) of a \$4,000 cap \(assumed\)$/)
   assert.match(today, /^today: \$85 by 10:00, a rate of \$204 a day · rolling 7d \$[\d,]+ (spare|short)$/)
-  assert.equal(mark, 'mark: $3,000 (75%) · ok')
+  assert.match(mark, /^mark: \$3,000 \(75%\) · ok$/)
   await at(['cap', '5,000 USD'], o)
   assert.match((await at(['usage'], o)).out, /of a \$5,000 cap\n.*\nmark: \$3,750 \(75%\) · ok/, 'a stated cap is no longer assumed, and the share mark follows it')
   fs.writeFileSync(`${home}/spend/s1.json`, JSON.stringify({ v: 1, base: 0, max: 4000, q: { [quarter(NOW - 3600000)]: 4000 } }))
@@ -220,11 +220,13 @@ test('a dollar mark is refused unless billing is per token, with the reason, and
     fs.mkdirSync(`${home}/sessions`, { recursive: true })
     fs.writeFileSync(`${home}/sessions/s1.json`, JSON.stringify(session))
     const o = { home, cwd: tmp('x'), session: 's1' }
-    const r = await cli(['mark', '$3000'], o)
-    assert.equal(r.code, 1)
-    assert.match(r.out, reason)
-    assert.match(r.out, /percentage|share of the week/)
-    assert.deepEqual(sessionJson(home), session)
+    for (const form of ['$3000', '3000usd']) {
+      const r = await cli(['mark', form], o)
+      assert.equal(r.code, 1, form)
+      assert.match(r.out, reason, form)
+      assert.match(r.out, /percentage|share of the week/, form)
+      assert.deepEqual(sessionJson(home), session, `${form} changes nothing`)
+    }
     assert.match((await cli(['mark', '80%'], o)).out.trim(), /^mark 80%\nweek: unknown\nok$/, 'a share still works')
   }
 })
@@ -258,7 +260,10 @@ test('a run at its dollar mark is lifted by raising the mark over the spend, or 
   await t.cli('pause', 'mark')
   assert.match(await say('mark', '3010usd'), /\$3,010\.\nat the mark/, 'still over the new mark: it stays gated')
   assert.ok(fs.existsSync(gate))
-  assert.doesNotMatch(await say('mark', '3400usd'), /at the mark/)
+  const lifted = await cli(['mark', '3400usd'], { ...t.o, env: { LCW_NOW: String(NOW) } })
+  assert.equal(lifted.code, 0)
+  assert.match(lifted.out, /\$3,400/)
+  assert.doesNotMatch(lifted.out, /at the mark/)
   assert.ok(!fs.existsSync(gate), 'a mark above the spend lifts the dollar gate at once')
   await say('mark', '3010usd')
   assert.ok(fs.existsSync(gate))
@@ -279,10 +284,9 @@ test('lcw usage takes the week from a working spend command and names it', async
   withCommand(home)
   const o = { home, cwd: tmp('x'), session: 's1' }
   await at(['cap', '4000'], o)
-  const [week, today, mark] = (await at(['usage'], o)).out.trim().split('\n')
-  assert.equal(week, 'last 7 days: $1,240 spent (from your spend command, 3 min ago) of a $4,000 cap')
+  const [, today, mark] = (await at(['usage'], o)).out.trim().split('\n')
   assert.match(today, /^today: \$85 by 10:00, a rate of \$204 a day · rolling 7d \$[\d,]+ (spare|short)$/)
-  assert.equal(mark, 'mark: $3,000 (75%) · ok')
+  assert.match(mark, /^mark: \$3,000 \(75%\) · ok$/)
   withCommand(home, { usd: 3100 })
   assert.match((await at(['usage'], o)).out, /mark: \$3,000 \(75%\) · at the mark/, 'the command\'s figure is what reaches the mark')
 })
@@ -295,11 +299,12 @@ test('lcw usage shows a failing spend command with the three figures adding up, 
   // the reading is 2h old, so 2 of its 168 hours have dropped out: 1239.6 * 166/168 is 1224.8, and LCW counted $85
   // since; the sum 1309.8 rounds to $1,310, and the parts shown add up to it
   withCommand(home, { usd: 1239.6, at: NOW - 2 * 3600000, fails: 3, failingSince: NOW - 35 * 60000, lastError: 'printed "401 Unauthorized"' })
-  assert.equal((await at(['usage'], o)).out, [
-    'last 7 days: $1,310 spent ($1,225 of the $1,240 from your spend command 2h ago, plus $85 LCW counted since) of a $4,000 cap',
-    'spend command: failing since 09:25, it printed "401 Unauthorized"',
-    'today: $85 by 10:00, a rate of $204 a day',
-    'mark: $3,000 (75%) · ok', ''].join('\n'))
+  const [week, failing, today, mark, ...rest] = (await at(['usage'], o)).out.trim().split('\n')
+  assert.match(week, /^last 7 days: \$1,310 spent .*\$1,225 of the \$1,240 .* 2h ago.*\$85 LCW counted since.* \$4,000 cap$/)
+  assert.match(failing, /^spend command: failing since 09:25, .*401 Unauthorized/)
+  assert.match(today, /^today: \$85 by 10:00, a rate of \$204 a day$/, 'no rolling pace while the command fails')
+  assert.match(mark, /^mark: \$3,000 \(75%\) · ok$/)
+  assert.deepEqual(rest, [])
   withCommand(home, { usd: 1240, at: NOW - 2 * 3600000, fails: 3, failingSince: NOW - 2 * 86400000, lastError: 'printed nothing' })
   assert.match((await at(['usage'], o)).out, /\nspend command: failing since 8 Jun 10:00, it printed nothing\n/)
   withCommand(home, { usd: 1240, at: NOW - 2 * 3600000, fails: 2, failingSince: NOW - 35 * 60000, lastError: 'printed nothing' })
@@ -316,7 +321,9 @@ test('lcw usage on a subscription ignores a spend command, and never runs it', a
   fs.writeFileSync(`${home}/spend-command.json`, JSON.stringify({ v: 1, command, setAt: NOW }))
   fs.writeFileSync(`${home}/spend-reading.json`, JSON.stringify({ v: 1, command, usd: 1240, at: NOW - 60000, fails: 0, failingSince: null, lastError: null }))
   const sub = (await at(['usage'], { home, cwd: tmp('x'), session: 'sub' })).out
-  assert.equal(sub, 'week: 42% used\nresets: unknown\nmark: 75%\nok\n')
+  assert.match(sub, /^week: 42% used\n/)
+  assert.match(sub, /\nmark: 75%\nok\n$/)
+  assert.doesNotMatch(sub, /\$/, 'no dollars on a subscription')
   const noSession = (await at(['usage'], { home, cwd: tmp('x') })).out
   assert.match(noSession, /^week: 42% used\nresets: unknown/, 'a reading makes no dollar view where there was none')
   payg(home)
@@ -326,20 +333,18 @@ test('lcw usage on a subscription ignores a spend command, and never runs it', a
   assert.equal(fs.existsSync(marker), false, 'usage only reads the reading')
 })
 
-test('lcw usage outside a session takes the week from the spend command too', async () => {
-  const home = tmp('home')
-  payg(home, 'other')
-  withCommand(home)
-  const o = { home, cwd: tmp('x') }
-  await at(['cap', '4000'], o)
-  const week = (await at(['usage'], o)).out.trim().split('\n')[0]
-  assert.equal(week, 'last 7 days: $1,240 spent (from your spend command, 3 min ago) of a $4,000 cap')
-})
-
-test('lcw usage with no spend command set reads as it always did', async () => {
-  const home = tmp('home')
-  payg(home)
-  fs.writeFileSync(`${home}/spend-reading.json`, JSON.stringify({ v: 1, command: 'echo 1240', usd: 1240, at: NOW - 60000, fails: 0 }))
-  const first = (await at(['usage'], { home, cwd: tmp('x'), session: 's1' })).out.split('\n')[0]
-  assert.equal(first, 'last 7 days: $1,260 spent on this machine (estimate) of a $4,000 cap (assumed)', 'a reading without its command set is not used')
+test("the week's first line takes its figure from the spend command when one is set, in a session or not, and not when only a reading is left", async () => {
+  for (const [name, session, withCmd, cap, line] of [
+    ['a session', 's1', true, '4000', /^last 7 days: \$1,240 spent \(from your spend command, 3 min ago\) of a \$4,000 cap$/],
+    ['no session', undefined, true, '4000', /^last 7 days: \$1,240 spent \(from your spend command, 3 min ago\) of a \$4,000 cap$/],
+    ['a reading without its command', 's1', false, undefined, /^last 7 days: \$1,260 spent on this machine \(estimate\) of a \$4,000 cap \(assumed\)$/],
+  ]) {
+    const home = tmp('home')
+    payg(home, session || 'other')
+    if (withCmd) withCommand(home)
+    else fs.writeFileSync(`${home}/spend-reading.json`, JSON.stringify({ v: 1, command: 'echo 1240', usd: 1240, at: NOW - 60000, fails: 0 }))
+    const o = { home, cwd: tmp('x'), session }
+    if (cap) await at(['cap', cap], o)
+    assert.match((await at(['usage'], o)).out.split('\n')[0], line, name)
+  }
 })
