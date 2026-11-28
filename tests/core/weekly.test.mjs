@@ -69,6 +69,7 @@ test('a newer version on the marketplace asks for the update check in one short 
   const m = machine('github', { latest: '1.1.0' })
   const out = update(m)
   assert.match(out, /lcw:weekly skill and run its update check/)
+  assert.ok(out.endsWith(`Scripts: '${path.dirname(SCRIPT)}'.`), out)
   assert.ok(out.length < 250, out)
   assert.equal(out.includes('\n'), false)
   assert.deepEqual(m.calls(), ['claude plugin marketplace update lcw'])
