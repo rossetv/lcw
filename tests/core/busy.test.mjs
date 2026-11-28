@@ -37,8 +37,10 @@ test('lcw status warns the orchestrator when the machine is busy, and only then'
   assert.match((await cli(['status'], { ...t.o, env: { LCW_LOAD: load } })).out, /machine busy: load/)
 })
 
-test('adding a whole-suite task prints a note where the whole suites run instead, and a plain task prints none', async () => {
+test('adding a whole-suite task prints a note that the whole suites run once and a milestone check runs only what it touched, and a plain task prints none', async () => {
   const t = await begin()
-  assert.match((await t.cli('task', 'add', 'M3', 'Full suite, lint, types')).out, /M3 added\nnote: /)
+  const note = (await t.cli('task', 'add', 'M3', 'Full suite, lint, types')).out
+  assert.match(note, /M3 added\nnote: the whole suites run once/)
+  assert.match(note, /milestone check runs the tests of the packages it touched/)
   assert.doesNotMatch((await t.cli('task', 'add', 'T1', 'Disk cache')).out, /note:/)
 })
