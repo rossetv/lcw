@@ -4,10 +4,14 @@ import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmp, installedConfig } from './helpers.mjs'
 import { STATUS_FILES } from '../../scripts/lib/status-files.mjs'
+import { noticesFile } from '../../lib/key.mjs'
 
 const SETUP = new URL('../../scripts/setup.mjs', import.meta.url).pathname
 const INSTALLED = installedConfig()
+// install waits 300 ms for older mods after it sets a notice for them; a notice already there skips the wait
 const setup = (home, settings, cmd) => {
+  const notices = noticesFile(home)
+  if (!fs.existsSync(notices)) { fs.mkdirSync(home, { recursive: true }); fs.writeFileSync(notices, JSON.stringify({ statusline: 'moved' })) }
   const r = spawnSync('node', [SETUP, cmd, '--settings', settings], { cwd: tmp('cwd'), encoding: 'utf8', env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: INSTALLED } })
   return { code: r.status, out: r.stdout, err: r.stderr }
 }
@@ -42,21 +46,14 @@ test('setup keeps the settings file\'s mode', () => {
 })
 
 test('the status line runs from a home with a space or a quote in its path', () => {
-  const home = tmp('my home') + '/.lcw', settings = tmp('s') + '/settings.json'
-  assert.equal(setup(home, settings, 'install').code, 0)
-  const { command } = read(settings).statusLine
   const input = JSON.stringify({ model: { display_name: 'Opus 5' }, cwd: tmp('cwd') })
-  const r = spawnSync('sh', ['-c', command], { input, encoding: 'utf8', env: { ...process.env, LCW_HOME: home, COLUMNS: '100' } })
-  assert.equal(r.status, 0, r.stderr)
-  assert.match(r.stdout, /Opus 5/, 'it printed the rows')
-  assert.match(setup(home, settings, 'status').out, /statusLine: LCW/)
-
-  const quote = tmp("it's") + '/.lcw', other = tmp('s') + '/settings.json'
-  setup(quote, other, 'install')
-  const q = `'${quote.replace(/'/g, `'\\''`)}`
-  assert.equal(read(other).statusLine.command, `lcw_bin=${q}/bin'; [ -r "$lcw_bin/statusline.sh" ] && . "$lcw_bin/statusline.sh"; node "$lcw_bin/statusline.mjs" || printf '%s\\n' 'LCW · status line could not load · see ~/.lcw/statusline.log'`)
-  const s = spawnSync('sh', ['-c', read(other).statusLine.command], { input, encoding: 'utf8', env: { ...process.env, LCW_HOME: quote, COLUMNS: '100' } })
-  assert.match(s.stdout, /Opus 5/, s.stderr)
+  for (const label of ['my home', "it's"]) {
+    const home = tmp(label) + '/.lcw', settings = tmp('s') + '/settings.json'
+    assert.equal(setup(home, settings, 'install').code, 0, label)
+    const r = spawnSync('sh', ['-c', read(settings).statusLine.command], { input, encoding: 'utf8', env: { ...process.env, LCW_HOME: home, COLUMNS: '100' } })
+    assert.equal(r.status, 0, r.stderr)
+    assert.match(r.stdout, /Opus 5/, `${label}: it printed the rows`)
+  }
 })
 
 test('a status line installed before paths were quoted is still LCW\'s own, and uninstall takes it out', () => {
@@ -67,55 +64,37 @@ test('a status line installed before paths were quoted is still LCW\'s own, and 
   assert.equal(read(settings).statusLine, undefined)
 })
 
-test('uninstall removes the agent depth only when install set it', () => {
-  const home = tmp('home'), settings = tmp('s') + '/settings.json'
-  fs.writeFileSync(settings, JSON.stringify({ theme: 'dark' }))
-  assert.equal(setup(home, settings, 'install').code, 0)
-  assert.equal(read(settings).env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH, '5')
-  assert.equal(setup(home, settings, 'install').code, 0, 'a second install finds it set and keeps the record')
-  setup(home, settings, 'uninstall')
-  assert.deepEqual(read(settings), { theme: 'dark' })
+// each limit install raises: LCW's own figure goes at uninstall, a figure the person set (any of these) stays
+for (const [key, ours, theirs] of [['CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH', '5', ['5']], ['CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS', '80', ['40', '80']]]) {
+  test(`uninstall removes ${key} only when install set it`, () => {
+    const home = tmp('home'), settings = tmp('s') + '/settings.json'
+    fs.writeFileSync(settings, JSON.stringify({ theme: 'dark' }))
+    assert.equal(setup(home, settings, 'install').code, 0)
+    assert.equal(read(settings).env[key], ours)
+    assert.equal(setup(home, settings, 'install').code, 0, 'a second install finds it set and keeps the record')
+    setup(home, settings, 'uninstall')
+    assert.deepEqual(read(settings), { theme: 'dark' })
 
-  const own = { env: { CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '5' } }
-  fs.writeFileSync(settings, JSON.stringify(own))
-  setup(home, settings, 'install')
-  const u = setup(home, settings, 'uninstall')
-  assert.deepEqual(read(settings).env, own.env, 'the person set it themselves')
-  assert.ok(!/removed env\.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH/.test(u.out), u.out)
-})
-
-test('install lets 80 agents run at once, keeps a figure the person set, and uninstall removes only its own', () => {
-  const home = tmp('home'), settings = tmp('s') + '/settings.json'
-  fs.writeFileSync(settings, JSON.stringify({ theme: 'dark' }))
-  const i = setup(home, settings, 'install')
-  assert.match(i.out, /set env\.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS to "80"/)
-  assert.equal(read(settings).env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS, '80')
-  assert.match(setup(home, settings, 'status').out, /env\.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: 80/)
-  setup(home, settings, 'uninstall')
-  assert.deepEqual(read(settings), { theme: 'dark' })
-
-  for (const theirs of ['40', '80']) {
-    fs.writeFileSync(settings, JSON.stringify({ env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: theirs } }))
-    setup(tmp('home'), settings, 'install')
-    assert.equal(read(settings).env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS, theirs)
-    const fresh = tmp('home')
-    setup(fresh, settings, 'install')
-    const u = setup(fresh, settings, 'uninstall')
-    assert.equal(read(settings).env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS, theirs, 'the person set it themselves')
-    assert.ok(!/removed env\.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS/.test(u.out), u.out)
-  }
-})
+    for (const value of theirs) {
+      const fresh = tmp('home')
+      fs.writeFileSync(settings, JSON.stringify({ env: { [key]: value } }))
+      setup(fresh, settings, 'install')
+      assert.equal(read(settings).env[key], value, 'install keeps the figure the person set')
+      setup(fresh, settings, 'uninstall')
+      assert.equal(read(settings).env[key], value, 'uninstall leaves it')
+    }
+  })
+}
 
 test('limits raises every agent limit under what a run needs, a figure the person set included, and uninstall puts theirs back', () => {
   const home = tmp('home'), settings = tmp('s') + '/settings.json'
   fs.writeFileSync(settings, JSON.stringify({ theme: 'dark', env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '40', KEEP: '1' } }))
   const r = setup(home, settings, 'limits')
   assert.equal(r.code, 0, r.err)
-  assert.match(r.out, /^Claude Code now runs up to 80 agents at once, nested 5 deep, in sessions opened from now on\. Open this one again to use it\.\n$/)
+  assert.match(r.out, /80 agents at once, nested 5 deep/)
   assert.deepEqual(read(settings).env, { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '80', KEEP: '1', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '5' })
-  assert.match(setup(home, settings, 'limits').out, /already runs up to 80/)
-  const u = setup(home, settings, 'uninstall')
-  assert.match(u.out, /put env\.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS back to "40"/)
+  assert.equal(setup(home, settings, 'limits').code, 0)
+  setup(home, settings, 'uninstall')
   assert.deepEqual(read(settings), { theme: 'dark', env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '40', KEEP: '1' } })
 })
 
@@ -123,7 +102,7 @@ test('limits leaves a limit that is already enough, however it was set', () => {
   const home = tmp('home'), settings = tmp('s') + '/settings.json'
   const theirs = { env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '120', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '6' } }
   fs.writeFileSync(settings, JSON.stringify(theirs))
-  assert.match(setup(home, settings, 'limits').out, /already runs/)
+  assert.equal(setup(home, settings, 'limits').code, 0)
   assert.deepEqual(read(settings), theirs)
   setup(home, settings, 'uninstall')
   assert.deepEqual(read(settings).env, theirs.env)

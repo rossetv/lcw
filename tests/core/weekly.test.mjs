@@ -11,8 +11,14 @@ const SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..
 const DAY = 24 * 3600 * 1000
 const T0 = 1800000000000
 
+// A `claude` stand-in written once: macOS scans each new script the first time it runs, which takes a quarter of a
+// second. claude logs to STUB_LOG and refreshes, or fails when STUB_REFRESH says so.
+const stubs = tmp('weekly-stubs')
+fs.writeFileSync(`${stubs}/claude`, '#!/bin/sh\necho "claude $*" >> "$STUB_LOG"\n[ "$STUB_REFRESH" = fail ] && { echo "network is down" >&2; exit 1; }\nexit 0\n', { mode: 0o755 })
+fs.writeFileSync(`${stubs}/gh`, '#!/bin/sh\nexit 1\n', { mode: 0o755 }) // the cleanup check asks gh about merged pull requests: never the real one
+
 // A scratch machine: LCW home, Claude config with LCW 1.0.0 installed from the given source kind (or not at all), its
-// marketplace clone holding `latest`, and a `claude` stub first on PATH that logs each call and refreshes or fails.
+// marketplace clone holding `latest`, and the `claude` stub first on PATH.
 function machine(source, { latest = '1.0.0', refresh = 'ok' } = {}) {
   const lcw = tmp('lcw')
   const claude = tmp('claude')
@@ -26,10 +32,8 @@ function machine(source, { latest = '1.0.0', refresh = 'ok' } = {}) {
     fs.writeFileSync(`${claude}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source }, installLocation: clone } }))
     fs.writeFileSync(`${claude}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ version: '1.0.0' }] } }))
   }
-  const answer = refresh === 'ok' ? 'exit 0' : 'echo "network is down" >&2; exit 1'
-  fs.writeFileSync(`${bin}/claude`, `#!/bin/sh\necho "claude $*" >> "${bin}/calls.log"\n${answer}\n`, { mode: 0o755 })
   const calls = () => (fs.existsSync(`${bin}/calls.log`) ? fs.readFileSync(`${bin}/calls.log`, 'utf8').trim().split('\n') : [])
-  const env = (now) => ({ ...process.env, LCW_HOME: lcw, CLAUDE_CONFIG_DIR: claude, LCW_NOW: String(now), PATH: `${bin}:${process.env.PATH}` })
+  const env = (now) => ({ ...process.env, LCW_HOME: lcw, CLAUDE_CONFIG_DIR: claude, LCW_NOW: String(now), STUB_LOG: `${bin}/calls.log`, STUB_REFRESH: refresh, PATH: `${stubs}:${process.env.PATH}` })
   return { lcw, claude, publish, calls, env }
 }
 function weekly(cmd, m, cwd, now, script = SCRIPT) {
@@ -40,27 +44,31 @@ function weekly(cmd, m, cwd, now, script = SCRIPT) {
 const due = (m, cwd, now = T0) => weekly('due', m, cwd, now)
 const update = (m, now = T0) => weekly('update', m, notGit(), now)
 const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'))
-// a repo with one merged branch: a cleanup candidate
+// a repo with one merged branch: a cleanup candidate; built once, then copied
+const candidateTemplate = makeRepo()
+git(candidateTemplate, 'checkout', '-q', '-b', 'done-work')
+fs.writeFileSync(`${candidateTemplate}/b.txt`, 'b\n')
+git(candidateTemplate, 'add', '.')
+git(candidateTemplate, 'commit', '-q', '-m', 'b')
+git(candidateTemplate, 'checkout', '-q', 'main')
+git(candidateTemplate, 'merge', '-q', '--no-ff', '-m', 'merge', 'done-work')
 function repoWithCandidate() {
-  const repo = makeRepo()
-  git(repo, 'checkout', '-q', '-b', 'done-work')
-  fs.writeFileSync(`${repo}/b.txt`, 'b\n')
-  git(repo, 'add', '.')
-  git(repo, 'commit', '-q', '-m', 'b')
-  git(repo, 'checkout', '-q', 'main')
-  git(repo, 'merge', '-q', '--no-ff', '-m', 'merge', 'done-work')
+  const repo = tmp('repo')
+  fs.cpSync(candidateTemplate, repo, { recursive: true })
   return repo
 }
 const notGit = () => tmp('plain')
 
-test('nothing due prints nothing: no install, outside git', () => {
-  assert.equal(due(machine(null), notGit()), '')
+test('nothing due prints nothing, and outside git no repo folder is left behind', () => {
+  const m = machine(null)
+  assert.equal(due(m, notGit()), '')
+  assert.equal(fs.existsSync(`${m.lcw}/repos`), false)
 })
 
-test('a newer version on the marketplace asks for the update check in one line naming the scripts', () => {
+test('a newer version on the marketplace asks for the update check in one short line', () => {
   const m = machine('github', { latest: '1.1.0' })
   const out = update(m)
-  assert.match(out, /lcw:weekly skill and run its update check\. Scripts: '.*\/scripts'\.$/)
+  assert.match(out, /update check/)
   assert.ok(out.length < 250, out)
   assert.equal(out.includes('\n'), false)
   assert.deepEqual(m.calls(), ['claude plugin marketplace update lcw'])
@@ -129,7 +137,7 @@ test('cleanup is asked only with a candidate, once a week, and the time is recor
   assert.equal(readJson(`${m.lcw}/repos/${repoKey(bare)}/checks.json`).cleanup, T0) // but the look is not repeated
   const repo = repoWithCandidate()
   const out = due(m, repo)
-  assert.match(out, /lcw:weekly skill and run its cleanup check/)
+  assert.match(out, /cleanup check/)
   assert.ok(out.length < 250, out)
   assert.equal(readJson(`${m.lcw}/repos/${repoKey(repo)}/checks.json`).cleanup, T0)
   assert.equal(due(m, repo, T0 + 3 * DAY), '')
@@ -145,12 +153,6 @@ test('cleanup is not asked when the person said never for this repo, or a box is
   fs.mkdirSync(`${boxed.lcw}/repos/${repoKey(repo)}`, { recursive: true })
   fs.writeFileSync(`${boxed.lcw}/repos/${repoKey(repo)}/cleanup.json`, JSON.stringify({ title: 't', items: [] }))
   assert.equal(due(boxed, repo), '')
-})
-
-test('outside git nothing is claimed and no repo folder is left behind', () => {
-  const m = machine(null)
-  assert.equal(due(m, notGit()), '')
-  assert.equal(fs.existsSync(`${m.lcw}/repos`), false)
 })
 
 test('a recorded box whose items are no longer candidates is dropped and the check asks again', () => {

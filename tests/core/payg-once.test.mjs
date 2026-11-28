@@ -31,19 +31,14 @@ const start = ({ home, repo }, input) => new Promise((resolve) => {
 })
 const told = (rs) => rs.filter((r) => NOTE.test(r.out)).length
 
-test('parallel tool-call hooks of one billed-per-token session give the note in exactly one output', async () => {
+test('parallel tool-call and prompt hooks of one billed-per-token session give the note in exactly one output', async () => {
   const f = setup()
-  const rs = await Promise.all(Array.from({ length: 8 }, () => start(f, tool(f.repo))))
-  assert.deepEqual(rs.map((r) => r.code), Array(8).fill(0))
+  const inputs = [prompt(f.repo), tool(f.repo), tool(f.repo), prompt(f.repo), tool(f.repo), tool(f.repo)]
+  const rs = await Promise.all(inputs.map((i) => start(f, i)))
+  assert.deepEqual(rs.map((r) => r.code), Array(6).fill(0))
   assert.equal(told(rs), 1)
   assert.equal(readJson(toldFile(f.home, 's1')).payg, true)
   assert.equal(readJson(sessionFile(f.home, 's1')).toldPayg, true)
-})
-
-test('a prompt racing tool calls gives the note once', async () => {
-  const f = setup()
-  const rs = await Promise.all([prompt(f.repo), tool(f.repo), tool(f.repo), prompt(f.repo)].map((i) => start(f, i)))
-  assert.equal(told(rs), 1)
 })
 
 test('a later tool call and a later prompt give no note', async () => {
@@ -52,12 +47,18 @@ test('a later tool call and a later prompt give no note', async () => {
   assert.equal(told([await start(f, tool(f.repo)), await start(f, prompt(f.repo))]), 0)
 })
 
-test('a told record already there means the note was given', () => {
-  const f = setup()
-  fs.mkdirSync(`${f.home}/told`)
-  fs.writeFileSync(toldFile(f.home, 's1'), JSON.stringify({ payg: true }))
-  assert.doesNotMatch(run(LIMIT_HOOK, [], { home: f.home, cwd: f.repo, env: { LCW_NOW: String(NOW) }, input: tool(f.repo) }).out, NOTE)
-})
+for (const [name, prepare] of [
+  ['a told record', (f) => { fs.mkdirSync(`${f.home}/told`); fs.writeFileSync(toldFile(f.home, 's1'), JSON.stringify({ payg: true })) }],
+  ['toldPayg in the session file', (f) => fs.writeFileSync(sessionFile(f.home, 's1'), JSON.stringify({ billing: 'payg', toldPayg: true }))],
+]) {
+  test(`${name} already there means the note was given`, () => {
+    const f = setup()
+    prepare(f)
+    for (const input of [tool(f.repo), prompt(f.repo)]) {
+      assert.doesNotMatch(run(LIMIT_HOOK, [], { home: f.home, cwd: f.repo, env: { LCW_NOW: String(NOW) }, input }).out, NOTE)
+    }
+  })
+}
 
 test('a call that is one of the LCW commands carries the note once, and a later call does not', () => {
   const f = setup()

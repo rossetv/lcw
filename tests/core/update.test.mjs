@@ -7,49 +7,59 @@ import { updateFile } from '../../lib/key.mjs'
 
 const SCRIPT = new URL('../../scripts/update.mjs', import.meta.url).pathname
 
+// A marketplace clone that is a real git repository (version 0.1.0, then two commits and 0.2.0), built once and copied.
+const template = tmp('update-clone')
+fs.mkdirSync(`${template}/.claude-plugin`)
+const writeVersion = (dir, v) => fs.writeFileSync(`${dir}/.claude-plugin/plugin.json`, JSON.stringify({ name: 'lcw', version: v }))
+git(template, 'init', '-q', '-b', 'main')
+writeVersion(template, '0.1.0')
+git(template, 'add', '.')
+git(template, 'commit', '-q', '-m', 'first')
+const first = git(template, 'rev-parse', 'HEAD')
+fs.writeFileSync(`${template}/a`, 'a')
+git(template, 'add', '.')
+git(template, 'commit', '-q', '-m', 'add the banner')
+writeVersion(template, '0.2.0')
+git(template, 'add', '.')
+git(template, 'commit', '-q', '-m', 'fix the gauge')
+const head = git(template, 'rev-parse', 'HEAD')
+
+// `claude` and `gh` stand-ins, written once: macOS scans each new script the first time it runs, which takes a
+// quarter of a second. What they do, and where they log, comes from the environment of each machine.
+const stubs = tmp('update-stubs')
+const stub = (name, body) => fs.writeFileSync(`${stubs}/${name}`, `#!/bin/sh\necho "${name} $*" >> "$STUB_LOG"\n${body}\n`, { mode: 0o755 })
+stub('claude', `case "$2" in
+  marketplace) [ "$STUB_REFRESH" = fail ] && { echo "network is down" >&2; exit 1; }; exit 0 ;;
+  update)
+    [ "$STUB_UPDATE" = fail ] && { echo "plugin update refused: disk full" >&2; exit 1; }
+    if [ -n "$STUB_UPDATE_TO" ]; then
+      sed -E "s/(version.:.)$STUB_INSTALLED/\\1$STUB_UPDATE_TO/" "$STUB_PLUGINS/installed_plugins.json" > "$STUB_PLUGINS/x" && mv "$STUB_PLUGINS/x" "$STUB_PLUGINS/installed_plugins.json"
+    fi
+    echo "Restart to apply changes"; exit 0 ;;
+esac`)
+stub('gh', '[ -n "$STUB_GH" ] || { echo "gh: not logged in" >&2; exit 1; }\nprintf \'%s\\n\' "$STUB_GH"')
+
 /**
- * A scratch machine: Claude Code's plugin files, a marketplace clone that is a real git repository (version 0.1.0,
- * then two commits and 0.2.0), and `claude` and `gh` stubs first on PATH. Each stub logs its arguments to calls.log.
+ * A scratch machine: Claude Code's plugin files and a copy of the marketplace clone. The stubs log their arguments
+ * to calls.log.
  */
-function machine({ source = { source: 'github', repo: 'o/lcw' }, shallow = false, gh = 'fail', refresh = 'ok', update = 'ok', updateTo = '0.2.0', installed = '0.1.0' } = {}) {
+function machine({ source = { source: 'github', repo: 'o/lcw' }, gh = null, refresh = 'ok', update = 'ok', updateTo = '0.2.0', installed = '0.1.0', shallow = false } = {}) {
   const root = tmp('update')
   const conf = `${root}/claude`
   const clone = `${root}/clone`
-  const bin = `${root}/bin`
   const lcwHome = `${root}/lcw`
-  for (const d of [`${conf}/plugins`, `${clone}/.claude-plugin`, bin]) fs.mkdirSync(d, { recursive: true })
-  const version = (v) => fs.writeFileSync(`${clone}/.claude-plugin/plugin.json`, JSON.stringify({ name: 'lcw', version: v }))
-  git(clone, 'init', '-q', '-b', 'main')
-  version('0.1.0')
-  git(clone, 'add', '.')
-  git(clone, 'commit', '-q', '-m', 'first')
-  const first = git(clone, 'rev-parse', 'HEAD')
-  fs.writeFileSync(`${clone}/a`, 'a')
-  git(clone, 'add', '.')
-  git(clone, 'commit', '-q', '-m', 'add the banner')
-  version('0.2.0')
-  git(clone, 'add', '.')
-  git(clone, 'commit', '-q', '-m', 'fix the gauge')
-  const head = git(clone, 'rev-parse', 'HEAD')
+  fs.mkdirSync(`${conf}/plugins`, { recursive: true })
+  fs.cpSync(template, clone, { recursive: true })
+  const version = (v) => writeVersion(clone, v)
 
   const json = (f, v) => fs.writeFileSync(f, JSON.stringify(v))
   json(`${conf}/plugins/known_marketplaces.json`, { lcw: { source, installLocation: clone } })
   const entry = { version: installed, gitCommitSha: shallow ? 'f'.repeat(40) : first, installPath: `${root}/cache` }
   json(`${conf}/plugins/installed_plugins.json`, { version: 2, plugins: { 'lcw@lcw': [entry] } })
 
-  const stub = (name, body) => fs.writeFileSync(`${bin}/${name}`, `#!/bin/sh\necho "${name} $*" >> "${root}/calls.log"\n${body}\n`, { mode: 0o755 })
-  const bump = updateTo
-    ? `sed 's/"version":"${installed}"/"version":"${updateTo}"/' "${conf}/plugins/installed_plugins.json" > "${conf}/x" && mv "${conf}/x" "${conf}/plugins/installed_plugins.json"; `
-    : ''
-  const updateCmd = update === 'ok' ? `${bump}echo "Restart to apply changes"; exit 0` : 'echo "plugin update refused: disk full" >&2; exit 1'
-  stub('claude', `case "$2" in
-  marketplace) ${refresh === 'ok' ? 'exit 0' : 'echo "network is down" >&2; exit 1'} ;;
-  update) ${updateCmd} ;;
-esac`)
-  stub('gh', gh === 'fail' ? 'echo "gh: not logged in" >&2; exit 1' : `printf '%s\\n' ${gh.map((s) => `'${s}'`).join(' ')}`)
-
+  const stubEnv = { STUB_LOG: `${root}/calls.log`, STUB_REFRESH: refresh, STUB_UPDATE: update, STUB_UPDATE_TO: updateTo || '', STUB_INSTALLED: installed, STUB_PLUGINS: `${conf}/plugins`, STUB_GH: gh ? gh.join('\n') : '' }
   const run = (...args) => {
-    const env = { ...process.env, CLAUDE_CONFIG_DIR: conf, LCW_HOME: lcwHome, PATH: `${bin}:${process.env.PATH}` }
+    const env = { ...process.env, ...stubEnv, CLAUDE_CONFIG_DIR: conf, LCW_HOME: lcwHome, PATH: `${stubs}:${process.env.PATH}` }
     const r = spawnSync('node', [SCRIPT, ...args], { env, encoding: 'utf8' })
     return { code: r.status, out: r.stdout, err: r.stderr }
   }
