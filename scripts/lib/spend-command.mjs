@@ -72,6 +72,9 @@ export function runCommand(command, { timeoutMs = 30000 } = {}) {
     // it would have ended without the handler. The handlers are gone once the run settles.
     const handlers = SIGNALS.map((sig) => [sig, () => { killGroup(); unhook(); process.kill(process.pid, sig) }])
     const unhook = () => { for (const [sig, fn] of handlers) process.removeListener(sig, fn) }
+    // Hooked before the spawn: a signal in the instant after it must not meet the default action and leave the group behind.
+    // The handlers run on the event loop, after this setup, so `child` and `killGroup` exist by then.
+    for (const [sig, fn] of handlers) process.on(sig, fn)
     let child
     try {
       child = spawn(command, {
@@ -91,7 +94,6 @@ export function runCommand(command, { timeoutMs = 30000 } = {}) {
       })
       return () => Buffer.concat(chunks).subarray(0, KEEP_BYTES).toString('utf8')
     }
-    for (const [sig, fn] of handlers) process.on(sig, fn)
     const out = keep(child.stdout)
     const err = keep(child.stderr)
     const killGroup = () => {
