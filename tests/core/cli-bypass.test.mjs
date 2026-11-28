@@ -55,7 +55,7 @@ test('a process refusal names --bypass, and with a reason the command goes ahead
   const r = await t.cli('wave', 'round', '--bypass', 'the review ran early by hand')
   assert.equal(r.code, 0, r.out)
   assert.equal(t.wave().round, 1)
-  const line = /BYPASS, not standard LCW: the review ran early by hand; went past: /
+  const line = /BYPASS, not standard LCW: the review ran early by hand; went past: .*wave 1.*Plan.*review round.*Review/i
   assert.match(r.out, line)
   assert.match(t.ledger(), line)
   assert.match(t.waveLedger(), line)
@@ -83,19 +83,6 @@ test('a command that goes past a process refusal and then cannot work writes no 
   assert.doesNotMatch(t.ledger(), BYPASS)
 })
 
-test('a hard refusal comes before a process one, so it never names --bypass', async () => {
-  const t = await planning()
-  commit(t.wt, 'b.txt')
-  await t.cli('req', 'add', 'R2', 'the 409')
-  for (const flags of [[], ['--bypass', 'want it anyway']]) {
-    const r = await t.cli('wave', 'shipped', ...flags)
-    assert.equal(r.code, 1)
-    assert.match(r.out, /cannot ship with R2 todo/)
-    assert.doesNotMatch(r.out, /--bypass/)
-  }
-  assert.equal(t.wave().status, 'running')
-})
-
 test('final checks start past a running task with --bypass', async () => {
   const t = await planning()
   await t.cli('stage', 'Ship')
@@ -107,35 +94,51 @@ test('final checks start past a running task with --bypass', async () => {
   assert.equal(t.wave().step, 'final checks')
 })
 
-test('the refusals LCW keeps hard do not give way to --bypass', async () => {
-  const t = await planning()
-  await t.cli('task', 'add', 'T1', 'fix it')
-  await t.cli('task', 'T1', 'running')
-  await t.cli('req', 'add', 'R1', 'the 409')
-  await t.cli('req', 'R1', 'park')
-  const cases = [
-    ['set', 'markPercent=95'], // the usage mark moves only on the person's words
-    ['merge', '1'], // the charter chose no merging as it goes
-    // a worker may be committing to the wave
-    ['wave', 'take'], ['wave', 'shipped'],
-    ['req', 'R1', 'pass'], // the sweep counts it parked
+test('refusals that are hard, or that come first, never give way to --bypass, name it, or write a bypass', async () => {
+  const hard = [
+    {
+      name: 'a hard refusal comes before a process one',
+      setup: async (t) => { commit(t.wt, 'b.txt'); await t.cli('req', 'add', 'R2', 'the 409') },
+      calls: [['wave', 'shipped'], ['wave', 'shipped', '--bypass', 'want it anyway']],
+      reason: /cannot ship with R2 todo/,
+      after: (t) => assert.equal(t.wave().status, 'running'),
+    },
+    {
+      name: 'what LCW keeps hard',
+      setup: async (t) => {
+        await t.cli('task', 'add', 'T1', 'fix it')
+        await t.cli('task', 'T1', 'running')
+        await t.cli('req', 'add', 'R1', 'the 409')
+        await t.cli('req', 'R1', 'park')
+      },
+      calls: [
+        ['set', 'markPercent=95'], // the usage mark moves only on the person's words
+        ['merge', '1'], // the charter chose no merging as it goes
+        ['wave', 'take'], ['wave', 'shipped'], // a worker may be committing to the wave
+        ['req', 'R1', 'pass'], // the sweep counts it parked
+      ].map((c) => [...c, '--bypass', 'want it anyway']),
+      after: (t) => {
+        assert.equal(t.state().sweep.parked, 1)
+        assert.equal(t.wave().status, 'running')
+      },
+    },
+    {
+      name: "a shipped wave's lists, whose fixes the sweep has counted",
+      shipped: true,
+      calls: [['task', 'add', 'T9', 'late'], ['req', 'add', 'R9', 'late']].map((c) => [...c, '--wave', '1', '--bypass', 'want it anyway']),
+    },
   ]
-  for (const c of cases) {
-    const r = await t.cli(...c, '--bypass', 'want it anyway')
-    assert.equal(r.code, 1, c.join(' '))
-    assert.doesNotMatch(r.out, /--bypass/, c.join(' '))
-  }
-  assert.doesNotMatch(t.ledger(), BYPASS)
-  assert.equal(t.state().sweep.parked, 1)
-  assert.equal(t.wave().status, 'running')
-})
-
-test('a shipped wave\'s lists, whose fixes the sweep has counted, do not give way to --bypass', async () => {
-  const t = await shipped()
-  for (const c of [['task', 'add', 'T9', 'late'], ['req', 'add', 'R9', 'late']]) {
-    const r = await t.cli(...c, '--wave', '1', '--bypass', 'want it anyway')
-    assert.equal(r.code, 1, c.join(' '))
-    assert.doesNotMatch(r.out, /--bypass/)
+  for (const { name, setup, shipped: ship, calls, reason, after } of hard) {
+    const t = ship ? await shipped() : await planning()
+    await setup?.(t)
+    for (const c of calls) {
+      const r = await t.cli(...c)
+      assert.equal(r.code, 1, `${name}: ${c.join(' ')}`)
+      if (reason) assert.match(r.out, reason, name)
+      assert.doesNotMatch(r.out, /--bypass/, `${name}: ${c.join(' ')}`)
+    }
+    assert.doesNotMatch(t.ledger(), BYPASS, name)
+    after?.(t)
   }
 })
 
