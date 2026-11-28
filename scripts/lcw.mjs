@@ -2038,7 +2038,7 @@ export async function main(argv, { cwd: dir = process.cwd(), env = process.env }
   if (env !== process.env) putEnv(env)
   try {
     process.chdir(dir)
-    const code = await exec(argv, dir)
+    const code = await exec(argv, process.cwd())
     return { code, out: chunks.join('') }
   } finally {
     print = console.log
