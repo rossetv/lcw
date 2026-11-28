@@ -21,12 +21,12 @@ const fixture = sampleP4 && { ...sampleP4, cwd: tmp('cwd') }
 
 /** One draw of the status line for `input`, in this process. */
 async function line(input, { home = tmp('home'), env = {} } = {}) {
-  return { out: await drawIn(ROOT, input, { ...process.env, LCW_HOME: home, COLUMNS: '120', ...env }), home }
+  return { out: await drawIn(ROOT, input, { PATH: process.env.PATH, HOME: home, LCW_HOME: home, COLUMNS: '120', ...env }), home }
 }
 
 /** The program itself, as Claude Code starts it: the input on stdin, the rows on stdout. */
 function program(input, home) {
-  const r = spawnSync('node', [LINE], { input, encoding: 'utf8', env: { ...process.env, LCW_HOME: home, COLUMNS: '120' } })
+  const r = spawnSync('node', [LINE], { input, encoding: 'utf8', env: { PATH: process.env.PATH, HOME: home, LCW_HOME: home, COLUMNS: '120' } })
   return { code: r.status, out: r.stdout }
 }
 
