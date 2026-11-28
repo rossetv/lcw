@@ -1069,10 +1069,14 @@ const commands = {
       const queued = w.waves.filter((x) => x.status === 'queued')
       if (queued.length) block(`${queued.length > 1 ? `Waves ${queued.map((x) => x.n).join(', ')} are` : `Wave ${queued[0].n} is`} already queued, and waves are added once none is. A fix found since whose files are free joins wave ${queued[0].n} in findings.md, so that it can start (lcw wave start); once it has started, lcw wave add queues the rest. Nothing was changed.`)
       const first = w.waves.length + 1
+      // the number of the wave it would make, given where its size goes, is a wave number, not a count of fixes
+      const numbered = sizes.length === 1 && first >= 10 && sizes[0] === first
+      if (numbered) sizes[0] = 1
       change(run, `waves queued: ${sizes.map((f, i) => `${first + i} (${f} fixes)`).join(', ')}`, (st) => {
         sizes.forEach((fixes, i) => st.sweep.waves.push({ n: first + i, fixes, status: 'queued', branch: null, pr: null, merged: false, dropped: 0 }))
       })
-      return out(`queued waves ${first}${sizes.length > 1 ? `-${first + sizes.length - 1}` : ''}`)
+      const note = numbered ? [`lcw wave add takes how many fixes each wave holds, not its number, so wave ${first} is queued with 1 fix; its count grows with the fixes recorded in it (lcw req add).`] : []
+      return out(`queued waves ${first}${sizes.length > 1 ? `-${first + sizes.length - 1}` : ''}`, ...note)
     }
     if (sub === 'start') {
       if (!s.branch) fail('The sweep has no branch yet: run lcw worktree first. Nothing was changed.')
