@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawn } from 'node:child_process'
 import { tmp, makeRepo, git, cli, CLI } from './helpers.mjs'
-import { fakeGh, shippedWaves, checks, waiting } from './sweep-kit.mjs'
+import { sweep, fakeGh, shippedWaves, checks, waiting } from './sweep-kit.mjs'
 
 test('merge readies a draft, merges it with a merge commit on the GitHub remote, and records it', async () => {
   const t = await shippedWaves()
@@ -356,4 +356,55 @@ test('a merge GitHub refuses puts the pull request it readied back to draft, and
   const open = fakeGh({ GH_FAIL: 'pr merge', GH_DRAFT: 'false' })
   assert.equal((await cli(['merge', '1'], { ...t.o, env: open.env })).code, 1)
   assert.ok(!open.calls().some((c) => c.startsWith('pr ready')), open.calls().join('\n'))
+})
+
+test('merge of a pull request GitHub closed unmerged says to open a new one first, and to open it again only while its base branch exists', async () => {
+  const t = await shippedWaves()
+  const r = await cli(['merge', '1'], { ...t.o, env: fakeGh({ GH_STATE: 'CLOSED', GH_BASE: 'lcw/tidy' }).env })
+  assert.equal(r.code, 1)
+  assert.match(r.out, /closed without being merged/)
+  assert.match(r.out, /lcw wave pr 1 <number>/, 'a new pull request is recorded on the wave')
+  assert.match(r.out, /base branch lcw\/tidy still exists.*reopen #12/, 'the old one is reopened only while its base exists')
+  assert.match(r.out, /lcw merge 1 again/)
+  assert.doesNotMatch(r.out, /retarget/)
+  assert.equal(t.state().sweep.waves[0].merged, false)
+})
+
+test('merge given a pull request number says it takes a wave number, and names the wave that has that pull request', async () => {
+  const t = await shippedWaves()
+  const gh = fakeGh()
+  const hit = await cli(['merge', '13'], { ...t.o, env: gh.env })
+  assert.equal(hit.code, 1)
+  assert.match(hit.out, /takes a wave number/)
+  assert.match(hit.out, /13.*wave 2.*lcw merge 2/, 'it names the wave that has that pull request')
+  const miss = await cli(['merge', '99'], { ...t.o, env: gh.env })
+  assert.match(miss.out, /No wave 99.*1, 2/s)
+  assert.doesNotMatch(miss.out, /pull request number|is wave/)
+  t.edit((s) => s.sweep.waves.push({ n: 3, fixes: 1, status: 'shipped', branch: 'lcw/tidy-wave-3', pr: null, empty: true, dropped: 1, fixed: 0 }))
+  assert.doesNotMatch((await cli(['merge', '0'], { ...t.o, env: gh.env })).out, /is wave/, 'a wave with no pull request has none numbered 0')
+  assert.deepEqual(gh.calls(), [])
+})
+
+test('merge of a number that is neither a wave nor a wave\'s pull request says there is no such wave and lists the waves', async () => {
+  const t = await sweep()
+  await t.cli('set', 'sweep.prs=merged')
+  const r = await t.cli('merge', '4')
+  assert.equal(r.code, 1)
+  assert.match(r.out, /No wave 4.*no waves/s)
+})
+
+test('merge --wait on a pull request GitHub closed unmerged says so at once and never waits for checks', async () => {
+  const t = await shippedWaves()
+  const gh = fakeGh({ GH_STATE: 'CLOSED', GH_BASE: 'main', GH_CHECKS: 'pending', LCW_CHECKS_MINUTE_MS: '5000' })
+  const r = await cli(['merge', '1', '--wait', '5'], { ...t.o, env: gh.env })
+  assert.equal(r.code, 1)
+  assert.match(r.out, /closed without being merged/)
+  assert.doesNotMatch(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /waiting up to/)
+})
+
+test('a merge GitHub refuses says so when the pull request could not be put back to draft', async () => {
+  const t = await shippedWaves()
+  const r = await cli(['merge', '1'], { ...t.o, env: fakeGh({ GH_FAIL: 'pr merge', GH_UNDO_FAIL: '1' }).env })
+  assert.equal(r.code, 1)
+  assert.match(r.out, /still marked ready/)
 })

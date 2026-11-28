@@ -1,9 +1,11 @@
 import test, { after } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
-import { tmp, readJson, begin, fakeClaude, CLI } from './helpers.mjs'
+import { tmp, readJson, begin, fakeClaude, cli, CLI } from './helpers.mjs'
+import { hunting } from './sweep-kit.mjs'
 import { othersHold, canHold, startHold, keptHold, releaseHold, inWsl } from '../../scripts/lib/awake.mjs'
 
 // What `pmset -g assertions` printed on a Mac: macOS's own holders, Claude Code's 5-minute caffeinate holds, Amphetamine.
@@ -165,4 +167,19 @@ for (const [name, stub] of [['a live hold', null], ['a hold when ps itself fails
 test('WSL cannot hold off the computer\'s sleep', { skip: process.platform === 'win32' }, () => {
   assert.equal(canHold('linux', { WSL_DISTRO_NAME: 'Ubuntu' }), false)
   assert.equal(canHold('darwin', { WSL_DISTRO_NAME: 'Ubuntu' }), process.platform === 'darwin')
+})
+
+test('awake on WSL says WSL cannot keep Windows awake', async () => {
+  const t = await hunting()
+  const env = { PATH: tmp('bin') + ':' + path.dirname(process.execPath) } // node only: no caffeinate or systemd-inhibit
+  const wsl = await cli(['awake'], { ...t.o, env: { ...env, WSL_DISTRO_NAME: 'Ubuntu' } })
+  assert.equal(wsl.code, 1)
+  assert.match(wsl.out, /WSL/)
+})
+
+test('awake outside WSL names the programs', { skip: (() => { try { return /microsoft/i.test(fs.readFileSync('/proc/version', 'utf8')) && 'this machine is WSL: /proc/version says so whatever the environment' } catch { return false } })() }, async () => {
+  const t = await hunting()
+  const env = { PATH: tmp('bin') + ':' + path.dirname(process.execPath) }
+  const plain = await cli(['awake'], { ...t.o, env: { ...env, WSL_DISTRO_NAME: '' } })
+  assert.match(plain.out, /caffeinate.*systemd-inhibit/)
 })

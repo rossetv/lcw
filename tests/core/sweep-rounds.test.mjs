@@ -392,13 +392,6 @@ test('wave pr is refused under one pull request at the end', async () => {
   assert.equal(t.state().sweep.waves[0].pr, null)
 })
 
-test('a merge GitHub refuses says so when the pull request could not be put back to draft', async () => {
-  const t = await shippedWaves()
-  const r = await cli(['merge', '1'], { ...t.o, env: fakeGh({ GH_FAIL: 'pr merge', GH_UNDO_FAIL: '1' }).env })
-  assert.equal(r.code, 1)
-  assert.match(r.out, /still marked ready/)
-})
-
 test('stage Charter in Charter changes nothing, so an approval already asked stays', async () => {
   const t = await sweep()
   await t.cli('approval')
