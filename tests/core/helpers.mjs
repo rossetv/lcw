@@ -25,12 +25,21 @@ export function git(cwd, ...args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, ...gitEnv } }).trim()
 }
 
+let template = null
+
+/** A repository of its own on main with a.txt committed: a copy of one made once for this test process. */
 export function makeRepo() {
+  if (!template) {
+    template = tmp('repo-template')
+    git(template, 'init', '-q', '-b', 'main')
+    fs.writeFileSync(`${template}/a.txt`, 'one\n')
+    git(template, 'add', '.')
+    git(template, 'commit', '-q', '-m', 'init')
+  }
   const dir = tmp('repo')
-  git(dir, 'init', '-q', '-b', 'main')
-  fs.writeFileSync(`${dir}/a.txt`, 'one\n')
-  git(dir, 'add', '.')
-  git(dir, 'commit', '-q', '-m', 'init')
+  fs.cpSync(template, dir, { recursive: true })
+  // the copied index holds the template's file stats, which git would otherwise report as changed
+  git(dir, 'update-index', '-q', '--refresh')
   return dir
 }
 
