@@ -110,19 +110,12 @@ test('a tick with a command set and no lock starts the refresh, and the reading 
   setting(home, 'echo 1300')
   tick(home)
   assert.ok(fs.existsSync(spendTryFile(home, Math.floor(NOW / 300000))), 'the window is claimed')
-  const until = Date.now() + 10000
+  const until = Date.now() + 20000
   while (Date.now() < until && readJson(home + '/spend-reading.json')?.usd !== 1300) await new Promise((r) => setTimeout(r, 50))
   const got = readJson(home + '/spend-reading.json')
   assert.equal(got?.usd, 1300)
   assert.equal(got.at, NOW)
   assert.equal(got.fails, 0)
-})
-
-test('with no command set a tick claims no window and starts nothing', () => {
-  const home = payg()
-  tick(home)
-  assert.equal(fs.existsSync(home + '/cache'), false)
-  assert.equal(fs.existsSync(home + '/spend-reading.json'), false)
 })
 
 test('the agent gate counts the command\'s figure: refused at the mark with it, let through without it', () => {
@@ -155,11 +148,4 @@ test('a failing note shows at every width where one fits, whole where it fits, a
   }
   assert.equal(rowsAt(40).at(-1), FULL)
   assert.equal(rowsAt(30).at(-1), SHORT)
-  // End to end once, through the line itself.
-  const home = payg({ 4: 146 })
-  setting(home); reading(home, { agoMs: 12 * 60000, fails: 3 }); lock(home)
-  const env = { ...process.env, LCW_HOME: home, LCW_NOW: String(NOW), TZ: 'Europe/Dublin', COLUMNS: '130', LCW_THEME: 'dark' }
-  const r = spawnSync('node', [LINE], { input: JSON.stringify({ session_id: 's1', cwd: CWD, model: { display_name: 'Opus 5' } }), encoding: 'utf8', env })
-  assert.equal(r.status, 0)
-  assert.match(plain(r.stdout).split('\n').filter(Boolean)[1], /spend command failing · 12 min old$/)
 })

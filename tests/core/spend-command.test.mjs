@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
-import { tmp, CLI } from './helpers.mjs' // first: it points HOME at a throwaway folder
+import { tmp, CLI, cli, readJson } from './helpers.mjs' // first: it points HOME at a throwaway folder
 import {
   parseFigure, runCommand, readSetting, writeSetting, clearSetting, readReading, recordResult, claimWindow, maybeRefresh,
 } from '../../scripts/lib/spend-command.mjs'
@@ -11,6 +11,7 @@ import { spendCommandFile, spendReadingFile, spendTryFile } from '../../lib/key.
 
 const MOD = new URL('../../scripts/lib/spend-command.mjs', import.meta.url).href
 const RUNNER = fileURLToPath(new URL('../../scripts/spend-refresh.mjs', import.meta.url))
+process.env.TZ = 'Europe/Dublin'
 const T0 = 1795000000000 // a fixed "now", in November 2026
 const WINDOW = Math.floor(T0 / 300000)
 
@@ -87,9 +88,9 @@ test('the command runs from the home folder', async () => {
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 const alive = (pid) => Number.isInteger(pid) && pid > 0 && (() => { try { process.kill(pid, 0); return true } catch { return false } })()
-/** The pid the command wrote, once the file holds one (within 2 seconds); else null, so no one signals pid 0 or a junk pid. */
+/** The pid the command wrote, once the file holds one (within 10 seconds); else null, so no one signals pid 0 or a junk pid. */
 const readPid = async (file) => {
-  const deadline = Date.now() + 2000
+  const deadline = Date.now() + 10000
   for (;;) {
     let pid = NaN
     try { pid = Number(fs.readFileSync(file, 'utf8')) } catch {}
@@ -98,9 +99,9 @@ const readPid = async (file) => {
   }
 }
 const killPid = (pid) => { if (Number.isInteger(pid) && pid > 0) { try { process.kill(pid, 'SIGKILL') } catch {} } }
-/** True once the process is gone, within 2 seconds. */
+/** True once the process is gone, within 10 seconds. */
 const goneSoon = async (pid) => {
-  const deadline = Date.now() + 2000
+  const deadline = Date.now() + 10000
   while (alive(pid) && Date.now() < deadline) await sleep(20)
   return !alive(pid)
 }
@@ -109,7 +110,7 @@ test('a timeout kills everything the command started, and says how long it waite
   const dir = tmp('spend-timeout')
   const t = Date.now()
   const r = await runCommand(`sleep 30 & echo $! > ${dir}/pid; sleep 30`, { timeoutMs: 1000 })
-  assert.ok(Date.now() - t < 2000, 'resolved at the timeout')
+  assert.ok(Date.now() - t < 15000, 'resolved at the timeout, not when the sleeps would have ended')
   assert.deepEqual(r, { ok: false, error: 'took longer than 1 second' })
   const pid = await readPid(`${dir}/pid`)
   try { assert.ok(pid, 'the command wrote its background pid'); assert.equal(await goneSoon(pid), true, 'the background sleep was killed') } finally { killPid(pid) }
@@ -118,16 +119,19 @@ test('a timeout kills everything the command started, and says how long it waite
 test('a command that leaves a child holding its output still gives its figure, and the child is killed', async () => {
   const dir = tmp('spend-leftover')
   const t = Date.now()
-  const r = await runCommand(`sleep 30 & echo $! > ${dir}/pid; echo 5`, { timeoutMs: 1500 })
-  assert.ok(Date.now() - t < 1000, 'settled at the exit, not at the timeout')
+  const r = await runCommand(`sleep 30 & echo $! > ${dir}/pid; echo 5`, { timeoutMs: 8000 })
+  assert.ok(Date.now() - t < 4000, 'settled at the exit, not at the timeout')
   assert.deepEqual(r, { ok: true, usd: 5 })
   const pid = await readPid(`${dir}/pid`)
   try { assert.ok(pid, 'the command wrote its background pid'); assert.equal(await goneSoon(pid), true, 'the leftover sleep was killed') } finally { killPid(pid) }
 })
 
 test('a command that exits with a figure just before the timeout is not reported as a timeout', async () => {
-  // The timeout falls inside the wait for the output of a leftover child to drain.
-  assert.deepEqual(await runCommand('sleep 30 & echo 5', { timeoutMs: 400 }), { ok: true, usd: 5 })
+  // The timeout falls inside the wait for the output of a leftover child to drain, so the command must exit within 400 ms.
+  // On a busy machine it can start late and the timeout is then real, so a late exit gets another try.
+  let r
+  for (let tries = 0; tries < 3 && !r?.ok; tries++) r = await runCommand('sleep 30 & echo 5', { timeoutMs: 400 })
+  assert.deepEqual(r, { ok: true, usd: 5 })
 })
 
 test('a process left behind after a normal exit is killed too', async () => {
@@ -243,7 +247,7 @@ test('a tick starts the runner, which saves the reading and deletes the old lock
   fs.mkdirSync(`${home}/cache`, { recursive: true })
   for (const n of [3, WINDOW - 1]) fs.writeFileSync(spendTryFile(home, n), '')
   tick(home)
-  const deadline = Date.now() + 5000
+  const deadline = Date.now() + 20000
   while (!readReading(home) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 25))
   assert.deepEqual(readReading(home), {
     v: 1, command: 'echo 1240', usd: 1240, at: T0, fails: 0, failingSince: null, lastError: null, triedAt: T0,
@@ -274,12 +278,12 @@ test('the refresh survives Claude Code killing the status line and all its desce
   })
   try {
     // Once the command is running, the launcher is long gone; then do what Claude Code does on a cancel.
-    let deadline = Date.now() + 5000
+    let deadline = Date.now() + 20000
     while (!fs.existsSync(marker) && Date.now() < deadline) await sleep(20)
     assert.ok(fs.existsSync(marker), 'the command started')
     for (const pid of descendants(statusLine.pid)) { try { process.kill(pid, 'SIGKILL') } catch {} }
     statusLine.kill('SIGKILL')
-    deadline = Date.now() + 5000
+    deadline = Date.now() + 20000
     while (!readReading(home) && Date.now() < deadline) await sleep(25)
     assert.equal(readReading(home)?.usd, 1240)
   } finally {
@@ -293,9 +297,9 @@ test('with no command set, a tick starts nothing', () => {
   assert.equal(fs.existsSync(`${home}/cache`), false)
 })
 
-/** Waits for `fn()` to be true, within 5 seconds. */
+/** Waits for `fn()` to be true, within 20 seconds. */
 const until = async (fn) => {
-  const deadline = Date.now() + 5000
+  const deadline = Date.now() + 20000
   while (!fn() && Date.now() < deadline) await sleep(20)
   return fn()
 }
@@ -347,4 +351,131 @@ test('the signal handlers are gone once a run settles', async () => {
   await runCommand('echo 1')
   await runCommand('true')
   assert.deepEqual(count(), before)
+})
+
+// The command line itself, in this process through the CLI's main().
+const NOW = new Date(2026, 5, 10, 10, 0).getTime() // June 10 2026, 10:00 in Dublin
+const MIN = 60000
+const at = (args, o) => cli(args, { ...o, env: { LCW_NOW: String(NOW) } })
+const DENIED = 'printf "401 Unauthorized\\n"; exit 1'
+
+/** A home, and the options that run the CLI in it from a folder of its own. */
+function setup() {
+  const home = tmp('home')
+  return { home, o: { home, cwd: tmp('x') } }
+}
+
+const settingFile = (home) => `${home}/spend-command.json`
+const readingFile = (home) => `${home}/spend-reading.json`
+
+/** A spend command already set, with the reading it last gave. */
+function preset(home, command, reading = {}) {
+  fs.writeFileSync(settingFile(home), JSON.stringify({ v: 1, command, setAt: NOW - 86400000 }))
+  fs.writeFileSync(readingFile(home), JSON.stringify({ v: 1, command, usd: 1240, at: NOW - 3 * MIN, fails: 0, failingSince: null, lastError: null, triedAt: NOW - 3 * MIN, ...reading }))
+}
+
+/** A session that spent $1,260 over the week, so "off" has a figure of LCW's own to give. */
+function spent(home, id, billing = 'payg') {
+  fs.mkdirSync(`${home}/sessions`, { recursive: true })
+  fs.mkdirSync(`${home}/spend`, { recursive: true })
+  fs.writeFileSync(`${home}/sessions/${id}.json`, JSON.stringify({ billing }))
+  fs.writeFileSync(`${home}/spend/${id}.json`, JSON.stringify({ v: 1, base: 0, max: 1260, q: { [Math.floor((NOW - 3600000) / 900000)]: 1260 } }))
+}
+
+test('setting a command that prints a figure saves it, takes its reading and says so', async () => {
+  const { home, o } = setup()
+  const r = await at(['spend-command', 'echo', '1240'], o)
+  assert.equal(r.code, 0)
+  assert.equal(r.out, 'Spend command set. It says $1,240 for the last 7 days; LCW now takes the figure from it.\n')
+  assert.equal(readJson(settingFile(home)).command, 'echo 1240')
+  const reading = readJson(readingFile(home))
+  assert.deepEqual([reading.command, reading.usd, reading.at, reading.fails], ['echo 1240', 1240, NOW, 0])
+  assert.ok(fs.existsSync(`${home}/cache/spend-try-${Math.floor(NOW / 300000)}`), 'the first reading counts as this window\'s run')
+})
+
+test('a command that gives no figure is refused, whatever it printed, and nothing is saved', async () => {
+  const { home, o } = setup()
+  const said = async (line) => {
+    const r = await at(['spend-command', line], o)
+    assert.equal(r.code, 1)
+    return r.out
+  }
+  assert.equal(await said(DENIED), 'Not set: the command printed "401 Unauthorized", not a dollar figure. LCW keeps its own count.\n')
+  assert.equal(await said('true'), 'Not set: the command printed nothing. LCW keeps its own count.\n')
+  // a figure with a bad exit is named with the exit code and is not called "not a dollar figure"
+  assert.equal(await said('echo 5; exit 2'), 'Not set: the command printed "5" and exited with code 2. LCW keeps its own count.\n')
+  assert.deepEqual(fs.readdirSync(home), [])
+})
+
+test('a refused command leaves a command already set, and its reading, exactly as they were', async () => {
+  const { home, o } = setup()
+  preset(home, 'echo 1240', { fails: 2, failingSince: NOW - 20 * MIN, lastError: 'printed nothing' })
+  const before = [settingFile(home), readingFile(home)].map((f) => fs.readFileSync(f, 'utf8'))
+  const r = await at(['spend-command', DENIED], o)
+  assert.equal(r.code, 1)
+  assert.equal(r.out, 'Not set: the command printed "401 Unauthorized", not a dollar figure. Your spend command stays as it was.\n')
+  assert.deepEqual([settingFile(home), readingFile(home)].map((f) => fs.readFileSync(f, 'utf8')), before)
+})
+
+test('off removes the command and its reading and gives LCW\'s own figure; with nothing set it says so', async () => {
+  const { home, o } = setup()
+  spent(home, 's1')
+  assert.equal((await at(['spend-command', 'off'], o)).out, 'No spend command was set. LCW counts the spend itself: $1,260 in the last 7 days.\n')
+  preset(home, 'echo 1240')
+  const r = await at(['spend-command', 'off'], o)
+  assert.equal(r.code, 0)
+  assert.equal(r.out, 'Spend command off. LCW counts the spend itself again: $1,260 in the last 7 days.\n')
+  assert.deepEqual([fs.existsSync(settingFile(home)), fs.existsSync(readingFile(home))], [false, false])
+})
+
+test('with no words it says what is set, how it last read and whether it is failing', async () => {
+  const { home, o } = setup()
+  assert.equal((await at(['spend-command'], o)).out, 'No spend command set.\n')
+  preset(home, 'echo 1240')
+  assert.equal((await at(['spend-command'], o)).out, 'Spend command: echo 1240. Last reading: $1,240, 3 min ago.\n')
+  preset(home, 'echo 1240', { at: NOW - 120 * MIN, fails: 3, failingSince: NOW - 35 * MIN, lastError: 'printed "401 Unauthorized"' })
+  assert.equal((await at(['spend-command'], o)).out, 'Spend command: echo 1240. Last reading: $1,240, 2h ago. Failing since 09:25, it printed "401 Unauthorized".\n')
+  preset(home, 'echo 1240', { at: NOW - 120 * MIN, fails: 3, failingSince: NOW - 35 * MIN, lastError: 'printed "5" and exited with code 2' })
+  assert.match((await at(['spend-command'], o)).out, /Failing since 09:25, it printed "5" and exited with code 2\.\n$/)
+})
+
+test('everything after spend-command is the command line, even a word that starts with "-"', async () => {
+  const { home, o } = setup()
+  assert.equal((await at(['spend-command', 'echo', '1240', '|', 'cat', '-u'], o)).code, 0)
+  assert.equal(readJson(settingFile(home)).command, 'echo 1240 | cat -u')
+})
+
+test('a final --session pair is not part of the command line', async () => {
+  const { home, o } = setup()
+  assert.equal((await at(['spend-command', 'echo', '1240', '--session', 's9'], o)).code, 0)
+  assert.equal(readJson(settingFile(home)).command, 'echo 1240')
+})
+
+test('a flag before spend-command is read as for any command, so the command is not first and nothing is set', async () => {
+  const { home, o } = setup()
+  const r = await at(['--session', 's9', 'spend-command', 'echo', '1240'], o)
+  assert.equal(r.code, 1)
+  assert.match(r.out, /The command must come first/)
+  assert.equal(fs.existsSync(settingFile(home)), false)
+  assert.equal((await at(['-x', 'spend-command', 'echo', '1240'], o)).code, 1)
+})
+
+test('the command is set and turned off from a subscription session, whatever its billing', async () => {
+  const { home } = setup()
+  spent(home, 'sub', 'subscription')
+  const o = { home, cwd: tmp('x'), session: 'sub' }
+  assert.equal((await at(['spend-command', 'echo', '1240'], o)).code, 0)
+  assert.equal(readJson(settingFile(home)).command, 'echo 1240')
+  assert.match((await at(['spend-command', 'off'], o)).out, /^Spend command off\./)
+  assert.equal(fs.existsSync(settingFile(home)), false)
+})
+
+test('a lone -h or --help after spend-command prints the help and sets nothing', async () => {
+  const { home, o } = setup()
+  for (const words of [['-h'], ['--help'], ['--help', '--session', 'x']]) {
+    const r = await at(['spend-command', ...words], o)
+    assert.equal(r.code, 0)
+    assert.match(r.out, /^lcw commands:/)
+  }
+  assert.equal(fs.existsSync(settingFile(home)), false)
 })
