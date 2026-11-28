@@ -14,6 +14,7 @@ case "$1 $2" in
   "pr view") echo '{"state":"OPEN","isDraft":true,"baseRefName":"main","headRefOid":"abc123"}';;
   "repo view") echo '{"defaultBranchRef":{"name":"main"}}';;
   "pr list") echo '[]';;
+  "pr checks") echo '[{"name":"ci","bucket":"fail"}]';;
 esac
 `
 
@@ -36,7 +37,7 @@ const leftAlone = (w) => {
 }
 const sweep = ['start', 'tidy', '--title', 'Tidy the backlog', '--shape', 'sweep']
 
-// a call is its arguments, { args, session }, or a change to the files made between calls; ID stands for the run's id
+// a call is its arguments, { args, session, cwd }, where cwd gives the folder it runs in from the world's folders, or a change to the files made between calls; ID stands for the run's id
 const families = [
   ['help and argument errors', [[], ['help'], ['nonsense'], ['status', '--frob'], ['--session'], ['ledger', '-x'], ['status', '--bypass', ' '], ['status']]],
   ['run', [['start', 'demo', '--title', 'Demo run'], ['status'], ['stage', 'Spec'], ['task', 'add', 'T1', 'Build it'], ['task', 'T1', 'nope'], ['ledger', 'picked', 'it'],
@@ -46,6 +47,18 @@ const families = [
   ['merge', [sweep, ['merge', '1'], ['set', 'sweep.prs=merged'],
     (w) => editState(w, (s) => { s.sweep.waves = [1, 2].map((n) => ({ n, fixes: 1, status: 'shipped', branch: `lcw/tidy-wave-${n}`, pr: 11 + n, merged: false, dropped: 0, fixed: 1 })) }),
     ['merge', '1'], ['merge', '1'], ['merge', '2', '--wait', '0'], ['status']]],
+  // a refusal passed with --bypass in a call that changes nothing must not be written to the ledger by a later call
+  ['a bypass is not carried into later calls', [sweep, ['worktree'], ['wave', 'add', '1'], ['wave', 'start'], ['wave', 'step', 'merging', '--bypass', 'by hand'],
+    ['wave', 'step', 'merging', '--bypass', 'by hand'], ['wave', 'step', 'none'], ['status']]],
+  // a wait noted by one call must not be taken for the next call's: it ends on a paused run, having never begun
+  ['a wait is not carried into later calls', [sweep, ['set', 'sweep.prs=merged'],
+    (w) => editState(w, (s) => { s.sweep.waves = [{ n: 1, fixes: 1, status: 'shipped', branch: 'lcw/tidy-wave-1', pr: 12, merged: false, dropped: 0, fixed: 1 }] }),
+    ['merge', '1', '--wait', '1'], (w) => editState(w, (s) => { s.sweep.waves[0].merged = true; s.status = 'paused' }), ['merge', '1', '--wait', '1']]],
+  // abandon asks where the call runs: a path through a symlink, or a relative one, must read as the program's does
+  ['working folders: a symlink and a relative path', [['start', 'demo', '--title', 'Demo run'], ['worktree'], leftAlone,
+    (w) => fs.symlinkSync(`${w.repo}/.claude/worktrees/demo`, `${w.repo}/../inside`),
+    { args: ['abandon', 'ID'], session: 's2', cwd: (w) => `${w.repo}/../inside` },
+    { args: ['abandon', 'ID'], session: 's2', cwd: (w) => path.relative(process.cwd(), `${w.repo}/.claude/worktrees/demo`) }, ['runs']]],
   ['usage and mark', [['mark', '60'], ['cap', '4000'], ['usage'], ['start', 'demo', '--title', 'Demo run'], ['mark', '3000usd'], ['mark', '101'], ['usage'], ['status']]],
   ['spend', [['spend-command'], ['spend-command', 'echo', '1240'], ['spend-command'], ['spend-command', 'true'], ['spend-command', 'off'], ['spend-command', 'off']]],
   ['quota', [['quota-command'], ['quota-command', 'http://localhost:8080/v1', 'printf secret'], ['quota-command', 'http://localhost:8080/v1', quotaCmd], ['quota-command'], ['quota-command', 'off']]],
@@ -57,6 +70,7 @@ const families = [
 function files(dir, base = dir) {
   return fs.readdirSync(dir).sort().flatMap((name) => {
     const p = `${dir}/${name}`
+    if (fs.lstatSync(p).isSymbolicLink()) return [`${path.relative(base, p)} -> ${fs.readlinkSync(p)}`]
     if (name === '.git') return [path.relative(base, p)]
     return fs.lstatSync(p).isDirectory() ? [`${path.relative(base, p)}/`, ...files(p, base)] : [`${path.relative(base, p)}\n${fs.readFileSync(p, 'utf8')}`]
   })
@@ -73,8 +87,8 @@ async function pass(pristine, world, door, calls) {
   const seen = []
   for (const call of calls) {
     if (typeof call === 'function') { call(w); continue }
-    const { args, session = 's1' } = Array.isArray(call) ? { args: call } : call
-    const r = await door(args.map((a) => (a === 'ID' ? path.basename(runDir(w)) : a)), { home: w.home, cwd: w.repo, session, env })
+    const { args, session = 's1', cwd = () => w.repo } = Array.isArray(call) ? { args: call } : call
+    const r = await door(args.map((a) => (a === 'ID' ? path.basename(runDir(w)) : a)), { home: w.home, cwd: cwd(w), session, env })
     seen.push({ args, code: r.code, out: r.out })
   }
   const refs = git(w.repo, 'for-each-ref', '--format=%(refname) %(objectname)')
