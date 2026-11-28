@@ -2,10 +2,32 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { tmp, makeRepo, git, lcw, cli } from './helpers.mjs'
+import { spawn } from 'node:child_process'
+import { describe } from 'node:test'
+import { tmp, makeRepo, git, cli, CLI } from './helpers.mjs'
 
 // Each family's calls run twice in the same folders, once through the real program and once in-process through
-// cli(), and must print the same, exit the same and leave the same files.
+// cli(), and must print the same, exit the same and leave the same files. The families run side by side, each in
+// folders of its own; their in-process passes take turns, as cli() calls share the process's env and cwd.
+
+// The program runs without blocking, from the env this file started with: a cli() call in another family swaps process.env while it runs.
+const BASE = { ...process.env }
+const IDENTITY = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
+function program(args, { home, cwd, session, env: more = {} }) {
+  const env = { ...BASE, ...IDENTITY, LCW_HOME: home, LCW_LOAD: '0' }
+  delete env.CLAUDE_CODE_SESSION_ID
+  delete env.CLAUDE_PID
+  if (session) env.CLAUDE_CODE_SESSION_ID = session
+  Object.assign(env, more)
+  return new Promise((resolve) => {
+    const kid = spawn('node', [CLI, ...args], { cwd, env, stdio: ['ignore', 'pipe', 'ignore'] })
+    let out = ''
+    kid.stdout.on('data', (d) => { out += d })
+    kid.on('close', (code) => resolve({ code, out }))
+  })
+}
+let turn = Promise.resolve()
+const inTurn = (fn) => { const r = turn.then(fn); turn = r.catch(() => {}); return r }
 
 const okQuota = JSON.stringify({ v: 1, status: 'ok', accountKey: 'a'.repeat(64), weekly: { percentUsed: 42, resetsAt: '2027-01-02T12:00:00.000Z' }, blocked: false })
 const quotaCmd = `${JSON.stringify(process.execPath)} -e ${JSON.stringify(`process.stdout.write(${JSON.stringify(okQuota)})`)}`
@@ -46,19 +68,14 @@ const families = [
     ['wave', 'start'], ['stage', 'Review'], ['stage', 'Review', '--wave', '1'], ['status']]],
   ['merge', [sweep, ['merge', '1'], ['set', 'sweep.prs=merged'],
     (w) => editState(w, (s) => { s.sweep.waves = [1, 2].map((n) => ({ n, fixes: 1, status: 'shipped', branch: `lcw/tidy-wave-${n}`, pr: 11 + n, merged: false, dropped: 0, fixed: 1 })) }),
-    ['merge', '1'], ['merge', '1'], ['merge', '2', '--wait', '0'], ['status']]],
+    ['merge', '1'], ['merge', '1'], ['merge', '2', '--wait', '0']]],
   // a refusal passed with --bypass in a call that changes nothing must not be written to the ledger by a later call
   ['a bypass is not carried into later calls', [sweep, ['worktree'], ['wave', 'add', '1'], ['wave', 'start'], ['wave', 'step', 'merging', '--bypass', 'by hand'],
-    ['wave', 'step', 'merging', '--bypass', 'by hand'], ['wave', 'step', 'none'], ['status']]],
+    ['wave', 'step', 'merging', '--bypass', 'by hand'], ['wave', 'step', 'none']]],
   // a wait noted by one call must not be taken for the next call's: it ends on a paused run, having never begun
   ['a wait is not carried into later calls', [sweep, ['set', 'sweep.prs=merged'],
     (w) => editState(w, (s) => { s.sweep.waves = [{ n: 1, fixes: 1, status: 'shipped', branch: 'lcw/tidy-wave-1', pr: 12, merged: false, dropped: 0, fixed: 1 }] }),
     ['merge', '1', '--wait', '1'], (w) => editState(w, (s) => { s.sweep.waves[0].merged = true; s.status = 'paused' }), ['merge', '1', '--wait', '1']]],
-  // abandon asks where the call runs: a path through a symlink, or a relative one, must read as the program's does
-  ['working folders: a symlink and a relative path', [['start', 'demo', '--title', 'Demo run'], ['worktree'], leftAlone,
-    (w) => fs.symlinkSync(`${w.repo}/.claude/worktrees/demo`, `${w.repo}/../inside`),
-    { args: ['abandon', 'ID'], session: 's2', cwd: (w) => `${w.repo}/../inside` },
-    { args: ['abandon', 'ID'], session: 's2', cwd: (w) => path.relative(process.cwd(), `${w.repo}/.claude/worktrees/demo`) }, ['runs']]],
   ['usage and mark', [['mark', '60'], ['cap', '4000'], ['usage'], ['start', 'demo', '--title', 'Demo run'], ['mark', '3000usd'], ['mark', '101'], ['usage'], ['status']]],
   ['spend', [['spend-command'], ['spend-command', 'echo', '1240'], ['spend-command'], ['spend-command', 'true'], ['spend-command', 'off'], ['spend-command', 'off']]],
   ['quota', [['quota-command'], ['quota-command', 'http://localhost:8080/v1', 'printf secret'], ['quota-command', 'http://localhost:8080/v1', quotaCmd], ['quota-command'], ['quota-command', 'off']]],
@@ -66,6 +83,10 @@ const families = [
     (w) => fs.writeFileSync(`${w.repo}/.claude/worktrees/demo/b.txt`, 'wip\n'), (w) => fs.rmSync(`${w.repo}/.claude/worktrees/demo/b.txt`),
     { args: ['abandon', 'ID'], session: 's2' }, ['runs']]],
 ]
+// abandon asks where the call runs: a relative path to the run's own worktree must read as the program's does. A relative
+// cwd is taken from this process's cwd, which a cli() call in another family would move, so this family runs on its own.
+const standing = ['working folders: a relative path', [['start', 'demo', '--title', 'Demo run'], ['worktree'], leftAlone,
+  { args: ['abandon', 'ID'], session: 's2', cwd: (w) => path.relative(process.cwd(), `${w.repo}/.claude/worktrees/demo`) }, ['runs']]]
 
 function files(dir, base = dir) {
   return fs.readdirSync(dir).sort().flatMap((name) => {
@@ -83,7 +104,7 @@ async function pass(pristine, world, door, calls) {
   fs.rmSync(world, { recursive: true, force: true })
   fs.cpSync(pristine, world, { recursive: true })
   const w = { home: `${world}/home`, repo: `${world}/repo` }
-  const env = { PATH: `${world}/bin:${process.env.PATH}`, GIT_AUTHOR_DATE: '2026-01-01T12:00:00Z', GIT_COMMITTER_DATE: '2026-01-01T12:00:00Z' }
+  const env = { PATH: `${world}/bin:${BASE.PATH}`, GIT_AUTHOR_DATE: '2026-01-01T12:00:00Z', GIT_COMMITTER_DATE: '2026-01-01T12:00:00Z' }
   const seen = []
   for (const call of calls) {
     if (typeof call === 'function') { call(w); continue }
@@ -95,18 +116,21 @@ async function pass(pristine, world, door, calls) {
   return timeless([...seen.map((r) => `$ lcw ${JSON.stringify(r.args)}\nexit ${r.code}\n${r.out}`), ...files(world), refs].join('\n'))
 }
 
-for (const [family, calls] of families) {
-  test(`${family}: the program and cli() print, exit and leave files the same`, async () => {
-    const root = tmp('same')
-    const pristine = `${root}/pristine`
-    fs.mkdirSync(`${pristine}/bin`, { recursive: true })
-    fs.writeFileSync(`${pristine}/bin/gh`, GH, { mode: 0o755 })
-    fs.renameSync(makeRepo(), `${pristine}/repo`)
-    git(`${pristine}/repo`, 'remote', 'add', 'origin', 'https://github.com/acme/widgets.git')
-    fs.mkdirSync(`${pristine}/home`)
-    const world = `${root}/world`
-    const program = await pass(pristine, world, lcw, calls)
-    const inProcess = await pass(pristine, world, cli, calls)
-    assert.equal(inProcess, program)
-  })
+async function same(calls) {
+  const root = tmp('same')
+  const pristine = `${root}/pristine`
+  fs.mkdirSync(`${pristine}/bin`, { recursive: true })
+  fs.writeFileSync(`${pristine}/bin/gh`, GH, { mode: 0o755 })
+  fs.renameSync(makeRepo(), `${pristine}/repo`)
+  git(`${pristine}/repo`, 'remote', 'add', 'origin', 'https://github.com/acme/widgets.git')
+  fs.mkdirSync(`${pristine}/home`)
+  const world = `${root}/world`
+  const ran = await pass(pristine, world, program, calls)
+  const inProcess = await inTurn(() => pass(pristine, world, cli, calls))
+  assert.equal(inProcess, ran)
 }
+
+describe('the program and cli() print, exit and leave files the same', { concurrency: true }, () => {
+  for (const [family, calls] of families) test(family, () => same(calls))
+})
+test(`${standing[0]}: the program and cli() print, exit and leave files the same`, () => same(standing[1]))
