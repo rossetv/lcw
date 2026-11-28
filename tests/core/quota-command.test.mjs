@@ -294,7 +294,10 @@ test('maybeRefreshQuota starts the runner in the background: the caller exits at
   const command = node(`const fs=require('node:fs'); const end=Date.now()+25000; const w=()=>{ if (fs.existsSync(${JSON.stringify(gate)}) || Date.now()>end) process.stdout.write(${JSON.stringify(JSON.stringify(ok))}); else setTimeout(w,20) }; w()`)
   assert.equal((await configureQuota(home, endpoint, command, { now: () => at, run: async () => ok })).ok, true)
   let landed = false
-  t.after(() => { if (!landed) fs.writeFileSync(gate, '') }) // lets the runner end if the test stopped early
+  t.after(() => { // lets the runner end if the test stopped early, and leaves no gate file behind
+    if (!landed) fs.writeFileSync(gate, '')
+    fs.rmSync(gate, { force: true })
+  })
   const before = readQuotaState(home).cache.requestId
   const url = new URL('../../scripts/lib/quota-command.mjs', import.meta.url).href
   const source = `import { maybeRefreshQuota } from ${JSON.stringify(url)}; maybeRefreshQuota(process.argv[1], ${at + 300000})`
@@ -309,7 +312,6 @@ test('maybeRefreshQuota starts the runner in the background: the caller exits at
   assert.equal(state.cache.result.status, 'ok')
   assert.equal(state.cache.attemptedAt, at + 300000)
   landed = true
-  fs.rmSync(gate)
 })
 
 test('runner bounds output and time without disclosing stdout or stderr', async () => {
