@@ -82,6 +82,11 @@ const families = [
   ['cleanup', [['start', 'demo', '--title', 'Demo run'], ['worktree'], { args: ['abandon', 'ID'], session: 's2' }, leftAlone,
     (w) => fs.writeFileSync(`${w.repo}/.claude/worktrees/demo/b.txt`, 'wip\n'), (w) => fs.rmSync(`${w.repo}/.claude/worktrees/demo/b.txt`),
     { args: ['abandon', 'ID'], session: 's2' }, ['runs']]],
+  // a run is found from where the call runs: through a symlink to its worktree it must read the real folder, as the program does
+  ['abandon from a folder reached through a symlink', [['start', 'demo', '--title', 'Demo run'], ['worktree'],
+    (w) => fs.symlinkSync(`${w.repo}/.claude/worktrees/demo`, `${w.home}/../link`),
+    { args: ['where', '--json'], session: 's3', cwd: (w) => `${w.home}/../link` }, leftAlone,
+    { args: ['abandon', 'ID'], session: 's2', cwd: (w) => `${w.home}/../link` }, ['runs']]],
 ]
 // abandon asks where the call runs: a relative path to the run's own worktree must read as the program's does. A relative
 // cwd is taken from this process's cwd, which a cli() call in another family would move, so this family runs on its own.
