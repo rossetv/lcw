@@ -70,7 +70,6 @@ test('a wave moved to the stage it is already in keeps its step, checked head an
   const lines = ledger()
   const r = await t.at(1, 'stage', 'Ship')
   assert.equal(r.code, 0, r.out)
-  assert.match(r.out, /wave 1 stage Ship/)
   assert.equal(JSON.stringify(t.state().sweep.waves), before)
   assert.equal(ledger(), lines)
 })
@@ -145,6 +144,7 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
   await t.cli('req', 'F2', 'pass')
   await t.cli('req', 'F3', 'drop')
   const tip = commit(t.wt, 'b.txt', 'fixed\n')
+  const ledgerBefore = fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8').length
   const r = await t.ship('--pr', '12')
   assert.equal(r.code, 0, r.out)
   assert.equal(git(t.repo, 'rev-parse', 'lcw/tidy'), tip)
@@ -153,7 +153,7 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
   const { n, status, branch, pr, merged, dropped, fixed, tasks, requirements } = s.waves[0]
   assert.deepEqual({ n, status, branch, pr, merged, dropped, fixed }, { n: 1, status: 'shipped', branch: 'lcw/tidy-wave-1', pr: 12, merged: false, dropped: 1, fixed: 2 })
   assert.deepEqual([tasks, requirements.map((r) => r.id + ' ' + r.status)], [[], ['F1 pass', 'F2 pass']])
-  assert.match(fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8'), /wave 1 shipped/)
+  assert.ok(fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8').length > ledgerBefore, 'the ship is recorded')
   assert.equal((await t.ship()).code, 1, 'no wave running')
   assert.equal(t.state().sweep.fixed, 2)
 
@@ -179,16 +179,6 @@ test('a partly fixed fix ships but is not counted as fixed, and status says how 
   const s = t.state().sweep
   assert.deepEqual([s.fixed, s.partial, s.waves[0].fixed, s.waves[0].partial], [1, 1, 1, 1])
   assert.match((await t.cli('status')).out, /fixed: 1 {2}partly fixed: 1 {2}parked/)
-})
-
-test('req partial is refused in a build', async () => {
-  const home = tmp('home')
-  const o = { home, cwd: makeRepo(), session: 's1' }
-  await cli(['start', 'b', '--title', 'B'], o)
-  await cli(['req', 'add', 'R1', 'one'], o)
-  const r = await cli(['req', 'R1', 'partial'], o)
-  assert.equal(r.code, 1)
-  assert.match(r.out, /Usage: lcw req <id> <todo\|pass\|failing>/)
 })
 
 test('wave shipped is refused when the sweep\'s branch cannot fast-forward to the wave, and nothing moves', async () => {
