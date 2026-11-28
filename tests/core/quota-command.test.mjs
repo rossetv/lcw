@@ -287,6 +287,31 @@ test('the background entry point refreshes using the same clock and quota state'
   assert.equal(state.cache.attemptedAt, at + 300000)
 })
 
+test('maybeRefreshQuota starts the runner in the background: the caller exits at once and the attempt lands later', async (t) => {
+  const home = fixture(t)
+  const gate = path.join(os.tmpdir(), `quota-gate-${process.pid}-${path.basename(home)}`)
+  // The command holds until the gate file exists, so that the result cannot land before the caller has exited.
+  const command = node(`const fs=require('node:fs'); const end=Date.now()+25000; const w=()=>{ if (fs.existsSync(${JSON.stringify(gate)}) || Date.now()>end) process.stdout.write(${JSON.stringify(JSON.stringify(ok))}); else setTimeout(w,20) }; w()`)
+  assert.equal((await configureQuota(home, endpoint, command, { now: () => at, run: async () => ok })).ok, true)
+  let landed = false
+  t.after(() => { if (!landed) fs.writeFileSync(gate, '') }) // lets the runner end if the test stopped early
+  const before = readQuotaState(home).cache.requestId
+  const url = new URL('../../scripts/lib/quota-command.mjs', import.meta.url).href
+  const source = `import { maybeRefreshQuota } from ${JSON.stringify(url)}; maybeRefreshQuota(process.argv[1], ${at + 300000})`
+  const env = { PATH: process.env.PATH, HOME: home, LCW_HOME: home, LCW_NOW: String(at + 300000) }
+  await promisify(execFile)(process.execPath, ['--input-type=module', '-e', source, home], { env, timeout: 15000 })
+  assert.equal(readQuotaState(home).cache.requestId, before, 'the caller was back before the command had finished')
+  fs.writeFileSync(gate, '')
+  const until = Date.now() + 30000
+  while (readQuotaState(home).cache.requestId === before && Date.now() < until) await new Promise((r) => setTimeout(r, 50))
+  const state = readQuotaState(home)
+  assert.notEqual(state.cache.requestId, before, 'the background runner recorded its attempt')
+  assert.equal(state.cache.result.status, 'ok')
+  assert.equal(state.cache.attemptedAt, at + 300000)
+  landed = true
+  fs.rmSync(gate)
+})
+
 test('runner bounds output and time without disclosing stdout or stderr', async () => {
   assert.deepEqual(await runQuotaCommand(node(`process.stdout.write(${JSON.stringify(JSON.stringify(ok))})`), { now: () => at }), ok)
   for (const source of ["process.stdout.write('credential-secret'); process.stderr.write('private-error'); process.exitCode=7", "process.stdout.write('x'.repeat(100000))", `process.stderr.write('x'.repeat(100000)); process.stdout.write(${JSON.stringify(JSON.stringify(ok))})`]) {
@@ -357,16 +382,14 @@ test('quota command configures, inspects and disables independently of dollars a
   assert.match((await run('help')).out, /quota-command/)
 })
 
-test('a quota file holding only the id of an interrupted setup reads as no command set', async (t) => {
-  const { run } = cliHome(t, { 'quota-command.json': JSON.stringify({ setupRequestId: 'abc' }) })
-  const r = await run('quota-command')
-  assert.equal(r.code, 0)
-  assert.match(r.out, /No external quota command set\./)
-})
-
-test('a quota file that names an endpoint but is not usable still says new work is held', async (t) => {
-  const { run } = cliHome(t, { 'quota-command.json': JSON.stringify({ endpoint: 'http://localhost:8080/v1', setupRequestId: 'abc' }) })
-  const r = await run('quota-command')
-  assert.equal(r.code, 0)
-  assert.match(r.out, /http:\/\/localhost:8080\/v1.*new work held/)
+test('a quota file that is not a usable setting reads as no command, or as one whose new work is held when it names an endpoint', async (t) => {
+  for (const [file, shown] of [
+    [{ setupRequestId: 'abc' }, /No external quota command set\./],
+    [{ endpoint: 'http://localhost:8080/v1', setupRequestId: 'abc' }, /http:\/\/localhost:8080\/v1.*new work held/],
+  ]) {
+    const { run } = cliHome(t, { 'quota-command.json': JSON.stringify(file) })
+    const r = await run('quota-command')
+    assert.equal(r.code, 0)
+    assert.match(r.out, shown)
+  }
 })
