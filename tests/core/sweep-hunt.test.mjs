@@ -105,7 +105,20 @@ test('a hunt whose merge of the waves conflicts reads the newest wave\'s tip and
   assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /stage: Hunt; latest work.*conflicts/, 'the run ledger records the conflict')
   assert.equal(git(`${t.repo}/.claude/worktrees/tidy-latest`, 'rev-parse', 'HEAD'), git(t.wt2, 'rev-parse', 'HEAD'))
 })
-test('during a hunt, ask and ledger from the main checkout stay off a wave holding in Ship, and its worktree still reaches it', async () => {
+test('during a hunt, ask and ledger from the main checkout stay off a wave still in Ship, and its worktree still reaches it', async () => {
+  const t = await shipping(1)
+  await t.cli('stage', 'Hunt')
+  await t.cli('ask', 'which way?')
+  await t.cli('ledger', 'a note for the run')
+  await t.cli('hunt', '--fix', '2')
+  await cli(['ledger', 'from the wave'], { ...t.o, cwd: t.wt })
+  const wl = fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8')
+  assert.doesNotMatch(wl, /which way|a note for the run|hunt, round/)
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /hunt, round/, 'the run ledger got the round line')
+  assert.match(wl, /from the wave/)
+  assert.equal(t.state().sweep.waves[0].waiting, false)
+})
+test('during a hunt, a shipped wave held for its merge is reached with --wave and stays off the run notes', async () => {
   const t = await shipping(1)
   assert.equal((await t.ship()).code, 0) // shipped, held for its merge
   assert.equal((await t.cli('stage', 'Hunt')).code, 0)
