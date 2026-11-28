@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import { tmp, makeRepo, run, cli, START_HOOK, GATE_HOOK, LIMIT_HOOK, readJson } from './helpers.mjs'
+import { hookIn } from './hook-inproc.mjs'
 import { quotaFile, sessionFile, usageFile, spendFile } from '../../lib/key.mjs'
 import { applyGate, settleGate, reconcileGate, setSessionMark, sessionMark, sessionIds } from '../../scripts/lib/gate.mjs'
 import { noteQuotaSession } from '../../scripts/lib/quota-session.mjs'
@@ -28,7 +29,7 @@ function gatedFixture() {
   return { ...f, paths, runState: state, apply: () => withHome(f.home, () => applyGate(paths, state, null, now)) }
 }
 
-test('empty and dead gate locks recover while a live contender fails closed without touching its gate', () => {
+test('empty and dead gate locks recover while a live contender fails closed without touching its gate', async () => {
   for (const owner of [null, '99999999-11111111-1111-4111-8111-111111111111', `${process.pid}-22222222-2222-4222-8222-222222222222`]) {
     const f = gatedFixture()
     const lock = `${f.paths.gate}.lock`
@@ -55,7 +56,7 @@ function heldLock(f) {
   return { lock, owner }
 }
 
-test('a gate lock released by its writer a moment later is waited for instead of reading as held', () => {
+test('a gate lock released by its writer a moment later is waited for instead of reading as held', async () => {
   const f = gatedFixture()
   const { lock, owner } = heldLock(f)
   f.runState.markPercent = 80
@@ -65,7 +66,7 @@ test('a gate lock released by its writer a moment later is waited for instead of
   assert.equal(fs.existsSync(f.paths.gate), false)
 })
 
-test('the status line does not wait on a busy gate lock', () => {
+test('the status line does not wait on a busy gate lock', async () => {
   const f = gatedFixture()
   heldLock(f)
   const started = Date.now()
@@ -74,7 +75,7 @@ test('the status line does not wait on a busy gate lock', () => {
   assert.equal(fs.existsSync(f.paths.gate), false)
 })
 
-test('dead private gate locks are reclaimed at crash boundaries without touching live or unrelated directories', () => {
+test('dead private gate locks are reclaimed at crash boundaries without touching live or unrelated directories', async () => {
   const f = gatedFixture()
   const base = `${f.paths.gate}.lock.`
   const deadEmpty = `${base}99999999-11111111-1111-4111-8111-111111111111`
@@ -93,7 +94,7 @@ test('dead private gate locks are reclaimed at crash boundaries without touching
   assert.equal(fs.readFileSync(`${foreign}/unrelated`, 'utf8'), 'keep')
 })
 
-test('a new hold after allowable evidence gets a new occurrence without resetting a human pause', () => {
+test('a new hold after allowable evidence gets a new occurrence without resetting a human pause', async () => {
   const f = gatedFixture()
   assert.equal(f.apply(), true)
   const first = readJson(f.paths.gate)
@@ -114,7 +115,7 @@ test('a new hold after allowable evidence gets a new occurrence without resettin
   assert.equal(f.runState.status, 'paused')
 })
 
-test('an older allowable snapshot cannot overwrite a hold observed before gate acquisition', () => {
+test('an older allowable snapshot cannot overwrite a hold observed before gate acquisition', async () => {
   const f = gatedFixture()
   f.runState.markPercent = 80
   f.apply()
@@ -136,7 +137,7 @@ test('an older allowable snapshot cannot overwrite a hold observed before gate a
   assert.equal(gate.recoveredBy, undefined)
 })
 
-test('external classification excludes old and new estimated money even before hooks rewrite billing', () => {
+test('external classification excludes old and new estimated money even before hooks rewrite billing', async () => {
   const f = fixture()
   put(sessionFile(f.home, 'proxy'), { billing: 'payg', quotaSelection: selection })
   const record = { v: 1, base: 0, max: 30, q: { [Math.floor(now / 900000)]: 30 } }
@@ -149,7 +150,7 @@ test('external classification excludes old and new estimated money even before h
   assert.deepEqual(readJson(spendFile(f.home, 'proxy')), record)
 })
 
-test('explicit canonical unselection overrides stale alias subscription in money reads and writes', () => {
+test('explicit canonical unselection overrides stale alias subscription in money reads and writes', async () => {
   const f = fixture()
   const canonical = { sessionCanonicalId: 'canonical', quotaSelection: null, billing: 'payg', markPercent: 80 }
   put(sessionFile(f.home, 'canonical'), canonical)
@@ -183,33 +184,33 @@ function fixture() {
   const state = { v: 1, sourceId: selection.sourceId, enabled: true, revision: 'one', endpoint: 'https://proxy.test', command: 'false', lastAttemptAt: now, cache: { revision: 'one', requestId: 'read-one', attemptedAt: now, completedAt: now, result: { v: 1, status: 'ok', accountKey: 'a'.repeat(64), weekly: { percentUsed: 42, resetsAt: reset }, blocked: false } } }
   put(quotaFile(home), state)
   put(usageFile(home), { sevenDay: { percentUsed: 5, resetsAt: reset }, at: now })
-  const hook = (script, id = 'proxy', extra = {}) => run(script, [], { ...options, env: { ...options.env, ...(id === 'native' ? { ANTHROPIC_BASE_URL: '' } : {}) }, input: JSON.stringify({ session_id: id, cwd, ...extra }) })
+  const hook = (script, id = 'proxy', extra = {}) => hookIn(script, { ...options, env: { ...options.env, ...(id === 'native' ? { ANTHROPIC_BASE_URL: '' } : {}) }, input: JSON.stringify({ session_id: id, cwd, ...extra }) })
   return { home, cwd, options, state, hook, save: () => put(quotaFile(home), state) }
 }
 
-test('startup binds external selection to both resume identities without downgrading during an outage', () => {
+test('startup binds external selection to both resume identities without downgrading during an outage', async () => {
   const f = fixture()
   delete f.state.cache
   f.save()
-  f.hook(START_HOOK, 'alias', { transcript_path: '/tmp/canonical.jsonl' })
+  await f.hook(START_HOOK, 'alias', { transcript_path: '/tmp/canonical.jsonl' })
   for (const id of ['canonical', 'alias']) {
     assert.deepEqual(getSession(f.home, id).quotaSelection, selection)
     assert.equal(getSession(f.home, id).billing, 'subscription')
   }
   fs.writeFileSync(quotaFile(f.home), '{')
-  f.hook(START_HOOK, 'alias', { transcript_path: '/tmp/canonical.jsonl' })
+  await f.hook(START_HOOK, 'alias', { transcript_path: '/tmp/canonical.jsonl' })
   assert.equal(getSession(f.home, 'alias').billing, 'subscription')
-  assert.equal(f.hook(GATE_HOOK, 'alias').code, 2)
+  assert.equal((await f.hook(GATE_HOOK, 'alias')).code, 2)
 })
 
-test('explicit off and a nonmatching resumed endpoint restore default billing on every identity', () => {
+test('explicit off and a nonmatching resumed endpoint restore default billing on every identity', async () => {
   for (const off of [true, false]) {
     const f = fixture()
     put(sessionFile(f.home, 'canonical'), { billing: 'payg' })
-    f.hook(START_HOOK, 'alias', { transcript_path: '/tmp/canonical.jsonl' })
+    await f.hook(START_HOOK, 'alias', { transcript_path: '/tmp/canonical.jsonl' })
     if (off) { f.state.enabled = false; f.save() }
     else f.options.env.ANTHROPIC_BASE_URL = 'https://elsewhere.test'
-    f.hook(START_HOOK, 'alias', { transcript_path: '/tmp/canonical.jsonl' })
+    await f.hook(START_HOOK, 'alias', { transcript_path: '/tmp/canonical.jsonl' })
     for (const id of ['canonical', 'alias']) {
       assert.equal(getSession(f.home, id).billing, 'payg')
       assert.equal(getSession(f.home, id).quotaSelection, null)
@@ -228,12 +229,12 @@ test('launches check both the launching session and driver even without a prior 
     assert.equal(r.code, 0, r.out)
     const dir = /^folder: (.+)$/m.exec(r.out)[1]
     put(sessionFile(f.home, launcher), { ...getSession(f.home, launcher), runDir: dir })
-    assert.equal(f.hook(GATE_HOOK, launcher).code, 2)
+    assert.equal((await f.hook(GATE_HOOK, launcher)).code, 2)
     f.state.cache.result.weekly.percentUsed = 10
     f.save()
-    assert.equal(f.hook(GATE_HOOK, launcher).code, 0)
+    assert.equal((await f.hook(GATE_HOOK, launcher)).code, 0)
     put(usageFile(f.home), { sevenDay: { percentUsed: 90, resetsAt: reset }, at: now })
-    assert.equal(f.hook(GATE_HOOK, launcher).code, 2)
+    assert.equal((await f.hook(GATE_HOOK, launcher)).code, 2)
   }
 })
 
@@ -251,17 +252,17 @@ test('the stop hook checks native and dollar driver holds independently of an ex
     const dir = /^folder: (.+)$/m.exec(started.out)[1]
     put(sessionFile(f.home, 'proxy'), { ...getSession(f.home, 'proxy'), runDir: dir })
     for (const hook_event_name of ['UserPromptSubmit', 'PostToolUse']) {
-      const stopped = f.hook(LIMIT_HOOK, 'proxy', { hook_event_name })
+      const stopped = (await f.hook(LIMIT_HOOK, 'proxy', { hook_event_name }))
       assert.match(stopped.out, /STOP/)
       assert.match(stopped.out, billing === 'payg' ? /\$3,500/ : /90%/)
       assert.doesNotMatch(stopped.out, /10%/)
     }
     if (billing === 'payg') spend(2000)
     else put(usageFile(f.home), { sevenDay: { percentUsed: 5, resetsAt: reset }, at: now })
-    for (const hook_event_name of ['UserPromptSubmit', 'PostToolUse']) assert.equal(f.hook(LIMIT_HOOK, 'proxy', { hook_event_name }).out, '')
+    for (const hook_event_name of ['UserPromptSubmit', 'PostToolUse']) assert.equal((await f.hook(LIMIT_HOOK, 'proxy', { hook_event_name })).out, '')
     f.state.cache.result.weekly.percentUsed = 95
     f.save()
-    assert.match(f.hook(LIMIT_HOOK, 'proxy', { hook_event_name: 'UserPromptSubmit' }).out, /STOP.*95%/)
+    assert.match((await f.hook(LIMIT_HOOK, 'proxy', { hook_event_name: 'UserPromptSubmit' })).out, /STOP.*95%/)
   }
 })
 
@@ -269,45 +270,45 @@ test('replacing the configured endpoint cannot transfer permission to an already
   const f = fixture()
   f.state.cache.result.weekly.percentUsed = 95
   f.save()
-  f.hook(START_HOOK)
-  assert.equal(f.hook(GATE_HOOK).code, 2)
+  await f.hook(START_HOOK)
+  assert.equal((await f.hook(GATE_HOOK)).code, 2)
   f.state.endpoint = 'https://other.test'
   f.state.revision = 'two'
   f.state.cache.revision = 'two'
   f.state.cache.requestId = 'new-endpoint'
   f.state.cache.result.weekly.percentUsed = 10
   f.save()
-  assert.equal(f.hook(GATE_HOOK).code, 2)
+  assert.equal((await f.hook(GATE_HOOK)).code, 2)
   assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, selection)
   assert.match((await cli(['usage'], f.options)).out, /held/)
-  f.hook(START_HOOK)
-  assert.equal(f.hook(GATE_HOOK).code, 2)
+  await f.hook(START_HOOK)
+  assert.equal((await f.hook(GATE_HOOK)).code, 2)
   assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, selection)
   f.state.endpoint = selection.endpoint
   f.state.revision = 'three'
   f.state.cache.revision = 'three'
   f.state.cache.requestId = 'same-endpoint-replacement'
   f.save()
-  assert.equal(f.hook(GATE_HOOK).code, 0)
+  assert.equal((await f.hook(GATE_HOOK)).code, 0)
 })
 
-test('an unbound saved selection holds until its own startup observes a matching endpoint', () => {
+test('an unbound saved selection holds until its own startup observes a matching endpoint', async () => {
   const f = fixture()
   const legacy = { sourceId: selection.sourceId }
   put(sessionFile(f.home, 'proxy'), { quotaSelection: legacy, billing: 'subscription', quotaDefaultBilling: 'payg' })
-  assert.equal(f.hook(GATE_HOOK).code, 2)
+  assert.equal((await f.hook(GATE_HOOK)).code, 2)
   assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, legacy)
   f.options.env.ANTHROPIC_BASE_URL = ''
-  f.hook(START_HOOK)
-  assert.equal(f.hook(GATE_HOOK).code, 2)
+  await f.hook(START_HOOK)
+  assert.equal((await f.hook(GATE_HOOK)).code, 2)
   assert.equal(getSession(f.home, 'proxy').billing, 'subscription')
   f.options.env.ANTHROPIC_BASE_URL = 'https://PROXY.test:443/'
-  f.hook(START_HOOK)
+  await f.hook(START_HOOK)
   assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, selection)
-  assert.equal(f.hook(GATE_HOOK).code, 0)
+  assert.equal((await f.hook(GATE_HOOK)).code, 0)
 })
 
-test('refusal and reset expiry hold hooks independently of the native cache and percentage mark', () => {
+test('refusal and reset expiry hold hooks independently of the native cache and percentage mark', async () => {
   const f = fixture()
   put(sessionFile(f.home, 'proxy'), { billing: 'subscription', quotaSelection: selection, markPercent: 80 })
   for (const result of [
@@ -317,8 +318,8 @@ test('refusal and reset expiry hold hooks independently of the native cache and 
   ]) {
     f.state.cache.result = result
     f.save()
-    assert.equal(f.hook(GATE_HOOK).code, 2)
-    const limit = f.hook(LIMIT_HOOK, 'proxy', { hook_event_name: 'UserPromptSubmit' })
+    assert.equal((await f.hook(GATE_HOOK)).code, 2)
+    const limit = (await f.hook(LIMIT_HOOK, 'proxy', { hook_event_name: 'UserPromptSubmit' }))
     assert.match(limit.out, /STOP/)
     assert.doesNotMatch(limit.out, /\$|5%/)
   }
@@ -353,10 +354,10 @@ test('a resumed session uses the current explicit mark for both raises and lower
   const options = { ...f.options, session: 'current' }
   assert.match((await cli(['mark', '100'], options)).out, /ok/)
   const input = { transcript_path: '/tmp/old.jsonl' }
-  assert.equal(f.hook(GATE_HOOK, 'current', input).code, 0)
+  assert.equal((await f.hook(GATE_HOOK, 'current', input)).code, 0)
   assert.equal((await cli(['mark', '70'], options)).code, 0)
-  assert.equal(f.hook(GATE_HOOK, 'current', input).code, 2)
-  assert.match(f.hook(LIMIT_HOOK, 'current', { ...input, hook_event_name: 'UserPromptSubmit' }).out, /STOP/)
+  assert.equal((await f.hook(GATE_HOOK, 'current', input)).code, 2)
+  assert.match((await f.hook(LIMIT_HOOK, 'current', { ...input, hook_event_name: 'UserPromptSubmit' })).out, /STOP/)
 })
 
 test('sequential resume identities share the current mark even when the run names a previous alias', async () => {
@@ -367,22 +368,22 @@ test('sequential resume identities share the current mark even when the run name
   put(sessionFile(f.home, 'original'), { billing: 'subscription', quotaSelection: selection, markPercent: 75 })
   const started = await cli(['start', 'aliases', '--title', 'Alias marks'], first)
   const dir = /^folder: (.+)$/m.exec(started.out)[1]
-  f.hook(START_HOOK, 'middle', { transcript_path: '/tmp/original.jsonl' })
-  f.hook(START_HOOK, 'latest', { transcript_path: '/tmp/original.jsonl' })
+  await f.hook(START_HOOK, 'middle', { transcript_path: '/tmp/original.jsonl' })
+  await f.hook(START_HOOK, 'latest', { transcript_path: '/tmp/original.jsonl' })
   const latest = { ...f.options, session: 'latest' }
   assert.equal((await cli(['mark', '100'], latest)).code, 0)
   const state = readJson(`${dir}/state.json`)
   put(`${dir}/state.json`, { ...state, driver: 'middle', markPercent: 75 })
-  assert.equal(f.hook(GATE_HOOK, 'latest', { transcript_path: '/tmp/original.jsonl' }).code, 0)
+  assert.equal((await f.hook(GATE_HOOK, 'latest', { transcript_path: '/tmp/original.jsonl' })).code, 0)
   assert.match((await cli(['usage'], latest)).out, /mark: 100%/)
   assert.match((await cli(['status'], latest)).out, /mark: 100%/)
   const reconciled = run(fileURLToPath(new URL('../../scripts/gate-reconcile.mjs', import.meta.url)), [JSON.stringify({ sessionId: 'latest', action: 'sync', expectedGate: readJson(`${dir}/gate`) })], latest)
   assert.equal(JSON.parse(reconciled.out).hold, false)
   assert.equal((await cli(['mark', '70'], latest)).code, 0)
-  assert.equal(f.hook(GATE_HOOK, 'middle', { transcript_path: '/tmp/original.jsonl' }).code, 2)
+  assert.equal((await f.hook(GATE_HOOK, 'middle', { transcript_path: '/tmp/original.jsonl' })).code, 2)
 })
 
-test('native alias marks clear the other unit and cyclic or live foreign identities stay separate', () => {
+test('native alias marks clear the other unit and cyclic or live foreign identities stay separate', async () => {
   const f = fixture()
   const original = { billing: 'payg', markPercent: 75 }
   put(sessionFile(f.home, 'native'), original)
@@ -412,17 +413,17 @@ test('native alias marks clear the other unit and cyclic or live foreign identit
   assert.equal(getSession(f.home, 'foreign').markPercent, 50)
 })
 
-test('positive startup billing replaces unknown history while genuinely unknown billing stays unknown', () => {
+test('positive startup billing replaces unknown history while genuinely unknown billing stays unknown', async () => {
   for (const [auth, expected] of [['{"authMethod":"api_key"}', 'payg'], ['fail', 'unclear']]) {
     const f = fixture()
     put(sessionFile(f.home, 'proxy'), { billing: 'unclear' })
     f.options.env.LCW_AUTH_STATUS_JSON = auth
-    f.hook(START_HOOK)
+    await f.hook(START_HOOK)
     assert.equal(getSession(f.home, 'proxy').quotaDefaultBilling, expected)
     f.state.enabled = false
     f.save()
     f.options.env.LCW_AUTH_STATUS_JSON = 'fail'
-    f.hook(START_HOOK)
+    await f.hook(START_HOOK)
     assert.equal(getSession(f.home, 'proxy').billing, expected)
   }
 })
@@ -435,37 +436,37 @@ test('conditional reconciliation retires only acknowledged obsolete gates and re
   const gate = { reason: 'mark', unit: 'usd', markUsd: 100, usedUsd: 120, retryAt: now + 3600000, at: now - 1000 }
   put(`${dir}/gate`, gate)
   const script = fileURLToPath(new URL('../../scripts/gate-reconcile.mjs', import.meta.url))
-  const invoke = (action, expectedGate, expectedQuota) => {
-    const result = run(script, [JSON.stringify({ sessionId: 'proxy', action, expectedGate, expectedQuota })], f.options)
+  const invoke = async (action, expectedGate, expectedQuota) => {
+    const result = await hookIn(script, { ...f.options, args: [JSON.stringify({ sessionId: 'proxy', action, expectedGate, expectedQuota })] })
     assert.equal(result.code, 0, result.err)
     return JSON.parse(result.out)
   }
-  assert.equal(invoke('sync', gate).hold, false)
+  assert.equal((await invoke('sync', gate)).hold, false)
   assert.deepEqual(readJson(`${dir}/gate`), gate)
   const evidence = { sourceId: selection.sourceId, revision: 'one', requestId: 'read-one', accountKey: 'a'.repeat(64), resetsAt: reset, observedAt: now }
-  assert.equal(invoke('ack', Object.fromEntries(Object.entries(gate).reverse()), evidence).ok, true)
+  assert.equal((await invoke('ack', Object.fromEntries(Object.entries(gate).reverse()), evidence)).ok, true)
   assert.equal(fs.existsSync(`${dir}/gate`), false)
   put(`${dir}/gate`, gate)
   f.state.cache.result = { v: 1, status: 'refused', code: 'provider-refused' }
   f.state.cache.requestId = 'new-refusal'
   f.save()
-  assert.equal(invoke('ack', gate, evidence).hold, true)
+  assert.equal((await invoke('ack', gate, evidence)).hold, true)
   assert.ok(fs.existsSync(`${dir}/gate`))
-  invoke('sync', gate)
+  await invoke('sync', gate)
   const newer = readJson(`${dir}/gate`)
   assert.equal(newer.requestId, 'new-refusal')
-  assert.equal(invoke('ack', gate, evidence).code, 'superseded')
+  assert.equal((await invoke('ack', gate, evidence)).code, 'superseded')
   assert.deepEqual(readJson(`${dir}/gate`), newer)
   f.state.enabled = false
   f.save()
-  assert.equal(invoke('sync', newer).hold, false)
+  assert.equal((await invoke('sync', newer)).hold, false)
   assert.deepEqual(readJson(`${dir}/gate`), newer)
-  assert.equal(invoke('ack', newer, evidence).code, 'superseded')
-  assert.equal(invoke('ack', newer).ok, true)
+  assert.equal((await invoke('ack', newer, evidence)).code, 'superseded')
+  assert.equal((await invoke('ack', newer)).ok, true)
   assert.equal(fs.existsSync(`${dir}/gate`), false)
 })
 
-test('native gate reconciliation fills a missing reset only from current evidence without changing a human pause', () => {
+test('native gate reconciliation fills a missing reset only from current evidence without changing a human pause', async () => {
   const f = fixture()
   put(sessionFile(f.home, 'native'), { billing: 'subscription', quotaSelection: null })
   const paths = { gate: `${f.home}/gate`, state: `${f.home}/state.json` }
@@ -506,7 +507,7 @@ test('legacy retries are serialized and never change run status or trust unsafe 
   const dir = /^folder: (.+)$/m.exec(started.out)[1]
   const state = readJson(`${dir}/state.json`)
   const script = fileURLToPath(new URL('../../scripts/gate-reconcile.mjs', import.meta.url))
-  const invoke = (request) => JSON.parse(run(script, [JSON.stringify(request)], options).out)
+  const invoke = async (request) => JSON.parse((await hookIn(script, { ...options, args: [JSON.stringify(request)] })).out)
   const gate = { reason: 'mark', unit: 'usd', markUsd: 3000, usedUsd: 3500, retryAt: now - 1000, at: now - 5000 }
   const record = (spent) => put(spendFile(f.home, 'native'), { v: 1, base: 0, max: spent, q: { [Math.floor(now / 900000)]: spent } })
   record(3500)
@@ -515,29 +516,29 @@ test('legacy retries are serialized and never change run status or trust unsafe 
   fs.mkdirSync(lock)
   const marker = `${process.pid}-66666666-6666-4666-8666-666666666666`
   fs.writeFileSync(`${lock}/${marker}`, '')
-  assert.equal(invoke({ sessionId: 'native', action: 'retry', expectedGate: gate }).code, 'gate-unavailable')
+  assert.equal((await invoke({ sessionId: 'native', action: 'retry', expectedGate: gate })).code, 'gate-unavailable')
   assert.deepEqual(readJson(`${dir}/gate`), gate)
   fs.unlinkSync(`${lock}/${marker}`)
   fs.rmdirSync(lock)
-  assert.equal(invoke({ sessionId: 'native', action: 'retry', expectedGate: gate }).hold, true)
+  assert.equal((await invoke({ sessionId: 'native', action: 'retry', expectedGate: gate })).hold, true)
   const retried = readJson(`${dir}/gate`)
   assert.equal(retried.retried, true)
   assert.ok(retried.retryAt > now)
-  assert.equal(invoke({ sessionId: 'native', action: 'ack', expectedGate: retried }).hold, true)
+  assert.equal((await invoke({ sessionId: 'native', action: 'ack', expectedGate: retried })).hold, true)
   record(2500)
   for (const status of ['paused', 'finished']) {
     put(`${dir}/state.json`, { ...state, status, pausedReason: 'human' })
-    const synced = invoke({ sessionId: 'native', action: 'sync', expectedGate: retried })
+    const synced = await invoke({ sessionId: 'native', action: 'sync', expectedGate: retried })
     if (status === 'paused') assert.equal(synced.hold, false)
     else assert.equal(synced.code, 'run-unavailable')
     assert.deepEqual(readJson(`${dir}/gate`), retried)
   }
   put(`${dir}/state.json`, state)
-  assert.equal(invoke({ sessionId: 'native', action: 'retry', expectedGate: retried }).hold, false)
+  assert.equal((await invoke({ sessionId: 'native', action: 'retry', expectedGate: retried })).hold, false)
   assert.equal(fs.existsSync(`${dir}/gate`), false)
   assert.deepEqual(readJson(`${dir}/state.json`), state)
   for (const sessionId of ['../native', '.', 'x'.repeat(257)]) {
-    assert.equal(invoke({ sessionId, action: 'sync', expectedGate: null }).code, 'invalid-request')
+    assert.equal((await invoke({ sessionId, action: 'sync', expectedGate: null })).code, 'invalid-request')
   }
 })
 
