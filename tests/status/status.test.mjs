@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { tmp, cli, readJson, makeRepo, git } from '../core/helpers.mjs'
 import { drawIn, withEnv } from './golden/draw.mjs'
 import { mapInput } from '../../scripts/statusline.mjs'
@@ -25,10 +25,13 @@ async function line(input, { home = tmp('home'), env = {} } = {}) {
 }
 
 /** The program itself, as Claude Code starts it: the input on stdin, the rows on stdout. */
-function program(input, home) {
-  const r = spawnSync('node', [LINE], { input, encoding: 'utf8', env: { PATH: process.env.PATH, HOME: home, LCW_HOME: home, COLUMNS: '120' } })
-  return { code: r.status, out: r.stdout }
-}
+const program = (input, home) => new Promise((resolve) => {
+  const p = spawn('node', [LINE], { env: { PATH: process.env.PATH, HOME: home, LCW_HOME: home, COLUMNS: '120' }, stdio: ['pipe', 'pipe', 'ignore'] })
+  let out = ''
+  p.stdout.on('data', (d) => { out += d })
+  p.on('close', (code) => resolve({ code, out }))
+  p.stdin.end(input)
+})
 
 test('a draw and an lcw command in one process take turns: the command waits while the draw holds the environment', async () => {
   const start = (name) => cli(['start', name, '--title', name], { home: tmp('home'), cwd: makeRepo(), session: 's1' })
@@ -73,14 +76,15 @@ test('maps empty and odd input without throwing', () => {
   }
 })
 
-test('the program reads its input from stdin, and prints something and exits 0 on bad input', () => {
-  const good = program(JSON.stringify({ model: { display_name: 'Opus 5' }, cwd: tmp('cwd') }), tmp('home'))
+test('the program reads its input from stdin, and prints something and exits 0 on bad input', async () => {
+  const good = await program(JSON.stringify({ model: { display_name: 'Opus 5' }, cwd: tmp('cwd') }), tmp('home'))
   assert.equal(good.code, 0)
   assert.match(good.out, /Opus 5/)
-  for (const input of ['', '{}', '[]', 'null', '{not json']) {
-    const bad = program(input, '/nonexistent/lcw-home')
-    assert.equal(bad.code, 0, JSON.stringify(input))
-    assert.ok(bad.out.trim().length > 0, JSON.stringify(input))
+  const inputs = ['', '{}', '[]', 'null', '{not json']
+  const bad = await Promise.all(inputs.map((input) => program(input, '/nonexistent/lcw-home')))
+  for (const [i, r] of bad.entries()) {
+    assert.equal(r.code, 0, JSON.stringify(inputs[i]))
+    assert.ok(r.out.trim().length > 0, JSON.stringify(inputs[i]))
   }
 })
 
