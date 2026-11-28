@@ -5,7 +5,7 @@ import { fixtures, drawFixture, expectedFile } from './golden/fixtures.mjs'
 
 const ROOT = new URL('../..', import.meta.url).pathname.replace(/\/$/, '')
 
-describe('the status line prints the same bytes, second by second', { concurrency: true }, () => {
+describe('the status line prints the same bytes, second by second', () => {
   for (const f of fixtures) {
     test(f.name, async () => {
       const want = JSON.parse(fs.readFileSync(expectedFile(f), 'utf8'))

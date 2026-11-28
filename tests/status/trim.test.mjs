@@ -4,9 +4,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync, execFileSync } from 'node:child_process'
 import { gitOf } from '../../scripts/lib/diff.mjs'
-import { tmp, lcw, readJson, makeRepo, git } from '../core/helpers.mjs'
+import { tmp, cli, readJson, makeRepo, git } from '../core/helpers.mjs'
+import { drawIn, withEnv } from './golden/draw.mjs'
 
-const LINE = new URL('../../scripts/statusline.mjs', import.meta.url).pathname
+const ROOT = new URL('../..', import.meta.url).pathname.replace(/\/$/, '')
+const LINE = ROOT + '/scripts/statusline.mjs'
 const NOW = Date.UTC(2026, 2, 10, 12)
 
 // Counts, in the process it is loaded into, the reads of each file and the git commands it starts.
@@ -29,18 +31,19 @@ syncBuiltinESMExports()
 process.on('exit', () => write(process.env.TRACE_OUT, JSON.stringify({ reads, gits })))
 `)
 
-function line(home, input, { now = NOW, trace = false } = {}) {
-  const env = { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(now) }
+/** One draw. With `trace` it runs as a program under the tracer, which counts what the process reads; otherwise it draws in this process. */
+async function line(home, input, { now = NOW, trace = false } = {}) {
+  const env = { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(now), CLAUDE_PID: undefined }
+  if (!trace) return { text: (await drawIn(ROOT, JSON.stringify(input), env)).replace(/\x1b\[[0-9;]*m/g, '') }
   delete env.CLAUDE_PID
-  const out = trace ? `${tmp('trace')}/out.json` : null
-  if (out) env.TRACE_OUT = out
-  const r = spawnSync('node', [...(out ? ['--import', TRACER] : []), LINE], { input: JSON.stringify(input), encoding: 'utf8', env })
+  const out = `${tmp('trace')}/out.json`
+  env.TRACE_OUT = out
+  const r = spawnSync('node', ['--import', TRACER, LINE], { input: JSON.stringify(input), encoding: 'utf8', env })
   assert.equal(r.status, 0, r.stderr)
-  return { text: r.stdout.replace(/\x1b\[[0-9;]*m/g, ''), ...(out ? readJson(out) : {}) }
+  return { text: r.stdout.replace(/\x1b\[[0-9;]*m/g, ''), ...readJson(out) }
 }
 
 const LAUNCHER = new URL('../../scripts/bin/statusline.mjs', import.meta.url).pathname
-const ROOT = new URL('../..', import.meta.url).pathname.replace(/\/$/, '')
 
 /** One run of the launcher the settings' command starts, as it draws frames ahead from the second `at`. */
 function launched(home, input, { now = NOW, bin } = {}) {
@@ -68,12 +71,12 @@ const inputFor = (cwd, extra = {}) => ({
 })
 
 /** A repository with changes on a branch, and a home where session s1 drives a run in it. */
-function withRun() {
+async function withRun() {
   const repo = makeRepo(), home = tmp('home')
   git(repo, 'checkout', '-q', '-b', 'feat')
   fs.writeFileSync(repo + '/a.txt', 'one\ntwo\n')
   fs.writeFileSync(repo + '/untracked.txt', 'three\n')
-  assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home, cwd: repo, session: 's1' }).code, 0)
+  assert.equal((await cli(['start', 'demo', '--title', 'Demo'], { home, cwd: repo, session: 's1' })).code, 0)
   return { repo, home, dir: readJson(home + '/sessions/s1.json').runDir }
 }
 
@@ -92,20 +95,20 @@ function snapshot(dir) {
 }
 const changedFiles = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((p) => !(a[p] ?? b[p]).dir && JSON.stringify(a[p]) !== JSON.stringify(b[p])).sort()
 
-describe('one status line run', { concurrency: true }, () => {
-  test('reads no file more than once, on its first run and on a settled one', () => {
-    const { repo, home } = withRun()
+describe('one status line run', () => {
+  test('reads no file more than once, on its first run and on a settled one', async () => {
+    const { repo, home } = await withRun()
     for (const now of [NOW, NOW + 1000]) {
-      const { reads } = line(home, inputFor(repo), { now, trace: true })
+      const { reads } = await line(home, inputFor(repo), { now, trace: true })
       const mine = Object.entries(reads).filter(([p]) => p.startsWith(home) || p.startsWith(repo))
       assert.ok(mine.length > 5, 'the run reads its records')
       assert.deepEqual(mine.filter(([, n]) => n > 1), [])
     }
   })
 
-  for (const [name, make] of [['a session with a run', withRun], ['a session with no run', () => ({ repo: makeRepo(), home: tmp('home') })]]) {
-    test(`frames drawn ahead read no file more than once, for ${name}`, () => {
-      const { repo, home } = make()
+  for (const [name, make] of [['a session with a run', withRun], ['a session with no run', async () => ({ repo: makeRepo(), home: tmp('home') })]]) {
+    test(`frames drawn ahead read no file more than once, for ${name}`, async () => {
+      const { repo, home } = await make()
       const bin = installedLauncher()
       for (const now of [NOW, NOW + 1000]) {
         const { reads, text } = launched(home, inputFor(repo), { now, bin })
@@ -117,8 +120,8 @@ describe('one status line run', { concurrency: true }, () => {
     })
   }
 
-  test('a draw ahead after the launcher found a record changed reads that record no second time', () => {
-    const { repo, home, dir } = withRun()
+  test('a draw ahead after the launcher found a record changed reads that record no second time', async () => {
+    const { repo, home, dir } = await withRun()
     const bin = installedLauncher()
     // the first draw records the session's billing, which the second draws again from
     launched(home, inputFor(repo), { bin })
@@ -131,74 +134,73 @@ describe('one status line run', { concurrency: true }, () => {
     assert.deepEqual(Object.entries(reads).filter(([p, n]) => (p.startsWith(home) || p.startsWith(repo)) && n > 1), [])
   })
 
-  test('a record the launcher handed on is read again when it has changed since the launcher read it', () => {
-    const { repo, home, dir } = withRun()
+  test('a record the launcher handed on is read again when it has changed since the launcher read it', async () => {
+    const { repo, home, dir } = await withRun()
     const state = `${dir}/state.json`
-    const code = `const { ahead } = await import(${JSON.stringify(LINE)}); process.stdout.write(await ahead(process.env.INPUT, { at: '${NOW / 1000}+0000', read: JSON.parse(process.env.READ) }))`
-    const READ = JSON.stringify([[state, JSON.stringify({ ...readJson(state), name: 'stale' }), 'a stamp of another file']])
-    const r = spawnSync('node', ['--input-type=module', '-e', code], { encoding: 'utf8', env: { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW), INPUT: JSON.stringify(inputFor(repo)), READ } })
-    assert.equal(r.status, 0, r.stderr)
-    assert.match(r.stdout.replace(/\x1b\[[0-9;]*m/g, ''), /LCW Build · demo/)
+    const READ = [[state, JSON.stringify({ ...readJson(state), name: 'stale' }), 'a stamp of another file']]
+    const env = { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW) }
+    const out = await withEnv(env, async () => (await import(LINE)).ahead(JSON.stringify(inputFor(repo)), { at: `${NOW / 1000}+0000`, read: READ }))
+    assert.match(out.replace(/\x1b\[[0-9;]*m/g, ''), /LCW Build · demo/)
   })
 
-  test('with nothing new it leaves the home as it was, byte for byte and time for time', () => {
-    const { repo, home } = withRun()
-    line(home, inputFor(repo))
+  test('with nothing new it leaves the home as it was, byte for byte and time for time', async () => {
+    const { repo, home } = await withRun()
+    await line(home, inputFor(repo))
     const before = snapshot(home)
-    line(home, inputFor(repo), { now: NOW + 1000 })
+    await line(home, inputFor(repo), { now: NOW + 1000 })
     assert.deepEqual(snapshot(home), before)
   })
 
-  test('something new is written, and only that', () => {
-    const { repo, home } = withRun()
-    line(home, inputFor(repo))
+  test('something new is written, and only that', async () => {
+    const { repo, home } = await withRun()
+    await line(home, inputFor(repo))
     const a = snapshot(home)
-    line(home, inputFor(repo, { context_window: { used_percentage: 43, context_window_size: 1_000_000 } }), { now: NOW + 1000 })
+    await line(home, inputFor(repo, { context_window: { used_percentage: 43, context_window_size: 1_000_000 } }), { now: NOW + 1000 })
     const b = snapshot(home)
     assert.deepEqual(changedFiles(a, b), [`${home}/cache/context-s1.json`])
-    line(home, inputFor(repo, { context_window: { used_percentage: 43, context_window_size: 1_000_000 }, rate_limits: { seven_day: { used_percentage: 33, resets_at: NOW / 1000 + 3 * 86400 } } }), { now: NOW + 2000 })
+    await line(home, inputFor(repo, { context_window: { used_percentage: 43, context_window_size: 1_000_000 }, rate_limits: { seven_day: { used_percentage: 33, resets_at: NOW / 1000 + 3 * 86400 } } }), { now: NOW + 2000 })
     assert.deepEqual(changedFiles(b, snapshot(home)), [`${home}/usage.json`])
     assert.equal(readJson(`${home}/usage.json`).sevenDay.percentUsed, 33)
   })
 
-  test('the context size is stamped again once its record is five minutes old', () => {
+  test('the context size is stamped again once its record is five minutes old', async () => {
     const repo = makeRepo(), home = tmp('home')
     const at = () => readJson(`${home}/cache/context-s1.json`).at
-    line(home, inputFor(repo))
-    line(home, inputFor(repo), { now: NOW + 299_000 })
+    await line(home, inputFor(repo))
+    await line(home, inputFor(repo), { now: NOW + 299_000 })
     assert.equal(at(), NOW)
-    line(home, inputFor(repo), { now: NOW + 300_000 })
+    await line(home, inputFor(repo), { now: NOW + 300_000 })
     assert.equal(at(), NOW + 300_000)
   })
 
-  test('git is asked once in fifteen seconds for a folder, and each folder shows its own figures', () => {
+  test('git is asked once in fifteen seconds for a folder, and each folder shows its own figures', async () => {
     const alpha = makeRepo(), beta = makeRepo(), home = tmp('home')
     git(alpha, 'checkout', '-q', '-b', 'alpha'); git(beta, 'checkout', '-q', '-b', 'beta')
-    const first = line(home, inputFor(alpha), { trace: true })
+    const first = await line(home, inputFor(alpha), { trace: true })
     assert.match(first.text, /· alpha/)
     assert.ok(first.gits.length > 0)
-    const other = line(home, inputFor(beta), { now: NOW + 1000, trace: true })
+    const other = await line(home, inputFor(beta), { now: NOW + 1000, trace: true })
     assert.match(other.text, /· beta/)
     assert.ok(other.gits.length > 0, 'another folder is asked for its own figures')
     git(alpha, 'checkout', '-q', '-b', 'alpha-2')
-    const kept = line(home, inputFor(alpha), { now: NOW + 14_999, trace: true })
+    const kept = await line(home, inputFor(alpha), { now: NOW + 14_999, trace: true })
     assert.deepEqual(kept.gits, [])
     assert.match(kept.text, /· alpha$/m)
-    const again = line(home, inputFor(alpha), { now: NOW + 15_000, trace: true })
+    const again = await line(home, inputFor(alpha), { now: NOW + 15_000, trace: true })
     assert.ok(again.gits.length > 0)
     assert.match(again.text, /· alpha-2/)
   })
 
-  test('a run that has nothing new still holds a session over its mark', () => {
-    const { repo, home, dir } = withRun()
+  test('a run that has nothing new still holds a session over its mark', async () => {
+    const { repo, home, dir } = await withRun()
     const over = inputFor(repo, { rate_limits: { seven_day: { used_percentage: 80, resets_at: NOW / 1000 + 3 * 86400 } } })
-    line(home, over)
+    await line(home, over)
     assert.equal(readJson(dir + '/gate').reason, 'mark')
     fs.rmSync(dir + '/gate')
-    line(home, over, { now: NOW + 1000 })
+    await line(home, over, { now: NOW + 1000 })
     assert.equal(readJson(dir + '/gate').reason, 'mark', 'the gate is put back with nothing else new')
     const before = snapshot(home)
-    line(home, over, { now: NOW + 2000 })
+    await line(home, over, { now: NOW + 2000 })
     assert.deepEqual(snapshot(home), before, 'a gate that stands is not written again, nor its lock taken')
   })
 })
