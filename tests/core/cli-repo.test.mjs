@@ -158,10 +158,11 @@ test('a stale lock is taken over', async () => {
   assert.equal((await t.cli('task', 'add', 'T1', 'x')).code, 0)
 })
 
-/** A run's lock held by pid since `ago` ms, its folder dated a minute back. */
-function heldLock(t, pid, ago) {
+/** A run's lock held by pid since `ago` ms, its folder dated a minute back unless `fresh`. */
+function heldLock(t, pid, ago, fresh = false) {
   fs.mkdirSync(`${t.dir}/lock`)
   fs.writeFileSync(`${t.dir}/lock/holder.json`, JSON.stringify({ pid, token: 'other', at: Date.now() - ago }))
+  if (fresh) return
   const old = new Date(Date.now() - 60000)
   fs.utimesSync(`${t.dir}/lock`, old, old)
 }
@@ -184,10 +185,10 @@ test('a lock whose holder has gone is taken at once, and one held past the long 
   const start = Date.now()
   const r = lcw(['task', 'add', 'T1', 'x'], { ...t.o, env: { LCW_LOCK_WAIT_MS: '120000' } })
   assert.equal(r.code, 0, r.out)
-  assert.ok(Date.now() - start < 60000, 'a dead holder was waited for')
+  assert.ok(Date.now() - start < 10000, 'a dead holder was waited for')
   assert.ok(!fs.existsSync(`${t.dir}/lock`))
-  // the wait is shorter than the hung limit, so only the holder's own time can make this lock hung
-  heldLock(t, process.pid, 60000)
+  // the wait is shorter than the hung limit and the folder is fresh, so only the holder's own time can make this lock hung
+  heldLock(t, process.pid, 60000, true)
   const hung = lcw(['task', 'add', 'T2', 'x'], { ...t.o, env: { LCW_LOCK_WAIT_MS: '5000', LCW_LOCK_HUNG_MS: '30000' } })
   assert.equal(hung.code, 0, hung.out)
   assert.deepEqual(t.state().tasks.map((x) => x.id), ['T1', 'T2'])
