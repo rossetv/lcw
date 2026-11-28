@@ -71,7 +71,7 @@ test('the status line does not wait on a busy gate lock', async () => {
   heldLock(f)
   const started = Date.now()
   withHome(f.home, () => settleGate(f.paths, f.runState, null, now, null))
-  assert.ok(Date.now() - started < 500)
+  assert.ok(Date.now() - started < 900, 'the redraw waited on the busy lock') // a stall is the full 1000 ms the lock waits by default; 900 holds under load
   assert.equal(fs.existsSync(f.paths.gate), false)
 })
 
