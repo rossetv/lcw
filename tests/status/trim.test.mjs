@@ -33,9 +33,8 @@ process.on('exit', () => write(process.env.TRACE_OUT, JSON.stringify({ reads, gi
 
 /** One draw. With `trace` it runs as a program under the tracer, which counts what the process reads; otherwise it draws in this process. */
 async function line(home, input, { now = NOW, trace = false } = {}) {
-  const env = { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(now), CLAUDE_PID: undefined }
+  const env = { PATH: process.env.PATH, HOME: home, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(now) }
   if (!trace) return { text: (await drawIn(ROOT, JSON.stringify(input), env)).replace(/\x1b\[[0-9;]*m/g, '') }
-  delete env.CLAUDE_PID
   const out = `${tmp('trace')}/out.json`
   env.TRACE_OUT = out
   const r = spawnSync('node', ['--import', TRACER, LINE], { input: JSON.stringify(input), encoding: 'utf8', env })
@@ -47,8 +46,7 @@ const LAUNCHER = new URL('../../scripts/bin/statusline.mjs', import.meta.url).pa
 
 /** One run of the launcher the settings' command starts, as it draws frames ahead from the second `at`. */
 function launched(home, input, { now = NOW, bin } = {}) {
-  const env = { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(now), TRACE_OUT: `${tmp('trace')}/out.json` }
-  delete env.CLAUDE_PID
+  const env = { PATH: process.env.PATH, HOME: home, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(now), TRACE_OUT: `${tmp('trace')}/out.json` }
   const r = spawnSync('node', ['--import', TRACER, bin, `${Math.floor(now / 1000)}+0000`], { input: JSON.stringify(input), encoding: 'utf8', env })
   assert.equal(r.status, 0, r.stderr)
   assert.ok(!r.stdout.includes('could not'), r.stdout)
@@ -138,7 +136,7 @@ describe('one status line run', () => {
     const { repo, home, dir } = await withRun()
     const state = `${dir}/state.json`
     const READ = [[state, JSON.stringify({ ...readJson(state), name: 'stale' }), 'a stamp of another file']]
-    const env = { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW) }
+    const env = { PATH: process.env.PATH, HOME: home, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW) }
     const out = await withEnv(env, async () => (await import(LINE)).ahead(JSON.stringify(inputFor(repo)), { at: `${NOW / 1000}+0000`, read: READ }))
     assert.match(out.replace(/\x1b\[[0-9;]*m/g, ''), /LCW Build · demo/)
   })

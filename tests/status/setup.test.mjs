@@ -8,9 +8,12 @@ const ROOT = new URL('../..', import.meta.url).pathname.replace(/\/$/, '')
 const SETUP = `${ROOT}/scripts/setup.mjs`
 // Claude Code's records name this copy as the installed plugin, unless a test says otherwise
 const INSTALLED = installedConfig()
+// What every child starts with: the way to find node, a throwaway HOME and folder, nothing of this process's own, which other tests may be changing
+const env0 = { PATH: process.env.PATH, HOME: tmp('home-guard') }
+const CWD = tmp('cwd')
 /** spawnSync's result for a command run to its end, without holding the other tests back while it runs. */
 const exec = (cmd, args, { input, ...opts } = {}) => new Promise((resolve) => {
-  const p = spawn(cmd, args, { ...opts, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] })
+  const p = spawn(cmd, args, { cwd: CWD, ...opts, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] })
   let stdout = '', stderr = ''
   p.stdout.on('data', (d) => { stdout += d })
   p.stderr.on('data', (d) => { stderr += d })
@@ -18,7 +21,7 @@ const exec = (cmd, args, { input, ...opts } = {}) => new Promise((resolve) => {
   if (input !== undefined) p.stdin.end(input)
 })
 const setup = async (home, settings, cmd, ...more) => {
-  const r = await exec('node', [SETUP, cmd, ...more, '--settings', settings], { env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: INSTALLED } })
+  const r = await exec('node', [SETUP, cmd, ...more, '--settings', settings], { env: { ...env0, LCW_HOME: home, CLAUDE_CONFIG_DIR: INSTALLED } })
   return { code: r.status, out: r.stdout, err: r.stderr }
 }
 const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'))
@@ -30,7 +33,7 @@ const oldLine = (home) => ({ type: 'command', command: `node ${home}/bin/statusl
 const notices = (home) => read(home + '/notices.json')
 const INPUT = JSON.stringify({ session_id: 's1', model: { display_name: 'Opus 5' }, cwd: '/' })
 /** Runs a status line command as Claude Code does, through sh, with Claude Code's input on stdin. */
-const tick = (home, command, env = {}) => exec('sh', ['-c', command], { input: INPUT, env: { ...process.env, LCW_HOME: home, COLUMNS: '100', ...env } })
+const tick = (home, command, env = {}) => exec('sh', ['-c', command], { input: INPUT, env: { ...env0, LCW_HOME: home, COLUMNS: '100', ...env } })
 const plain = (t) => t.replace(/\x1b\][^\x1b]*\x1b\\/g, '').replace(/\x1b\[[0-9;]*m/g, '')
 
 // The tests start their own processes and share nothing but what is read, so they run side by side.
@@ -100,7 +103,7 @@ describe('setup and the command it writes', { concurrency: true }, () => {
     await setup(home, settings, 'install')
     const input = JSON.stringify({ model: { display_name: 'Opus 5' }, cwd: tmp('cwd'), rate_limits: { seven_day: { used_percentage: 20, resets_at: Math.floor(Date.now() / 1000) + 3 * 86400 } } })
     for (const columns of [100, 126]) {
-      const r = await exec('node', [home + '/bin/statusline.mjs'], { input, env: { ...process.env, LCW_HOME: home, COLUMNS: String(columns) } })
+      const r = await exec('node', [home + '/bin/statusline.mjs'], { input, env: { ...env0, LCW_HOME: home, COLUMNS: String(columns) } })
       assert.equal(r.status, 0)
       const cells = r.stdout.replace(/\x1b\][^\x1b]*\x1b\\/g, '').replace(/\x1b\[[0-9;]*m/g, '').split('\n').filter(Boolean).map((row) => [...row].length)
       assert.ok(cells.length > 0 && cells.every((n) => n === columns - 4), columns + ': ' + cells.join(',') + r.stderr)
@@ -194,7 +197,7 @@ describe('setup and the command it writes', { concurrency: true }, () => {
       fs.mkdirSync(cwd + '/.claude')
       fs.writeFileSync(cwd + '/.claude/' + f, JSON.stringify({ statusLine: { type: 'command', command: 'proj-line' } }))
       fs.writeFileSync(settings, '{}')
-      const r = await exec('node', [SETUP, 'auto', '--settings', settings], { cwd, env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: INSTALLED } })
+      const r = await exec('node', [SETUP, 'auto', '--settings', settings], { cwd, env: { ...env0, LCW_HOME: home, CLAUDE_CONFIG_DIR: INSTALLED } })
       assert.equal(r.status, 0, r.stderr)
       assert.equal(read(settings).statusLine, undefined, f)
       assert.deepEqual(read(settings).attribution, { commit: '', pr: '' })
@@ -264,7 +267,7 @@ describe('setup and the command it writes', { concurrency: true }, () => {
   test('without --settings the file is the one in CLAUDE_CONFIG_DIR when set, else in HOME/.claude', async () => {
     const home = tmp('home'), config = installedConfig(), fakeHome = tmp('fh')
     fs.cpSync(installedConfig(), fakeHome + '/.claude', { recursive: true })
-    const go = (env) => exec('node', [SETUP, 'auto'], { env: { ...process.env, LCW_HOME: home, HOME: fakeHome, CLAUDE_CONFIG_DIR: '', ...env } })
+    const go = (env) => exec('node', [SETUP, 'auto'], { env: { ...env0, LCW_HOME: home, HOME: fakeHome, CLAUDE_CONFIG_DIR: '', ...env } })
     assert.equal((await go({ CLAUDE_CONFIG_DIR: config })).status, 0)
     assert.ok(read(config + '/settings.json').statusLine)
     assert.ok(!fs.existsSync(fakeHome + '/.claude/settings.json'))
@@ -411,7 +414,7 @@ describe('setup and the command it writes', { concurrency: true }, () => {
   async function autoMoves(dir, config) {
     const home = tmp('home'), settings = tmp('s') + '/settings.json'
     fs.writeFileSync(settings, JSON.stringify({ statusLine: oldLine(home), attribution: { commit: '', pr: '' } }))
-    const r = await exec('node', [`${dir}/scripts/setup.mjs`, 'auto', '--settings', settings], { env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: config } })
+    const r = await exec('node', [`${dir}/scripts/setup.mjs`, 'auto', '--settings', settings], { env: { ...env0, LCW_HOME: home, CLAUDE_CONFIG_DIR: config } })
     assert.equal(r.status, 0, r.stderr)
     const command = read(settings).statusLine.command
     if (command === oldLine(home).command) { assert.ok(!fs.existsSync(home + '/bin')); return false }
@@ -445,7 +448,7 @@ describe('setup and the command it writes', { concurrency: true }, () => {
       if (line) fs.writeFileSync(home + '/bin/statusline.mjs', '// an older launcher\n')
       fs.writeFileSync(settings, JSON.stringify(line ? { statusLine: line(home) } : { theme: 'dark' }))
       const before = fs.readFileSync(settings, 'utf8')
-      const r = await exec('node', [SETUP, 'auto', '--settings', settings], { env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: elsewhere } })
+      const r = await exec('node', [SETUP, 'auto', '--settings', settings], { env: { ...env0, LCW_HOME: home, CLAUDE_CONFIG_DIR: elsewhere } })
       assert.equal(r.status, 0, r.stderr)
       assert.equal(r.stdout, '')
       assert.equal(fs.readFileSync(settings, 'utf8'), before)
@@ -476,7 +479,7 @@ describe('setup and the command it writes', { concurrency: true }, () => {
     const a = tmp('a') + '/.lcw', b = tmp('b') + '/.lcw', settings = tmp('s') + '/settings.json'
     fs.mkdirSync(b)
     assert.equal((await setup(a, settings, 'install')).code, 0)
-    const r = await exec('/bin/sh', ['-c', read(settings).statusLine.command], { input: INPUT, env: { ...process.env, LCW_HOME: b, COLUMNS: '100' } })
+    const r = await exec('/bin/sh', ['-c', read(settings).statusLine.command], { input: INPUT, env: { ...env0, LCW_HOME: b, COLUMNS: '100' } })
     assert.equal(r.status, 0, r.stderr)
     const rows = plain(r.stdout).split('\n').filter(Boolean)
     assert.equal(rows.length, 2, r.stdout)
@@ -489,11 +492,11 @@ describe('setup and the command it writes', { concurrency: true }, () => {
     const home = tmp('home'), settings = tmp('s') + '/settings.json'
     const win = tmp('win') + '/win.mjs'
     fs.writeFileSync(win, "Object.defineProperty(process, 'platform', { value: 'win32' })\n")
-    const r = await exec('node', ['--import', win, SETUP, 'install', '--settings', settings], { env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: INSTALLED } })
+    const r = await exec('node', ['--import', win, SETUP, 'install', '--settings', settings], { env: { ...env0, LCW_HOME: home, CLAUDE_CONFIG_DIR: INSTALLED } })
     assert.equal(r.status, 0, r.stderr)
     assert.deepEqual(read(settings).statusLine, oldLine(home))
     assert.ok(!fs.existsSync(home + '/notices.json'))
-    const auto = await exec('node', ['--import', win, SETUP, 'auto', '--settings', settings], { env: { ...process.env, LCW_HOME: home, CLAUDE_CONFIG_DIR: INSTALLED } })
+    const auto = await exec('node', ['--import', win, SETUP, 'auto', '--settings', settings], { env: { ...env0, LCW_HOME: home, CLAUDE_CONFIG_DIR: INSTALLED } })
     assert.equal(auto.stdout, '')
     assert.deepEqual(read(settings).statusLine, oldLine(home), 'auto leaves the node command as it is')
   })

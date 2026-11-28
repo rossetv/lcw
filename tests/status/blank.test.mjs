@@ -36,8 +36,7 @@ test('a card whose money cannot be worked out still leaves the rows and the card
   const repo = makeRepo(), home = tmp('home')
   assert.equal((await cli(['start', 'demo', '--title', 'Demo'], { home, cwd: repo, session: 's1' })).code, 0)
   const input = { session_id: 's1', cwd: repo, model: { display_name: 'Opus 5' }, rate_limits: { seven_day: { used_percentage: 31, resets_at: NOW / 1000 + 3 * 86400 } } }
-  const env = { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW) }
-  delete env.CLAUDE_PID
+  const env = { PATH: process.env.PATH, HOME: home, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW) }
   const r = await exec('node', ['--import', brokenMoney(), LINE], { input: JSON.stringify(input), env })
   const text = plain(r.stdout)
   assert.match(text, /Opus 5/)

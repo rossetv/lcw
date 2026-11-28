@@ -20,7 +20,7 @@ async function tick(home, { id = 's1', transcript, cost, rate_limits, at = NOW, 
   if (transcript) input.transcript_path = transcript
   if (cost !== undefined) input.cost = { total_cost_usd: cost }
   if (rate_limits) input.rate_limits = rate_limits
-  const env = { ...process.env, LCW_HOME: home, LCW_NOW: String(at), TZ: 'Europe/Dublin', COLUMNS: columns }
+  const env = { PATH: process.env.PATH, HOME: home, LCW_HOME: home, LCW_NOW: String(at), TZ: 'Europe/Dublin', COLUMNS: columns }
   return plain(await drawIn(ROOT, JSON.stringify(input), env)).split('\n').filter(Boolean)
 }
 const session = (home, id) => readJson(home + '/sessions/' + id + '.json')
@@ -126,13 +126,13 @@ test('each approved state seeds and draws: the figures, the pace, the card and t
   }
   for (const [state, patterns] of Object.entries(want)) {
     const home = tmp('seed')
-    const env = { ...process.env, LCW_NOW: String(NOW), TZ: 'Europe/Dublin' }
+    const env = { PATH: process.env.PATH, HOME: home, LCW_NOW: String(NOW), TZ: 'Europe/Dublin' }
     assert.equal(spawnSync('node', [SEED, state, home], { env }).status, 0, state)
     const out = plain(await drawIn(ROOT, fs.readFileSync(home + '/stdin.json', 'utf8'), { ...env, LCW_HOME: home + '/.lcw', COLUMNS: '100' }))
     for (const p of patterns) assert.match(out, p, state)
   }
   const home = tmp('seed')
-  const env = { ...process.env, LCW_NOW: String(NOW), TZ: 'Europe/Dublin' }
+  const env = { PATH: process.env.PATH, HOME: home, LCW_NOW: String(NOW), TZ: 'Europe/Dublin' }
   spawnSync('node', [SEED, 'narrow', home], { env })
   const rows = plain(await drawIn(ROOT, fs.readFileSync(home + '/stdin.json', 'utf8'), { ...env, LCW_HOME: home + '/.lcw', COLUMNS: '42' })).split('\n').filter(Boolean)
   assert.equal(rows.length, 3, rows.join('\n'))
