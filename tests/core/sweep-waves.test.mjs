@@ -115,6 +115,10 @@ test('a third wave started beside two still being built is cut from where the fi
   assert.equal(r.code, 0, r.out)
   assert.deepEqual(t.state().sweep.waves.map((x) => x.base), [cut, cut, cut])
   assert.equal(t.state().sweep.waves[2].after, 'lcw/tidy-wave-2')
+  const line = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8').trim().split('\n').filter((l) => /wave 3 started/.test(l)).at(-1)
+  assert.match(line, /beside waves 1, 2\b/, 'it names the waves still being built')
+  assert.match(line, /cut from where wave 1 was cut/, 'and the wave they were cut from')
+  assert.ok(line.includes(cut), 'at the commit it was cut from')
 })
 
 test('a wave takes in what the wave before it changed since it started, before its own review', async () => {

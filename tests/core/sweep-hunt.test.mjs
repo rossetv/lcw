@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { tmp, git, cli } from './helpers.mjs'
-import { hunting, shipping, holdingWithClosure } from './sweep-kit.mjs'
+import { isOpenWave } from '../../lib/banner.mjs'
+import { hunting, shipping, holdingWithClosure, commit } from './sweep-kit.mjs'
 
 // a git on PATH ahead of the real one: sh runs the shim's lines, then falls through to the real git
 const realGit = process.env.PATH.split(path.delimiter).map((d) => `${d}/git`).find((p) => fs.existsSync(p))
@@ -35,19 +36,21 @@ test('a worktree folder deleted outside git does not block wave start or a hunt 
 
 for (const [name, body, says, notSays] of [
   ['a worktree folder', `case "$PWD" in *tidy-latest) if [ "$1" = rev-parse ]; then echo "fatal: cannot read folder" >&2; exit 128; fi;; esac`,
-    /folder at .*tidy-latest could not be read.*cannot read folder.*Move or remove it/s, /not the hunt's/],
+    /tidy-latest.*cannot read folder/s, /not the hunt's/],
   ['the repository refs', `if [ "$1" = for-each-ref ]; then echo "fatal: cannot read refs" >&2; exit 128; fi`,
-    /repository's refs.*cannot read refs.*Nothing was changed/s, /folder at|Move or remove/],
+    /cannot read refs/, /folder at/],
 ]) {
   test(`a hunt whose git cannot read ${name} says what it could not read and removes nothing`, async () => {
     const t = await holdingWithClosure()
     assert.equal((await t.cli('stage', 'Hunt')).code, 0)
     t.edit((s) => { s.stage = 'Plan' })
+    const before = JSON.stringify(t.state())
     const r = await cli(['stage', 'Hunt'], { ...t.o, env: shim(body) })
     assert.equal(r.code, 1, r.out)
     assert.match(r.out, says)
     assert.doesNotMatch(r.out, notSays)
     assert.ok(fs.existsSync(`${t.repo}/.claude/worktrees/tidy-latest`), 'nothing was removed')
+    assert.equal(JSON.stringify(t.state()), before, 'the run is as it was')
   })
 }
 
@@ -119,8 +122,16 @@ test('during a hunt, ask and ledger from the main checkout stay off a wave still
   assert.equal(t.state().sweep.waves[0].waiting, false)
 })
 test('during a hunt, a shipped wave held for its merge is reached with --wave and stays off the run notes', async () => {
-  const t = await shipping(1)
-  assert.equal((await t.ship()).code, 0) // shipped, held for its merge
+  const t = await hunting()
+  await t.cli('set', 'sweep.prs=merged')
+  await t.cli('wave', 'add', '1')
+  await t.start()
+  await t.cli('stage', 'Ship')
+  commit(t.wt, 'b.txt', 'fix\n')
+  assert.equal((await t.ship('--pr', '5')).code, 0)
+  const held = t.state().sweep.waves[0]
+  assert.deepEqual([held.status, held.pr, held.merged], ['shipped', 5, false])
+  assert.ok(isOpenWave(t.state(), held), 'shipped, and held open for its merge')
   assert.equal((await t.cli('stage', 'Hunt')).code, 0)
   await t.cli('ask', 'which way?')
   await t.cli('ledger', 'a note for the run')

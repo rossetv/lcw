@@ -118,6 +118,8 @@ test('hunt records a round\'s park and drop after a wave has started and moved t
   const r = await t.cli('hunt', '--park', '2', '--drop', '1')
   assert.equal(r.code, 0, r.out)
   assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped], [2, 1])
+  assert.deepEqual([t.state().sweep.hunt.park, t.state().sweep.hunt.drop], [2, 1])
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /hunt, round 1.*park 2.*drop 1/, 'the round\'s line carries both counts')
 })
 
 test('sweep-only commands are refused in a build', async () => {
