@@ -67,9 +67,11 @@ test('the program reads its input from stdin, and prints something and exits 0 o
   const good = program(JSON.stringify({ model: { display_name: 'Opus 5' }, cwd: tmp('cwd') }), tmp('home'))
   assert.equal(good.code, 0)
   assert.match(good.out, /Opus 5/)
-  const bad = program('{not json', '/nonexistent/lcw-home')
-  assert.equal(bad.code, 0)
-  assert.ok(bad.out.trim().length > 0)
+  for (const input of ['', '{}', '[]', 'null', '{not json']) {
+    const bad = program(input, '/nonexistent/lcw-home')
+    assert.equal(bad.code, 0, JSON.stringify(input))
+    assert.ok(bad.out.trim().length > 0, JSON.stringify(input))
+  }
 })
 
 test('bad input still draws something', async () => {
