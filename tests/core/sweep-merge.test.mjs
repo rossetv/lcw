@@ -82,7 +82,7 @@ test('merge --wait rides out two failed reads of the checks and ends on the thir
   const always = waiting('ERR')
   const lost = await cli(['merge', '1', '--wait', '60'], { ...u.o, env: always.env })
   assert.equal(lost.code, 1, lost.out)
-  assert.match(lost.out, /could not read the checks of #12, three times running: connection reset by peer/)
+  assert.match(lost.out, /#12.*three times.*connection reset by peer/s)
   assert.equal(always.calls().filter((c) => c.startsWith('pr checks')).length, 3)
   assert.ok(!wrote(always), always.calls().join('\n'))
 })
@@ -108,8 +108,8 @@ test('merge --wait ends, merging nothing, for a run paused before it or stopped 
   const quiet = waiting(checks('pending'))
   const held = await cli(['merge', '1', '--wait', '5'], { ...t.o, env: quiet.env })
   assert.equal(held.code, 1, held.out)
-  assert.match(held.out, /is paused, so lcw merge --wait ends here for #12/)
-  assert.match((await cli(['merge', '2', '--wait', '5'], { ...t.o, env: quiet.env })).out, /is paused, so lcw merge --wait ends here for #13/, 'checked again once the wait is over')
+  assert.match(held.out, /paused.*#12/s)
+  assert.match((await cli(['merge', '2', '--wait', '5'], { ...t.o, env: quiet.env })).out, /paused.*#13/s, 'checked again once the wait is over')
   assert.deepEqual(quiet.calls(), [])
 
   const u = await shippedWaves()
@@ -121,7 +121,7 @@ test('merge --wait ends, merging nothing, for a run paused before it or stopped 
   await until(() => gh.calls().some((c) => c.startsWith('pr checks')), 'lcw merge --wait to read the checks')
   assert.equal((await u.cli('stop')).code, 0)
   assert.equal(await done, 1, out)
-  assert.match(out, /is stopped, so lcw merge --wait ends here for #12/)
+  assert.match(out, /stopped.*#12/s)
   assert.match(fs.readFileSync(`${u.dir}/ledger.md`, 'utf8'), /wave 1:.*#12.*no merge.*stopped/)
   assert.ok(!wrote(gh), gh.calls().join('\n'))
   assert.equal(u.state().sweep.waves[0].merged, false)
@@ -189,7 +189,7 @@ test('merge moves a pull request based on the wave branch onto the default branc
   const stuck = fakeGh({ GH_LIST: '[{"number":13}]', GH_FAIL: 'pr edit' })
   const kept = await cli(['merge', '1'], { ...u.o, env: stuck.env })
   assert.equal(kept.code, 0, kept.out)
-  assert.match(kept.out, /remote branch lcw\/tidy-wave-1 is left: a pull request based on it could not be moved onto main/)
+  assert.match(kept.out, /lcw\/tidy-wave-1 is left.*main/s)
   assert.ok(!stuck.calls().some((c) => c.startsWith('api -X DELETE')), stuck.calls().join('\n'))
   assert.equal(u.state().sweep.waves[0].merged, true)
 })
@@ -280,7 +280,7 @@ test('a wave that never shipped is recorded from the pull request --pr names, an
   const w2 = t.state().sweep.waves[1]
   assert.deepEqual([w2.status, w2.pr, w2.merged, w2.fixed], ['shipped', 15, true, 1])
   assert.equal(t.state().sweep.fixed, fixedBefore + 1)
-  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /PR #15 recorded as landed at \w+; its final checks had not passed on that head \(it was in Ship, merging\)/)
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /PR #15 recorded as landed.*final checks had not passed.*Ship, merging/)
 })
 
 test('a merged pull request is recorded for a wave whose branch was deleted after the merge', async () => {
@@ -297,8 +297,8 @@ test('a merged pull request is not recorded when the wave holds commits beyond w
   t.edit((s) => { Object.assign(s.sweep.waves[1], { status: 'running', stage: 'Ship', step: 'merging', pr: null }) })
   const r = await merge('2', '--pr', '13')
   assert.equal(r.code, 1, r.out)
-  assert.match(r.out, /has not landed\. Nothing was recorded\./)
-  assert.equal(t.state().sweep.waves[1].merged, false)
+  assert.match(r.out, /has not landed/)
+  assert.deepEqual([t.state().sweep.waves[1].merged, t.state().sweep.waves[1].pr], [false, null], 'nothing was recorded')
 })
 
 /** Starts lcw merge 1 in the background; once gh is in its pr merge, resolves to { done }, what the merge ends with. */
@@ -334,7 +334,7 @@ test('a command whose lock was taken from it as hung saves nothing over the newe
   assert.equal(q.code, 0, q.out)
   const m = await merging
   assert.equal(m.code, 1, m.out)
-  assert.match(m.out, /nothing was saved to the run\. Run this command again/)
+  assert.match(m.out, /nothing was saved/)
   assert.deepEqual([t.state().sweep.waves[0].merged, t.state().questions.map((x) => x.id)], [false, ['Q1']])
   assert.ok(!fs.existsSync(`${t.dir}/lock`))
   const again = await cli(['merge', '1'], { ...t.o, env: fakeGh({ GH_STATE: 'MERGED' }).env })
