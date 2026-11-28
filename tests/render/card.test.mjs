@@ -271,6 +271,20 @@ const LANES = {
 const strip = s => s.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, '');
 const card = (board, opts) => renderCard(buildView(inputsOf(board)), opts);
 const cols = s => [...s].length;
+// The width sweeps below draw the same boards at the same widths: each is drawn once. Nothing may change what it returns.
+const drawnAt = new Map();
+const drawn = (name, width, frame) => {
+  const key = `${name} ${width} ${frame}`;
+  if (!drawnAt.has(key)) drawnAt.set(key, renderCard(buildView(inputsOf(name)), { width, frame }));
+  return drawnAt.get(key);
+};
+const linesAt = new Map();
+// The rows as the status line paints them at that width, with the colour taken out, one string per row.
+const printed = (name, width, frame) => {
+  const key = `${name} ${width} ${frame}`;
+  if (!linesAt.has(key)) linesAt.set(key, strip(toAnsi(drawn(name, width, frame), 'dark', width)).split('\n'));
+  return linesAt.get(key);
+};
 
 test('the frame has the title in the top border and a rule between sections', () => {
   const lines = strip(toAnsi(card('RunningA', { width: 100, frame: true }), 'dark', 100)).split('\n');
@@ -668,7 +682,7 @@ test('every framed row is exactly the width, from 44 columns up', () => {
   const boards = ['Brainstorm', 'Spec', 'Plan', 'Review'].map(s => 'Stage' + s)
     .concat(['RunningA', 'NeedsYou', 'SeveralAsks', 'Paused', 'Done', 'ManyAgents', 'AgentsOpen', 'Stalled', 'NoMod'], Object.keys(SWEEP), Object.keys(LANES));
   for (const board of boards) for (let width = 44; width <= 130; width++) {
-    const lines = strip(toAnsi(card(board, { width, frame: true }), 'dark', width)).split('\n');
+    const lines = printed(board, width, true);
     lines.forEach((l, i) => assert.equal(cols(l), width, board + ' at ' + width + ', line ' + i + ': ' + l));
   }
 });
@@ -1157,11 +1171,13 @@ test('a cut leaves no dangling "›" before its "…"', () => {
   }
 });
 
-test('no row of any board is wider than the card, at any width from 20 to 200', () => {
+test('no row of any board is wider than the card, at any width from 20 to 150, and at 200', () => {
+  // Every board prints the same words from 147 columns up, with more padding between them: 200 stands for the wide end.
+  const widths = [...Array.from({ length: 131 }, (_, i) => 20 + i), 200];
   for (const name of Object.keys(fixtures)) {
-    for (let width = 20; width <= 200; width++) {
+    for (const width of widths) {
       for (const frame of [false, true]) {
-        for (const l of strip(toAnsi(card(name, { width, frame }), 'dark', width)).split('\n')) {
+        for (const l of printed(name, width, frame)) {
           assert.ok(cols(l) <= width, name + ' at ' + width + (frame ? ' framed' : '') + ': ' + l);
         }
       }
@@ -1520,13 +1536,12 @@ test('a short row shows only words of the card, cut inside one only at its "…"
   const words = rows => new Set(rows.filter(r => !r.some(s => /^more/.test(s.id ?? '')))
     .flatMap(r => r.map(s => (s.r ? ' ' : '') + s.t).join('').split(/[\s·│╭╮╰╯├┤─]+/)).map(w => w.replace(/^…|[,;:.]?(…?)$/g, '$1')).filter(w => w && !/^([▰▱]+|\d+)…?$/.test(w)));
   for (const name of Object.keys(fixtures)) {
-    const v = buildView(inputsOf(name));
     for (const frame of [false, true]) {
       // and the words only a narrower layout uses
-      const all = [...words(renderCard(v, { width: 400, frame })), ...NARROWER], whole = new Set(all.map(w => w.replace(/…$/, '')));
+      const all = [...words(drawn(name, 400, frame)), ...NARROWER], whole = new Set(all.map(w => w.replace(/…$/, '')));
       const ofCard = w => whole.has(w.replace(/…$/, '')) || (w.endsWith('…') && all.some(a => a.startsWith(w.slice(0, -1))));
       for (let width = 44; width <= 130; width += 2) {
-        const lost = [...words(renderCard(v, { width, frame }))].filter(w => !ofCard(w));
+        const lost = [...words(drawn(name, width, frame))].filter(w => !ofCard(w));
         assert.deepEqual(lost, [], `${name} at ${width}${frame ? ', framed' : ''}`);
       }
     }
@@ -1664,9 +1679,8 @@ test('a bar gives up cells before its counts go, and a failing requirement is th
 
 test('a row cut short leaves no comma or full stop before its "…"', () => {
   for (const name of Object.keys(fixtures)) {
-    const v = buildView(inputsOf(name));
     for (let width = 36; width <= 130; width++) for (const frame of [false, true]) {
-      const hit = toPlain(renderCard(v, { width, frame })).split('\n').find(l => /[,;:.]…/.test(l));
+      const hit = toPlain(drawn(name, width, frame)).split('\n').find(l => /[,;:.]…/.test(l));
       assert.equal(hit, undefined, `${name} at ${width}${frame ? ', framed' : ''}`);
     }
   }
@@ -1719,10 +1733,9 @@ test('a short row keeps a word of what the person must act on: the pause, the de
 
 test("an agent's description cut short gives up a few cells at most to end on a whole word", () => {
   for (const name of Object.keys(fixtures)) {
-    const v = buildView(inputsOf(name));
     for (let width = 44; width <= 130; width++) for (const frame of [false, true]) {
       // The description is the agent's text padded to its column; two cells more go where they spare a word cut one or two letters short.
-      for (const s of renderCard(v, { width, frame }).flat().filter(s => /^view:/.test(s.id ?? '') && len(s.t) > 2)) {
+      for (const s of drawn(name, width, frame).flat().filter(s => /^view:/.test(s.id ?? '') && len(s.t) > 2)) {
         const kept = s.t.trimEnd();
         if (kept.endsWith('…')) assert.ok(len(kept) >= len(s.t) - 8, `${name} at ${width}${frame ? ', framed' : ''}: "${kept}" in ${len(s.t)} cells`);
       }
@@ -1732,11 +1745,10 @@ test("an agent's description cut short gives up a few cells at most to end on a 
 
 test('the bar of a progress row never grows as the card gets narrower', () => {
   for (const name of Object.keys(fixtures)) {
-    const v = buildView(inputsOf(name));
     for (const frame of [false, true]) {
       const wider = {};
       for (let width = 130; width >= 44; width--) {
-        for (const row of toPlain(renderCard(v, { width, frame })).split('\n')) {
+        for (const row of toPlain(drawn(name, width, frame)).split('\n')) {
           const m = /^(.*?)([▰▱]+)/.exec(row);
           if (!m) continue;
           const label = m[1].replace(/[│\s]+/g, ' ').trim(), was = wider[label];
