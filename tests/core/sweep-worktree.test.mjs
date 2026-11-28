@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { tmp, makeRepo, git, cli } from './helpers.mjs'
-import { sweep, hunting, shipping, commit, fakeGh, overlapping, bothShipping, shippedWaves, twoOpen, three, holdingWithClosure } from './sweep-kit.mjs'
+import { sweep, hunting, shipping, commit, fakeGh, overlapping, bothShipping, shippedWaves, twoOpen, three } from './sweep-kit.mjs'
 
 test('a take-in is refused while a task of the wave is running, and nothing moves', async () => {
   const t = await overlapping()
