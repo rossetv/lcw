@@ -313,11 +313,14 @@ async function slowMerge(t, gh) {
 
 test('a command that waits on a slow lcw merge does not lose its change, however long the merge holds the lock', async () => {
   const t = await shippedWaves()
-  const gh = fakeGh({ GH_SLEEP: '1' })
+  const hold = `${tmp('hold')}/release`
+  const gh = fakeGh({ GH_HOLD: hold })
   const { done: merging } = await slowMerge(t, gh)
   // a lock this old was once taken from its holder while the holder still ran
   const old = new Date(Date.now() - 60000)
   fs.utimesSync(`${t.dir}/lock`, old, old)
+  // the question blocks this process until it has the lock, so a process of its own lets the merge go once it has been waiting a while
+  spawn('sh', ['-c', `sleep 0.5; : > '${hold}'`], { stdio: 'ignore' }).unref()
   const q = await t.cli('question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it', '--recommend', 'a')
   assert.equal(q.code, 0, q.out)
   const m = await merging
@@ -327,10 +330,12 @@ test('a command that waits on a slow lcw merge does not lose its change, however
 
 test('a command whose lock was taken from it as hung saves nothing over the newer state, and says to run it again', async () => {
   const t = await shippedWaves()
-  const gh = fakeGh({ GH_SLEEP: '1' })
+  const hold = `${tmp('hold')}/release`
+  const gh = fakeGh({ GH_HOLD: hold })
   const { done: merging } = await slowMerge(t, gh)
   await new Promise((r) => setTimeout(r, 200))
   const q = await cli(['question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it', '--recommend', 'a'], { ...t.o, env: { LCW_LOCK_HUNG_MS: '100' } })
+  fs.writeFileSync(hold, '') // the merge goes on only once the question has taken the lock from it
   assert.equal(q.code, 0, q.out)
   const m = await merging
   assert.equal(m.code, 1, m.out)

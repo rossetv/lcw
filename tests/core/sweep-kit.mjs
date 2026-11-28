@@ -60,8 +60,8 @@ let ghBin = null
  * what each pr view shows in turn, comma separated, the last one again once they run out (open, then merged, by default);
  * GH_DRAFT, GH_BASE and GH_HEAD are the rest of what it shows, and the repository's default branch is main. GH_CHECKS is what each
  * pr checks shows in turn, separated by |, the last one again (NONE: no checks yet, ERR: a failed read). GH_FAIL is the subcommand
- * that fails, GH_UNDO_FAIL makes the pr ready --undo fail too, GH_API_ERROR is what a failing api call says, GH_SLEEP how many
- * seconds pr merge takes, GH_LIST what pr list shows.
+ * that fails, GH_UNDO_FAIL makes the pr ready --undo fail too, GH_API_ERROR is what a failing api call says, GH_HOLD a file
+ * that pr merge waits for (at most 30 s), GH_LIST what pr list shows.
  */
 export function fakeGh(more = {}) {
   if (!ghBin) {
@@ -71,7 +71,7 @@ echo "$*" >> "$FAKE_GH_LOG"
 case "$*" in *--delete-branch*) echo "gh must not delete the branch" >&2; exit 1;; esac
 if [ -n "$GH_UNDO_FAIL" ] && echo "$*" | grep -q -- --undo; then echo "cannot undo" >&2; exit 1; fi
 if [ "$1 $2" = "$GH_FAIL" ]; then echo "GraphQL: not mergeable" >&2; exit 1; fi
-if [ "$1 $2" = "pr merge" ] && [ -n "$GH_SLEEP" ]; then sleep "$GH_SLEEP"; fi
+if [ "$1 $2" = "pr merge" ] && [ -n "$GH_HOLD" ]; then n=0; while [ ! -e "$GH_HOLD" ] && [ $n -lt 600 ]; do sleep 0.05; n=$((n+1)); done; fi
 if [ "$1 $2" = "pr view" ]; then
   states="\${GH_STATE:-OPEN,MERGED}"
   state=$(echo "$states" | cut -d, -f"$(grep -c '^pr view.*state' "$FAKE_GH_LOG")")
