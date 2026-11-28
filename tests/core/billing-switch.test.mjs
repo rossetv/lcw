@@ -1,10 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { tmp, makeRepo, run, cli, readJson, START_HOOK, LIMIT_HOOK } from './helpers.mjs'
+import { tmp, makeRepo, cli, readJson, START_HOOK, LIMIT_HOOK } from './helpers.mjs'
+import { hookIn, callIn } from './hook-inproc.mjs'
+import { main as statusLine } from '../../scripts/statusline.mjs'
 import { measureStep } from '../../hooks/lcw-mod.mjs'
 
-const STATUS_LINE = new URL('../../scripts/statusline.mjs', import.meta.url).pathname
 const NOW = Date.UTC(2026, 5, 10, 12, 0, 0)
 const env = (authMethod) => ({
   LCW_NOW: String(NOW),
@@ -20,40 +21,39 @@ function place(sessions) {
   return { home, repo }
 }
 const billingOf = (home, id) => readJson(`${home}/sessions/${id}.json`).billing
-const start = ({ home, repo }, authMethod, input = { session_id: 'p1' }) =>
-  run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ ...input, cwd: repo }), env: env(authMethod) }).out
+const start = async ({ home, repo }, authMethod, input = { session_id: 'p1' }) =>
+  (await hookIn(START_HOOK, { home, cwd: repo, input: JSON.stringify({ ...input, cwd: repo }), env: env(authMethod) })).out
 /** One status line tick: a cost so far, and the weekly figure a subscription's ticks carry. */
-const tick = ({ home, repo }, { cost, weekly = false, id = 'p1' }) => run(STATUS_LINE, [], {
-  home, cwd: repo, env: env('api_key'),
+const tick = ({ home, repo }, { cost, weekly = false, id = 'p1' }) => callIn({ home, cwd: repo, env: env('api_key') }, () => statusLine({
   input: JSON.stringify({ session_id: id, cwd: repo, cost: { total_cost_usd: cost }, ...(weekly ? { rate_limits: { seven_day: { used_percentage: 20, resets_at: NOW / 1000 + 3 * 86400 } } } : {}) }),
-})
+}))
 /** What the limit hook tells Claude on the next prompt, or null when it says nothing. */
-const prompt = ({ home, repo }, id = 'p1') => {
-  const r = run(LIMIT_HOOK, [], { home, cwd: repo, env: env('api_key'), input: JSON.stringify({ session_id: id, cwd: repo, hook_event_name: 'UserPromptSubmit' }) })
+const prompt = async ({ home, repo }, id = 'p1') => {
+  const r = await hookIn(LIMIT_HOOK, { home, cwd: repo, env: env('api_key'), input: JSON.stringify({ session_id: id, cwd: repo, hook_event_name: 'UserPromptSubmit' }) })
   assert.equal(r.code, 0, r.err)
   return r.out.trim() ? JSON.parse(r.out).hookSpecificOutput.additionalContext : null
 }
 
-test('a subscriber resumed with an API key in the environment is told nothing about dollars, and a weekly figure keeps the subscription', () => {
+test('a subscriber resumed with an API key in the environment is told nothing about dollars, and a weekly figure keeps the subscription', async () => {
   const t = place({ p1: { billing: 'subscription' } })
-  for (const resume of [1, 2]) assert.ok(!/per token|dollar|weekly cap/.test(start(t, 'api_key')), `resume ${resume}, before any reply`)
-  tick(t, { cost: 0.4, weekly: true })
+  for (const resume of [1, 2]) assert.ok(!/per token|dollar|weekly cap/.test(await start(t, 'api_key')), `resume ${resume}, before any reply`)
+  await tick(t, { cost: 0.4, weekly: true })
   assert.equal(billingOf(t.home, 'p1'), 'subscription')
-  assert.equal(prompt(t), null)
+  assert.equal(await prompt(t), null)
 })
 
-test('a resumed subscriber whose first tick shows the cost from before the resume, with no weekly figure, is never made pay-per-token', () => {
+test('a resumed subscriber whose first tick shows the cost from before the resume, with no weekly figure, is never made pay-per-token', async () => {
   const t = place({ p1: { billing: 'subscription' } })
-  start(t, 'api_key')
-  tick(t, { cost: 0.00308 })
+  await start(t, 'api_key')
+  await tick(t, { cost: 0.00308 })
   assert.notEqual(billingOf(t.home, 'p1'), 'payg')
-  assert.equal(prompt(t), null)
-  tick(t, { cost: 0.00308, weekly: true })
+  assert.equal(await prompt(t), null)
+  await tick(t, { cost: 0.00308, weekly: true })
   assert.equal(billingOf(t.home, 'p1'), 'subscription')
-  assert.equal(prompt(t), null)
+  assert.equal(await prompt(t), null)
 })
 
-test('the mod settles a session left unclear at a resume as pay-per-token only once its cost rises past the first reading', () => {
+test('the mod settles a session left unclear at a resume as pay-per-token only once its cost rises past the first reading', async () => {
   const first = measureStep({ billing: 'unclear' }, null, { weekly: null, cost: 0.00308 }, NOW)
   assert.equal(first.billing, 'unclear')
   assert.equal(measureStep({ billing: 'unclear' }, first.record, { weekly: null, cost: 0.05 }, NOW).billing, 'payg')
@@ -61,28 +61,28 @@ test('the mod settles a session left unclear at a resume as pay-per-token only o
 
 test('a stored subscription resumed under an API key whose reply has no weekly figure counts dollars and stops at the dollar mark', async () => {
   const t = place({ p1: { billing: 'subscription', toldPayg: true } })
-  start(t, 'api_key')
-  tick(t, { cost: 0.4 })
-  tick(t, { cost: 0.9 })
+  await start(t, 'api_key')
+  await tick(t, { cost: 0.4 })
+  await tick(t, { cost: 0.9 })
   assert.equal(billingOf(t.home, 'p1'), 'payg')
-  assert.match(prompt(t), /turned out to be billed per token/)
+  assert.match(await prompt(t), /turned out to be billed per token/)
   assert.equal((await cli(['mark', '10usd'], { home: t.home, cwd: t.repo, session: 'p1' })).code, 0)
-  tick(t, { cost: 12.4 })
-  assert.match(prompt(t), /STOP\. This session is at its usage mark: \$12 was spent .* the mark is \$10/)
+  await tick(t, { cost: 12.4 })
+  assert.match(await prompt(t), /STOP\. This session is at its usage mark: \$12 was spent .* the mark is \$10/)
 })
 
-test('a resume known by an older canonical id settles the canonical session too', () => {
+test('a resume known by an older canonical id settles the canonical session too', async () => {
   const t = place({ c0: { billing: 'subscription', sessionCanonicalId: 'c0' }, p1: { sessionCanonicalId: 'c0' } })
-  start(t, 'api_key')
-  tick(t, { cost: 0.4 })
-  tick(t, { cost: 0.9 })
-  assert.match(prompt(t), /turned out to be billed per token/)
+  await start(t, 'api_key')
+  await tick(t, { cost: 0.4 })
+  await tick(t, { cost: 0.9 })
+  assert.match(await prompt(t), /turned out to be billed per token/)
 })
 
-test('a stored subscription stays one when the sign-in cannot be read or is a subscription', () => {
+test('a stored subscription stays one when the sign-in cannot be read or is a subscription', async () => {
   for (const [authMethod, input, id] of [[null, { session_id: 'p2', transcript_path: '/x/p1.jsonl' }, 'p2'], ['claude.ai', undefined, 'p1']]) {
     const t = place({ [id]: { billing: 'subscription' } })
-    start(t, authMethod, input)
+    await start(t, authMethod, input)
     assert.equal(billingOf(t.home, id), 'subscription', String(authMethod))
   }
 })
