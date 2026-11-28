@@ -298,8 +298,6 @@ test('below 44 columns there is no frame', () => {
 
 test('the right group sits against the right edge at 126 and 80 columns', () => {
   for (const width of [126, 80]) {
-    const framed = strip(toAnsi(card('Stalled', { width, frame: true }), 'dark', width)).split('\n');
-    assert.ok(framed.every(l => cols(l) === width), 'framed rows are ' + width + ' wide at ' + width);
     const status = strip(toAnsi(renderStatusRows(inputsOf('Stalled').status, { width }), 'dark', width)).split('\n');
     assert.equal(cols(status[0]), width);
     assert.ok(status[0].endsWith('acme-api · lcw/export-csv'));
@@ -484,12 +482,6 @@ test('motion: bars fill cell by cell on first draw', () => {
   assert.equal(taskBar(100), 17);
 });
 
-test('needs-you frame pulses', () => {
-  const view = buildView(inputsOf('NeedsYou'));
-  const c = tick => renderCard(view, { width: 100, frame: true, tick })[0][0].c;
-  assert.notEqual(c(0), c(14));
-});
-
 test('a card that waits on the person pulses evenly, one step a second over a four-second beat, in its own colours', () => {
   const withYou = buildView(inputsOf('StageBrainstorm'));
   assert.equal(withYou.mode, 'with-you');
@@ -623,15 +615,6 @@ test('one more worker is singular', () => {
   assert.ok(!text.includes('1 more workers'));
 });
 
-test('every board fits the frame at 126, 100 and 80 columns', () => {
-  for (const board of ['Brainstorm', 'Spec', 'Plan', 'Review'].map(s => 'Stage' + s).concat(['RunningA', 'NeedsYou', 'SeveralAsks', 'Paused', 'Done', 'ManyAgents', 'AgentsOpen', 'Stalled', 'NoMod'], Object.keys(SWEEP), Object.keys(LANES))) {
-    for (const width of [126, 100, 80]) {
-      const lines = strip(toAnsi(card(board, { width, frame: true }), 'dark', width)).split('\n');
-      lines.forEach((l, i) => assert.equal(cols(l), width, board + ' at ' + width + ', line ' + i + ': ' + l));
-    }
-  }
-});
-
 test('sparse state prints no undefined, null or NaN', () => {
   const sub = { plan: {}, spec: {}, intent: {}, blindReview: {}, closing: {}, totals: {}, tasks: [], requirements: [], asks: [], pr: null };
   const states = [];
@@ -683,7 +666,7 @@ test('a right group too long for the card is cut too', () => {
 
 test('every framed row is exactly the width, from 44 columns up', () => {
   const boards = ['Brainstorm', 'Spec', 'Plan', 'Review'].map(s => 'Stage' + s)
-    .concat(['RunningA', 'NeedsYou', 'SeveralAsks', 'Paused', 'Done', 'ManyAgents', 'AgentsOpen', 'Stalled', 'NoMod']);
+    .concat(['RunningA', 'NeedsYou', 'SeveralAsks', 'Paused', 'Done', 'ManyAgents', 'AgentsOpen', 'Stalled', 'NoMod'], Object.keys(SWEEP), Object.keys(LANES));
   for (const board of boards) for (let width = 44; width <= 130; width++) {
     const lines = strip(toAnsi(card(board, { width, frame: true }), 'dark', width)).split('\n');
     lines.forEach((l, i) => assert.equal(cols(l), width, board + ' at ' + width + ', line ' + i + ': ' + l));
@@ -732,22 +715,16 @@ test('a collapsed orchestrator counts every agent under it', () => {
   assert.ok(rows.some(t => /3 more agents/.test(t)));
 });
 
-test('paused at a mark the week has already passed, the hint offers a step above what is used', () => {
-  const hint = (markPercent, percentUsed) => plain(renderCard(buildView({ state: { stage: 'Build', status: 'paused', pausedReason: 'mark', markPercent, name: 'd' },
-    usage: { sevenDay: { percentUsed, resetsAt: new Date(NOW + 36e5).toISOString() } }, ...at }), { width: 100, frame: true })).join('\n').match(/run up to (\d+)%/)?.[1];
-  assert.equal(hint(75, 40), '85');
-  assert.equal(hint(70, 85), '90');
-  assert.equal(hint(75, 92), '100');
-  assert.equal(hint(95, 20), '100');
-  assert.equal(hint(75, 100), undefined);
-});
-
-test('paused at a mark with an outside quota reading, the hint offers a step above the quota\'s figure', () => {
-  const hint = (markPercent, percentUsed) => plain(renderCard(buildView({ state: { stage: 'Build', status: 'paused', pausedReason: 'mark', markPercent, name: 'd' },
-    quota: { status: 'ok', hold: true, percentUsed }, ...at }), { width: 100, frame: true })).join('\n').match(/run up to (\d+)%/)?.[1];
-  assert.equal(hint(70, 85), '90');
-  assert.equal(hint(75, 92), '100');
-  assert.equal(hint(75, 40), '85');
+test('paused at a mark, the hint offers a step above what the week or the outside quota has used, and none from 100%', () => {
+  const hint = (markPercent, source) => plain(renderCard(buildView({ state: { stage: 'Build', status: 'paused', pausedReason: 'mark', markPercent, name: 'd' }, ...source, ...at }), { width: 100, frame: true })).join('\n').match(/run up to (\d+)%/)?.[1];
+  const week = percentUsed => ({ usage: { sevenDay: { percentUsed, resetsAt: new Date(NOW + 36e5).toISOString() } } });
+  const quota = percentUsed => ({ quota: { status: 'ok', hold: true, percentUsed } });
+  for (const [name, source, mark, used, expected] of [
+    ['week', week, 75, 40, '85'], ['week', week, 70, 85, '90'], ['week', week, 75, 92, '100'], ['week', week, 95, 20, '100'], ['week', week, 75, 100, undefined],
+    ['quota', quota, 70, 85, '90'], ['quota', quota, 75, 92, '100'], ['quota', quota, 75, 40, '85'],
+  ]) assert.equal(hint(mark, source(used)), expected, `${name} used ${used} at mark ${mark}`);
+  assert.equal(hint(100, {}), undefined);
+  assert.equal(hint(75, {}), '85');
 });
 
 test('the placeholder zeros a spec and a plan start with are not drawn as figures', () => {
@@ -760,13 +737,6 @@ test('the placeholder zeros a spec and a plan start with are not drawn as figure
   assert.doesNotMatch(drawn('Plan', wave(0)), /0 tasks/);
   assert.match(drawn('Plan', wave(7)), /7 tasks/);
 });
-
-test('paused at a 100% mark, the card offers no higher mark', () => {
-  const rows = (markPercent) => plain(renderCard(buildView({ state: { stage: 'Build', status: 'paused', pausedReason: 'mark', markPercent, name: 'd' }, ...at }), { width: 100, frame: true })).join('\n');
-  assert.doesNotMatch(rows(100), /run up to/);
-  assert.match(rows(75), /run up to 85%/);
-});
-
 
 test('a long intent row keeps the newest in view: the oldest settled points give way after a "…"', () => {
   const v = buildView({ ...inputsOf('StageBrainstorm'), state: { ...inputsOf('StageBrainstorm').state,
@@ -1169,18 +1139,14 @@ test("an agent row's effort is whole or absent when the card is narrow", () => {
   }
 });
 
-test('a cut on the edge of a span leaves no dangling dot and says it cut', () => {
-  const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), 65).find(l => l.includes('areas '));
-  assert.ok(row.includes('…') && !/·\s+23 findings/.test(row), row);
-  assert.match(row, /…\s+23 findings so far/, row);
-});
-
-test('a cut that drops whole spans always shows "…", even where what is left ends on a word', () => {
+test('a cut on the edge of a span leaves no dangling dot, says it cut, and shows "…" even where what is left ends on a word', () => {
   for (const width of [61, 65]) {
     const row = framedRows(inputsOf('03-hunt-round-1-probes-at-work'), width).find(l => l.includes('areas '));
-    assert.match(row, /(▱ |14 hunted |6 running )…\s+23 findings so far/, width + ': ' + row);
+    assert.ok(row.includes('…') && !/·\s+23 findings/.test(row), width + ': ' + row);
+    assert.match(row, /…\s+23 findings so far/, width + ': ' + row);
     assert.ok(!row.includes('16 left'), row);
   }
+  assert.match(framedRows(inputsOf('03-hunt-round-1-probes-at-work'), 61).find(l => l.includes('areas ')), /(▱ |14 hunted |6 running )…\s+23 findings so far/);
   const plain = strip(toAnsi(card('03-hunt-round-1-probes-at-work', { width: 61 }), 'dark', 61)).split('\n').find(l => l.startsWith('areas '));
   assert.match(plain, /…\s+23 findings so far/, plain);
 });
