@@ -60,8 +60,12 @@ test('a gate lock released by its writer a moment later is waited for instead of
   const f = gatedFixture()
   const { lock, owner } = heldLock(f)
   f.runState.markPercent = 80
-  const release = `setTimeout(() => { require('fs').unlinkSync(${JSON.stringify(`${lock}/${owner}`)}); require('fs').rmdirSync(${JSON.stringify(lock)}) }, 150)`
+  // the releaser says it is running before the wait starts, so a slow node start does not eat the wait's second
+  const ready = `${lock}.ready`
+  const release = `const fs = require('fs'); fs.writeFileSync(${JSON.stringify(ready)}, ''); setTimeout(() => { fs.unlinkSync(${JSON.stringify(`${lock}/${owner}`)}); fs.rmdirSync(${JSON.stringify(lock)}) }, 150)`
   spawn(process.execPath, ['-e', release], { stdio: 'ignore' })
+  for (const end = Date.now() + 60000; !fs.existsSync(ready) && Date.now() < end;) await new Promise((r) => setTimeout(r, 10))
+  assert.ok(fs.existsSync(ready), 'the releaser never started')
   assert.equal(f.apply(), false)
   assert.equal(fs.existsSync(f.paths.gate), false)
 })
