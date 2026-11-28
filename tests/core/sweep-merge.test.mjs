@@ -387,8 +387,13 @@ test('merge given a pull request number says it takes a wave number, and names t
 
 test('merge of a number that is neither a wave nor a wave\'s pull request says there is no such wave and lists the waves', async () => {
   const t = await sweep()
+  const stateBefore = JSON.stringify(t.state())
+  const ledgerBefore = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
   await t.cli('set', 'sweep.prs=merged')
+  assert.equal(miss.code, 1, miss.out)
   const r = await t.cli('merge', '4')
+  assert.equal(JSON.stringify(t.state()), stateBefore, 'a miss changes no state')
+  assert.equal(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), ledgerBefore, 'a miss writes no ledger line')
   assert.equal(r.code, 1)
   assert.match(r.out, /No wave 4.*no waves/s)
 })
