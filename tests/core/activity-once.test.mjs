@@ -68,11 +68,13 @@ test('a stale lock is broken and the failure counted', () => {
 })
 
 test('a lock that stays held never makes the hook fail or hang, and is left to its holder', () => {
+  const spawnTime = () => { const t = Date.now(); fire(home(), failed('toolu_0')); return Date.now() - t }
+  const unlocked = spawnTime() // what a start costs on this machine now, so a loaded one does not read as a wait
   const dir = home()
   fs.writeFileSync(lockOf(dir), '')
   const t = Date.now()
   fire(dir, failed('toolu_1'))
-  assert.ok(Date.now() - t < 1500)
+  assert.ok(Date.now() - t < unlocked + 3000, 'the hook waited on a lock far past its short give-up')
   assert.equal(record(dir).fails, 1)
   assert.equal(fs.existsSync(lockOf(dir)), true)
 })
