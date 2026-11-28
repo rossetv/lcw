@@ -319,9 +319,19 @@ test('a command that waits on a slow lcw merge does not lose its change, however
   // a lock this old was once taken from its holder while the holder still ran
   const old = new Date(Date.now() - 60000)
   fs.utimesSync(`${t.dir}/lock`, old, old)
-  // the question blocks this process until it has the lock, so a process of its own lets the merge go once it has been waiting a while
-  spawn('sh', ['-c', `sleep 0.5; : > '${hold}'`], { stdio: 'ignore' }).unref()
-  const q = await t.cli('question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it', '--recommend', 'a')
+  // the question blocks this process until it has the lock, so a process of its own lets the merge go once the question has found the lock held
+  const waiting = `${hold}.waiting`
+  spawn('sh', ['-c', `n=0; while [ ! -e '${waiting}' ] && [ $n -lt 1200 ]; do sleep 0.05; n=$((n+1)); done; : > '${hold}'`], { stdio: 'ignore' }).unref()
+  const mkdir = fs.mkdirSync
+  fs.mkdirSync = (p, ...rest) => {
+    try { return mkdir(p, ...rest) } catch (e) {
+      if (p === `${t.dir}/lock` && e.code === 'EEXIST') fs.writeFileSync(waiting, '')
+      throw e
+    }
+  }
+  let q
+  try { q = await t.cli('question', 'add', 'Q1', '--text', 'Allow a 422?', '--a', 'Yes: fix it', '--b', 'No: keep it', '--recommend', 'a') } finally { fs.mkdirSync = mkdir }
+  assert.ok(fs.existsSync(waiting), 'the question never met the held lock')
   assert.equal(q.code, 0, q.out)
   const m = await merging
   assert.equal(m.code, 0, m.out)
@@ -377,8 +387,13 @@ test('merge given a pull request number says it takes a wave number, and names t
   assert.equal(hit.code, 1)
   assert.match(hit.out, /takes a wave number/)
   assert.match(hit.out, /13.*wave 2.*lcw merge 2/, 'it names the wave that has that pull request')
+  const stateBefore = JSON.stringify(t.state())
+  const ledgerBefore = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
   const miss = await cli(['merge', '99'], { ...t.o, env: gh.env })
+  assert.equal(miss.code, 1, miss.out)
   assert.match(miss.out, /No wave 99.*1, 2/s)
+  assert.equal(JSON.stringify(t.state()), stateBefore, 'a miss changes no state')
+  assert.equal(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), ledgerBefore, 'a miss writes no ledger line')
   assert.doesNotMatch(miss.out, /pull request number|is wave/)
   t.edit((s) => s.sweep.waves.push({ n: 3, fixes: 1, status: 'shipped', branch: 'lcw/tidy-wave-3', pr: null, empty: true, dropped: 1, fixed: 0 }))
   assert.doesNotMatch((await cli(['merge', '0'], { ...t.o, env: gh.env })).out, /is wave/, 'a wave with no pull request has none numbered 0')
@@ -387,13 +402,8 @@ test('merge given a pull request number says it takes a wave number, and names t
 
 test('merge of a number that is neither a wave nor a wave\'s pull request says there is no such wave and lists the waves', async () => {
   const t = await sweep()
-  const stateBefore = JSON.stringify(t.state())
-  const ledgerBefore = fs.readFileSync(`${t.dir}/ledger.md`, 'utf8')
   await t.cli('set', 'sweep.prs=merged')
-  assert.equal(miss.code, 1, miss.out)
   const r = await t.cli('merge', '4')
-  assert.equal(JSON.stringify(t.state()), stateBefore, 'a miss changes no state')
-  assert.equal(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), ledgerBefore, 'a miss writes no ledger line')
   assert.equal(r.code, 1)
   assert.match(r.out, /No wave 4.*no waves/s)
 })
