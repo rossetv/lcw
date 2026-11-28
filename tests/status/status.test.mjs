@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmp, cli, readJson, makeRepo, git } from '../core/helpers.mjs'
-import { drawIn } from './golden/draw.mjs'
+import { drawIn, withEnv } from './golden/draw.mjs'
 import { mapInput } from '../../scripts/statusline.mjs'
 import { renderStatusRows } from '../../lib/status.mjs'
 import { toAnsi } from '../../lib/paint.mjs'
@@ -29,6 +29,16 @@ function program(input, home) {
   const r = spawnSync('node', [LINE], { input, encoding: 'utf8', env: { PATH: process.env.PATH, HOME: home, LCW_HOME: home, COLUMNS: '120' } })
   return { code: r.status, out: r.stdout }
 }
+
+test('a draw and an lcw command in one process take turns: the command waits while the draw holds the environment', async () => {
+  const start = (name) => cli(['start', name, '--title', name], { home: tmp('home'), cwd: makeRepo(), session: 's1' })
+  await start('warm') // the command's own code is loaded, so that it would end well inside the draw's wait
+  const order = []
+  const draw = withEnv({ PATH: process.env.PATH }, async () => { await new Promise((r) => setTimeout(r, 150)); order.push('draw') })
+  const run = start('demo').then(() => order.push('command'))
+  await Promise.all([draw, run])
+  assert.deepEqual(order, ['draw', 'command'])
+})
 
 test('maps the real worktree sample', () => {
   // The sample was recorded in a session inside the worktree .claude/worktrees/probe of a repository called "repo".
