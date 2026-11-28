@@ -1,8 +1,8 @@
-import test, { after } from 'node:test'
+import test, { after, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawn } from 'node:child_process'
-import { tmp, makeRepo, run, cli, LIMIT_HOOK, CLI } from './helpers.mjs'
+import { tmp, makeRepo, cli, LIMIT_HOOK, CLI } from './helpers.mjs'
 import { quotaFile, sessionFile, spendFile, usageFile, capFile } from '../../lib/key.mjs'
 import { cases } from './mark-cases.mjs'
 
@@ -18,8 +18,9 @@ const CALLS = {
 }
 const put = (file, value) => { fs.mkdirSync(file.slice(0, file.lastIndexOf('/')), { recursive: true }); fs.writeFileSync(file, JSON.stringify(value)) }
 
-// Two processes that run for the whole file stand for the rows' running pids; a pid no process holds stands for each ended one.
-const running = [0, 1].map(() => spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)'], { stdio: 'ignore' }))
+// Processes that run until the file ends stand for the rows' running pids, one for each place a row lists, started when first named; a pid no process holds stands for each ended one.
+const running = []
+const live = (i) => (running[i] ??= spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e9)'], { stdio: 'ignore' }))
 after(() => running.forEach((kid) => kid.kill()))
 const ENDED = 2000000000
 
@@ -28,14 +29,16 @@ function processes(row) {
   const named = new Set([...Object.values(row.sessions ?? {}).map((s) => s.claudePid), row.pid].filter(Boolean))
   const real = new Map()
   let ended = 0
-  for (const pid of named) real.set(pid, row.running?.includes(pid) ? running[row.running.indexOf(pid)].pid : ENDED + ended++)
+  for (const pid of named) real.set(pid, row.running?.includes(pid) ? live(row.running.indexOf(pid)).pid : ENDED + ended++)
   return real
 }
 
+// The hook only reads the repository, so the rows that start no run share one.
+let shared
 /** A home in the row's state; returns the home, the repo, and a way to put the session files back as they were. */
 async function build(row, real) {
   const home = tmp('home')
-  const repo = makeRepo()
+  const repo = row.run ? makeRepo() : (shared ??= makeRepo())
   const sessions = {}
   if (row.run) {
     const r = await cli(['start', 'demo', '--title', 'Demo run'], { home, cwd: repo, session: row.run })
@@ -58,20 +61,39 @@ async function build(row, real) {
   return { home, repo, reset }
 }
 
-const say = (r) => (r.out.trim() ? JSON.parse(r.out).hookSpecificOutput.additionalContext : null)
-
-for (const row of cases) {
-  test(`the usage mark: ${row.name}`, async () => {
-    const real = processes(row)
-    const { home, repo, reset } = await build(row, real)
-    const env = { LCW_NOW: String(NOW), ...(row.pid ? { CLAUDE_PID: String(real.get(row.pid)) } : {}) }
-    const transcript = row.transcript ? { transcript_path: `/t/${row.transcript}.jsonl` } : {}
-    for (const [call, want] of Object.entries(row.expect)) {
-      reset() // the once-only note is written by the first call
-      const r = run(LIMIT_HOOK, [], { home, cwd: repo, env, input: JSON.stringify({ session_id: 'p1', cwd: repo, ...transcript, ...CALLS[call] }) })
-      assert.equal(r.code, 0, r.err)
-      const cli = `node ${CLI}`
-      assert.equal(say(r), want === null ? null : want.replaceAll('{cli}', cli), call)
-    }
+// The hook runs without blocking, from the env this file started with: a cli() call for another row swaps process.env while it runs.
+const BASE = { ...process.env }
+function hook({ home, cwd, env: more, input }) {
+  const env = { ...BASE, LCW_HOME: home, LCW_LOAD: '0', ...more }
+  delete env.CLAUDE_CODE_SESSION_ID
+  if (!more.CLAUDE_PID) delete env.CLAUDE_PID // the hook would read the real Claude Code's command line
+  return new Promise((resolve) => {
+    const kid = spawn('node', [LIMIT_HOOK], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] })
+    let out = ''
+    let err = ''
+    kid.stdout.on('data', (d) => { out += d })
+    kid.stderr.on('data', (d) => { err += d })
+    kid.on('close', (code) => resolve({ code, out, err }))
+    kid.stdin.end(input)
   })
 }
+
+const say = (r) => (r.out.trim() ? JSON.parse(r.out).hookSpecificOutput.additionalContext : null)
+
+describe('the usage mark', { concurrency: true }, () => {
+  for (const row of cases) {
+    test(row.name, async () => {
+      const real = processes(row)
+      const { home, repo, reset } = await build(row, real)
+      const env = { LCW_NOW: String(NOW), ...(row.pid ? { CLAUDE_PID: String(real.get(row.pid)) } : {}) }
+      const transcript = row.transcript ? { transcript_path: `/t/${row.transcript}.jsonl` } : {}
+      for (const [call, want] of Object.entries(row.expect)) {
+        reset() // the once-only note is written by the first call
+        const r = await hook({ home, cwd: repo, env, input: JSON.stringify({ session_id: 'p1', cwd: repo, ...transcript, ...CALLS[call] }) })
+        assert.equal(r.code, 0, r.err)
+        const cli = `node ${CLI}`
+        assert.equal(say(r), want === null ? null : want.replaceAll('{cli}', cli), call)
+      }
+    })
+  }
+})

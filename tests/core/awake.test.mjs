@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
-import { tmp, readJson, started, fakeClaude, CLI } from './helpers.mjs'
+import { tmp, readJson, begin, fakeClaude, CLI } from './helpers.mjs'
 import { othersHold, canHold, startHold, keptHold, releaseHold, inWsl } from '../../scripts/lib/awake.mjs'
 
 // What `pmset -g assertions` printed on a Mac: macOS's own holders, Claude Code's 5-minute caffeinate holds, Amphetamine.
@@ -68,41 +68,41 @@ async function gone(pid) {
   return !alive(pid)
 }
 
-// A hold is kept only for a process that is Claude Code's, so each run records a stand-in one.
-const claudes = []
-after(() => claudes.forEach((c) => c.kill()))
+// A hold is kept only for a process that is Claude Code's, so each run records one stand-in for it, shared by them all.
+let claude
+after(() => claude?.kill())
 
-function building() {
-  const t = started()
-  t.cli('stage', 'Build')
+async function building() {
+  const t = await begin()
+  await t.cli('stage', 'Build')
   const file = `${t.home}/sessions/s1.json`
-  claudes.push(fakeClaude())
-  fs.writeFileSync(file, JSON.stringify({ ...readJson(file), claudePid: claudes.at(-1).pid }))
-  return { ...t, check: () => JSON.parse(t.cli('awake', '--check').out) }
+  claude ??= fakeClaude()
+  fs.writeFileSync(file, JSON.stringify({ ...readJson(file), claudePid: claude.pid }))
+  return { ...t, check: async () => JSON.parse((await t.cli('awake', '--check')).out) }
 }
 
 test('keep awake starts a hold that outlives the command, and pausing the run ends it', real, async () => {
-  const t = building()
-  assert.deepEqual(t.check(), { canHold: true, heldByOther: false, kept: false })
+  const t = await building()
+  assert.deepEqual(await t.check(), { canHold: true, heldByOther: false, kept: false })
   // a hold still tied to lcw's output or process group would keep this waiting past the timeout
   const env = { ...process.env, LCW_HOME: t.home, CLAUDE_CODE_SESSION_ID: 's1' }
   const r = spawnSync('node', [CLI, 'awake'], { cwd: t.repo, env, encoding: 'utf8', timeout: 15000 })
   assert.equal(r.status, 0, r.stdout)
   const hold = readJson(`${t.dir}/awake`)
   assert.ok(alive(hold.pid), 'the hold is still running after lcw awake returned')
-  assert.deepEqual(t.check(), { canHold: true, heldByOther: false, kept: true })
-  assert.equal(t.cli('awake').out.trim(), 'already kept awake')
-  t.cli('pause', 'human')
+  assert.deepEqual(await t.check(), { canHold: true, heldByOther: false, kept: true })
+  assert.equal((await t.cli('awake')).out.trim(), 'already kept awake')
+  await t.cli('pause', 'human')
   assert.ok(await gone(hold.pid))
   assert.equal(fs.existsSync(`${t.dir}/awake`), false)
-  assert.equal(t.check().kept, false)
+  assert.equal((await t.check()).kept, false)
 })
 
 test('a run going back to the person ends the hold', real, async () => {
-  const t = building()
-  t.cli('awake')
+  const t = await building()
+  await t.cli('awake')
   const hold = readJson(`${t.dir}/awake`)
-  t.cli('stage', 'Brainstorm')
+  await t.cli('stage', 'Brainstorm')
   assert.equal(t.state().status, 'with-you')
   assert.ok(await gone(hold.pid))
   assert.equal(fs.existsSync(`${t.dir}/awake`), false)
@@ -121,15 +121,15 @@ test('releasing never kills a process that only took over the hold\'s pid', host
   } finally { other.kill() }
 })
 
-test('keep awake refuses without Claude Code\'s pid, or for a run that is not running', host, () => {
-  const t = building()
+test('keep awake refuses without Claude Code\'s pid, or for a run that is not running', host, async () => {
+  const t = await building()
   const file = `${t.home}/sessions/s1.json`
   const session = readJson(file)
   fs.writeFileSync(file, JSON.stringify({ runDir: t.dir }))
-  assert.equal(t.cli('awake').code, 1)
+  assert.equal((await t.cli('awake')).code, 1)
   fs.writeFileSync(file, JSON.stringify(session))
-  t.cli('pause', 'human')
-  assert.equal(t.cli('awake').code, 1)
+  await t.cli('pause', 'human')
+  assert.equal((await t.cli('awake')).code, 1)
   assert.equal(fs.existsSync(`${t.dir}/awake`), false)
 })
 
@@ -137,15 +137,15 @@ test('keep awake refuses without Claude Code\'s pid, or for a run that is not ru
 function withStub(program, body, fn) {
   const bin = tmp('stub')
   fs.writeFileSync(`${bin}/${program}`, body, { mode: 0o755 })
+  // the first run of a new script can take 300 ms or more on macOS while it is scanned, as long as startHold waits for it to exit
+  spawnSync(`${bin}/${program}`)
   const path = process.env.PATH
   process.env.PATH = `${bin}:${path}`
   try { return fn() } finally { process.env.PATH = path }
 }
 
 test('a hold that dies at once is not reported as started', host, () => {
-  // the first run of a new script can take 300 ms or more on macOS while it is scanned, as long as startHold waits for it to exit
   withStub('systemd-inhibit', '#!/bin/sh\nexit 1\n', () => {
-    spawnSync('systemd-inhibit')
     assert.equal(startHold(tmp('run'), process.pid, 'x', 0, 'linux'), null)
   })
 })
