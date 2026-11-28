@@ -1,8 +1,8 @@
-import test from 'node:test'
+import test, { after } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { spawn, spawnSync } from 'node:child_process'
-import { tmp, makeRepo, run, lcw, LIMIT_HOOK, CLI } from './helpers.mjs'
+import { spawn } from 'node:child_process'
+import { tmp, makeRepo, run, cli, LIMIT_HOOK, CLI } from './helpers.mjs'
 import { quotaFile, sessionFile, spendFile, usageFile, capFile } from '../../lib/key.mjs'
 import { cases } from './mark-cases.mjs'
 
@@ -18,31 +18,27 @@ const CALLS = {
 }
 const put = (file, value) => { fs.mkdirSync(file.slice(0, file.lastIndexOf('/')), { recursive: true }); fs.writeFileSync(file, JSON.stringify(value)) }
 
-/**
- * Real processes for the row's pids: one that runs for each pid in row.running, one that has ended for every other.
- * Returns the pid that stands for each, and a way to end the running ones.
- */
+// Two processes that run for the whole file stand for the rows' running pids; a pid no process holds stands for each ended one.
+const running = [0, 1].map(() => spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)'], { stdio: 'ignore' }))
+after(() => running.forEach((kid) => kid.kill()))
+const ENDED = 2000000000
+
+/** The pid that stands for each pid the row names: a running process for each in row.running, an unheld pid for every other. */
 function processes(row) {
   const named = new Set([...Object.values(row.sessions ?? {}).map((s) => s.claudePid), row.pid].filter(Boolean))
   const real = new Map()
-  const kids = []
-  for (const pid of named) {
-    if (row.running?.includes(pid)) {
-      const kid = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' })
-      kids.push(kid)
-      real.set(pid, kid.pid)
-    } else real.set(pid, spawnSync(process.execPath, ['-e', '']).pid)
-  }
-  return { real, end: () => kids.forEach((kid) => kid.kill()) }
+  let ended = 0
+  for (const pid of named) real.set(pid, row.running?.includes(pid) ? running[row.running.indexOf(pid)].pid : ENDED + ended++)
+  return real
 }
 
 /** A home in the row's state; returns the home, the repo, and a way to put the session files back as they were. */
-function build(row, real) {
+async function build(row, real) {
   const home = tmp('home')
   const repo = makeRepo()
   const sessions = {}
   if (row.run) {
-    const r = lcw(['start', 'demo', '--title', 'Demo run'], { home, cwd: repo, session: row.run })
+    const r = await cli(['start', 'demo', '--title', 'Demo run'], { home, cwd: repo, session: row.run })
     sessions.p1 = { runDir: /^folder: (.+)$/m.exec(r.out)[1] }
   }
   for (const [id, body] of Object.entries(row.sessions ?? {})) sessions[id] = { ...sessions[id], ...body, ...(body.claudePid ? { claudePid: real.get(body.claudePid) } : {}) }
@@ -65,10 +61,9 @@ function build(row, real) {
 const say = (r) => (r.out.trim() ? JSON.parse(r.out).hookSpecificOutput.additionalContext : null)
 
 for (const row of cases) {
-  test(`the usage mark: ${row.name}`, (t) => {
-    const { real, end } = processes(row)
-    t.after(end)
-    const { home, repo, reset } = build(row, real)
+  test(`the usage mark: ${row.name}`, async () => {
+    const real = processes(row)
+    const { home, repo, reset } = await build(row, real)
     const env = { LCW_NOW: String(NOW), ...(row.pid ? { CLAUDE_PID: String(real.get(row.pid)) } : {}) }
     const transcript = row.transcript ? { transcript_path: `/t/${row.transcript}.jsonl` } : {}
     for (const [call, want] of Object.entries(row.expect)) {

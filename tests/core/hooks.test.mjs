@@ -4,9 +4,10 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
-import { tmp, makeRepo, run, lcw, started, readJson, fakeClaude, installedConfig, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
+import { tmp, makeRepo, run, cli, begin, readJson, fakeClaude, installedConfig, START_HOOK, GATE_HOOK, LIMIT_HOOK, ACTIVITY_HOOK } from './helpers.mjs'
 import * as gate from '../../scripts/lib/gate.mjs'
 import { cases } from './mark-cases.mjs'
+import { next as nextActivity } from '../../lib/activity.mjs'
 
 process.env.TZ = 'Europe/Dublin'
 process.env.LCW_AUTH_STATUS_JSON = 'fail' // the sign-in is stubbed: no test runs the real `claude auth status`
@@ -27,16 +28,16 @@ test('gate hook allows with no run and on broken input', () => {
   }
 })
 
-test('gate hook allows a run below its mark', () => {
-  const t = started()
+test('gate hook allows a run below its mark', async () => {
+  const t = await begin()
   assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 0)
 })
 
-test('gate hook refuses at the mark and allows after the reset time', () => {
-  const t = started()
+test('gate hook refuses at the mark and allows after the reset time', async () => {
+  const t = await begin()
   const usage = (resetsAt) => fs.writeFileSync(`${t.home}/usage.json`, JSON.stringify({ at: 1, sevenDay: { percentUsed: 80, resetsAt } }))
   usage(future())
-  t.cli('usage')
+  await t.cli('usage')
   const refused = gateHook(t, { session_id: 's1', cwd: t.repo })
   assert.equal(refused.code, 2)
   assert.match(refused.err, /usage mark/)
@@ -48,10 +49,10 @@ test('gate hook refuses at the mark and allows after the reset time', () => {
   assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 0)
 })
 
-test('gate hook keeps refusing when the usage reading is gone but the gate still stands', () => {
-  const t = started()
+test('gate hook keeps refusing when the usage reading is gone but the gate still stands', async () => {
+  const t = await begin()
   fs.writeFileSync(`${t.home}/usage.json`, JSON.stringify({ at: 1, sevenDay: { percentUsed: 80, resetsAt: future() } }))
-  t.cli('usage')
+  await t.cli('usage')
   fs.rmSync(`${t.home}/usage.json`)
   assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 2)
 })
@@ -60,36 +61,36 @@ test('a process started by a test is given a throwaway home, never the real one'
   assert.ok(process.env.HOME.startsWith(fs.realpathSync(os.tmpdir())), process.env.HOME)
 })
 
-test("a session that is not on the run is held to its own mark, not the run's", () => {
-  const t = started()
+test("a session that is not on the run is held to its own mark, not the run's", async () => {
+  const t = await begin()
   weekAt(t.home, 80)
-  t.cli('usage')
+  await t.cli('usage')
   assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 2, 'the run is at its mark of 75')
-  lcw(['mark', '95'], { home: t.home, cwd: t.repo, session: 'other' })
+  await cli(['mark', '95'], { home: t.home, cwd: t.repo, session: 'other' })
   assert.equal(gateHook(t, { session_id: 'other', cwd: t.repo }).code, 0, 'its own mark lets the other session go on')
   assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 2, 'and does not lift the run')
 })
 
-test('gate hook refuses a run over its mark that has no gate file, and allows it once the mark is raised over the usage', () => {
-  const t = started()
+test('gate hook refuses a run over its mark that has no gate file, and allows it once the mark is raised over the usage', async () => {
+  const t = await begin()
   weekAt(t.home, 90) // another session read the week past the mark; this one has written no gate yet
   const refused = gateHook(t, { session_id: 's1', cwd: t.repo })
   assert.equal(refused.code, 2)
   assert.match(refused.err, /this run is at its usage mark.*pause mark/)
-  t.cli('usage')
-  t.cli('pause', 'mark')
-  t.cli('resume')
+  await t.cli('usage')
+  await t.cli('pause', 'mark')
+  await t.cli('resume')
   assert.equal(fs.existsSync(`${t.dir}/gate`), false, 'resume removes the gate')
   assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 2, 'resumed while still over the mark')
-  t.cli('mark', '95')
+  await t.cli('mark', '95')
   assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 0)
 })
 
-test('gate hook refuses a run the user paused while over its mark', () => {
-  const t = started()
+test('gate hook refuses a run the user paused while over its mark', async () => {
+  const t = await begin()
   weekAt(t.home, 90)
-  t.cli('pause', 'human')
-  t.cli('usage')
+  await t.cli('pause', 'human')
+  await t.cli('usage')
   assert.equal(fs.existsSync(`${t.dir}/gate`), false)
   const refused = gateHook(t, { session_id: 's1', cwd: t.repo })
   assert.equal(refused.code, 2)
@@ -97,8 +98,8 @@ test('gate hook refuses a run the user paused while over its mark', () => {
   assert.ok(!/pause mark/.test(refused.err), 'the user\'s pause is not turned into a pause at the mark')
 })
 
-test('gate hook allows a run whose percent gate has expired once the new week is under the mark', () => {
-  const t = started()
+test('gate hook allows a run whose percent gate has expired once the new week is under the mark', async () => {
+  const t = await begin()
   fs.writeFileSync(`${t.dir}/gate`, JSON.stringify({ reason: 'mark', markPercent: 75, usedPercent: 80, resetsAt: past(), at: 1 }))
   weekAt(t.home, 10)
   assert.equal(gateHook(t, { session_id: 's1', cwd: t.repo }).code, 0)
@@ -120,6 +121,9 @@ test('session-start hook without a run prints the rule and the command', () => {
   assert.ok(!/Unfinished/.test(r.out))
   assert.ok(!/past LCW runs/.test(r.out))
   assert.ok(r.out.split('\n').length <= 25)
+  assert.ok(!/one-time setup/.test(r.out))
+  assert.match(r.out, /"set up LCW"[^\n]*setup\.mjs install/)
+  assert.ok(!/notices\.json/.test(r.out), 'the person\'s standing choices are not deleted')
   assert.ok(fs.existsSync(`${fs.readFileSync(`${home}/plugin-root`, 'utf8').trim()}/scripts/lcw.mjs`))
 })
 
@@ -170,6 +174,7 @@ function pluginCopy(dir) {
 function claudeWith(config, markets, plugins) {
   fs.mkdirSync(`${config}/plugins`, { recursive: true })
   fs.writeFileSync(`${config}/plugins/known_marketplaces.json`, JSON.stringify(markets))
+  fs.rmSync(`${config}/plugins/installed_plugins.json`, { force: true })
   if (plugins) fs.writeFileSync(`${config}/plugins/installed_plugins.json`, JSON.stringify({ version: 2, plugins }))
   const repo = makeRepo()
   const start = (dir, home, source) => run(`${dir}/scripts/hook-session-start.mjs`, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo, ...(source ? { source } : {}) }), env: { CLAUDE_CONFIG_DIR: config, LCW_AUTH_STATUS_JSON: 'fail' } })
@@ -186,10 +191,22 @@ const pointerAndFiles = (home) => Object.fromEntries(['plugin-root', ...fs.readd
 const movedTo = (home, dir) => fs.existsSync(`${home}/plugin-root`) && fs.readFileSync(`${home}/plugin-root`, 'utf8') === dir
   && fs.readFileSync(`${home}/bin/setup-root`, 'utf8') === dir + '\n'
   && fs.readFileSync(`${home}/bin/statusline.sh`, 'utf8') === fs.readFileSync(`${dir}/scripts/bin/statusline.sh`, 'utf8')
-/** Versions in Claude Code's cache, as an update leaves them; the install records name those given, in that order. */
+let shared = null
+/**
+ * Versions in Claude Code's cache, as an update leaves them, and a checkout, made once for the file: a copy's first run
+ * is slow, and the tests only read them. Each test writes its own marketplace and install records into the one folder.
+ */
+function copies() {
+  if (!shared) {
+    const config = tmp('claude')
+    const v = Object.fromEntries(['0.8.1', '0.8.0', '0.7.9'].map((n) => [n, pluginCopy(`${config}/plugins/cache/lcw/lcw/${n}`)]))
+    shared = { config, v, checkout: pluginCopy(`${tmp('dev')}/lcw`) }
+  }
+  return shared
+}
+/** The cached versions with install records naming those given, in that order. */
 function cached(recorded) {
-  const config = tmp('claude')
-  const v = Object.fromEntries(['0.8.1', '0.8.0', '0.7.9'].map((n) => [n, pluginCopy(`${config}/plugins/cache/lcw/lcw/${n}`)]))
+  const { config, v } = copies()
   const records = recorded && recorded.map(([n, scope]) => ({ scope, installPath: v[n], version: n, ...(scope === 'project' ? { projectPath: '/a/project' } : {}) }))
   return { v, ...claudeWith(config, { lcw: { source: { source: 'github', repo: 'owner/lcw' } } }, records && { 'lcw@lcw': records }) }
 }
@@ -197,11 +214,11 @@ function cached(recorded) {
 test('the installed version\'s start moves the pointer and the status line\'s files; an older version still open never moves them back, at any source', () => {
   const c = cached([['0.8.1', 'user']])
   const said = {}
+  const home = c.home()
+  c.start(c.v['0.8.1'], home, 'startup')
+  assert.ok(movedTo(home, c.v['0.8.1']))
+  const before = pointerAndFiles(home)
   for (const source of ['compact', 'clear', 'startup', 'resume', undefined]) {
-    const home = c.home()
-    c.start(c.v['0.8.1'], home, 'startup')
-    assert.ok(movedTo(home, c.v['0.8.1']))
-    const before = pointerAndFiles(home)
     const r = c.start(c.v['0.8.0'], home, source)
     assert.equal(r.code, 0, r.err)
     said[source] = r.out
@@ -238,31 +255,29 @@ test('every version an install record names counts, whatever the order of the re
 })
 
 test('a checkout a directory marketplace loads is the installed copy, listed after another marketplace offering the plugin', () => {
-  const other = tmp('claude')
-  const b = claudeWith(other, { tools: { source: { source: 'github', repo: 'owner/tools' } }, lcw: { source: { source: 'directory', path: pluginCopy(`${tmp('dev')}/lcw`) } } },
-    { 'lcw@tools': [{ scope: 'user', installPath: pluginCopy(`${other}/plugins/cache/tools/lcw/1.0.0`), version: '1.0.0' }] })
-  const checkoutB = readJson(`${other}/plugins/known_marketplaces.json`).lcw.source.path
+  const { config, v, checkout } = copies()
+  const b = claudeWith(config, { tools: { source: { source: 'github', repo: 'owner/tools' } }, lcw: { source: { source: 'directory', path: checkout } } },
+    { 'lcw@tools': [{ scope: 'user', installPath: v['0.7.9'], version: '0.7.9' }] })
   const home = b.home()
-  b.start(checkoutB, home, 'startup')
-  assert.ok(movedTo(home, checkoutB))
+  b.start(checkout, home, 'startup')
+  assert.ok(movedTo(home, checkout))
 })
 
 test('a checkout a directory marketplace loads is the installed copy, and the older cached copy its install record names is not', () => {
-  const config = tmp('claude')
-  const checkout = pluginCopy(`${tmp('dev')}/lcw`), stale = pluginCopy(`${config}/plugins/cache/lcw/lcw/0.6.22`)
-  const c = claudeWith(config, { lcw: { source: { source: 'directory', path: checkout } } }, { 'lcw@lcw': [{ scope: 'user', installPath: stale, version: '0.6.22' }] })
+  const { config, v, checkout } = copies()
+  const c = claudeWith(config, { lcw: { source: { source: 'directory', path: checkout } } }, { 'lcw@lcw': [{ scope: 'user', installPath: v['0.7.9'], version: '0.7.9' }] })
   const h = c.home()
   c.start(checkout, h, 'startup')
   assert.ok(movedTo(h, checkout))
   const before = pointerAndFiles(h)
-  c.start(stale, h, 'startup')
+  c.start(v['0.7.9'], h, 'startup')
   assert.deepEqual(pointerAndFiles(h), before, 'the older copy the record names is not the one loaded')
 })
 
-test('session-start hook with an unfinished run names it and the next step', () => {
-  const t = started('carry')
-  t.cli('stage', 'Spec')
-  t.cli('checkpoint', 'run the blind review')
+test('session-start hook with an unfinished run names it and the next step', async () => {
+  const t = await begin('carry')
+  await t.cli('stage', 'Spec')
+  await t.cli('checkpoint', 'run the blind review')
   const r = run(START_HOOK, [], { home: t.home, cwd: t.repo, input: JSON.stringify({ session_id: 's1', cwd: t.repo }) })
   assert.match(r.out, /Unfinished LCW run: \d{8}-carry/)
   assert.match(r.out, /Stage Spec, status running/)
@@ -270,16 +285,16 @@ test('session-start hook with an unfinished run names it and the next step', () 
   assert.match(r.out, /carry on/)
 })
 
-test('session-start hook says why a run is paused: a pause by the user stays until they say so, one at the mark ends when the limit resets', () => {
-  const t = started('hold')
+test('session-start hook says why a run is paused: a pause by the user stays until they say so, one at the mark ends when the limit resets', async () => {
+  const t = await begin('hold')
   const said = () => run(START_HOOK, [], { home: t.home, cwd: t.repo, input: JSON.stringify({ session_id: 's1', cwd: t.repo }) }).out
-  t.cli('pause', 'human')
+  await t.cli('pause', 'human')
   const human = said()
   assert.match(human, /status paused \(paused by the user\)/)
   assert.match(human, /stays paused until they say carry on/)
   assert.ok(!/Load the lcw:lcw skill and carry on/.test(human), human)
-  t.cli('resume')
-  t.cli('pause', 'mark')
+  await t.cli('resume')
+  await t.cli('pause', 'mark')
   const mark = said()
   assert.match(mark, /status paused \(paused at the usage mark\)/)
   assert.ok(!/stays paused until they say/.test(mark), mark)
@@ -287,24 +302,24 @@ test('session-start hook says why a run is paused: a pause by the user stays unt
   assert.match(mark, /still says at the mark, the run stays paused and you end your turn/)
 })
 
-test('session start finds the run of a resumed session by its transcript', () => {
-  const t = started('resumed')
+test('session start finds the run of a resumed session by its transcript', async () => {
+  const t = await begin('resumed')
   const input = JSON.stringify({ session_id: 'process-7', transcript_path: '/x/projects/y/s1.jsonl', cwd: t.repo })
   assert.match(run(START_HOOK, [], { home: t.home, cwd: t.repo, input }).out, /Unfinished LCW run: \d{8}-resumed/)
 })
 
-test('session start says the mark the session really has, not always the default', () => {
+test('session start says the mark the session really has, not always the default', async () => {
   const home = tmp('home')
   const repo = makeRepo()
   const said = () => run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }) }).out
   assert.match(said(), /: 75% of the week/)
-  lcw(['mark', '90'], { home, cwd: repo, session: 'a' })
+  await cli(['mark', '90'], { home, cwd: repo, session: 'a' })
   assert.match(said(), /: 90% of the week/)
 })
 
-test('session-start hook binds by place and does not take over from the main checkout', () => {
-  const t = started('bindme')
-  const wt = t.cli('worktree').out.trim()
+test('session-start hook binds by place and does not take over from the main checkout', async () => {
+  const t = await begin('bindme')
+  const wt = (await t.cli('worktree')).out.trim()
   const inWt = run(START_HOOK, [], { home: t.home, cwd: wt, input: JSON.stringify({ session_id: 'resumed', cwd: wt }) })
   assert.match(inWt.out, /Unfinished LCW run/)
   assert.ok(fs.existsSync(`${t.home}/sessions/resumed.json`))
@@ -315,15 +330,15 @@ test('session-start hook binds by place and does not take over from the main che
 })
 
 test('a new session in the worktree of a run another open session drives neither carries it on nor takes it', async () => {
-  const t = started('busy')
-  const wt = t.cli('worktree').out.trim()
+  const t = await begin('busy')
+  const wt = (await t.cli('worktree')).out.trim()
   const claude = fakeClaude()
   const driver = `${t.home}/sessions/s1.json`
   fs.writeFileSync(driver, JSON.stringify({ ...readJson(driver), claudePid: claude.pid }))
   const start = (id, env) => run(START_HOOK, [], { home: t.home, cwd: wt, input: JSON.stringify({ session_id: id, cwd: wt }), env })
   try {
     assert.ok(!/Unfinished/.test(start('second').out))
-    assert.equal(lcw(['task', 'add', 'T1', 'x'], { home: t.home, cwd: wt, session: 'second' }).code, 1, 'nor do its lcw calls drive it')
+    assert.equal((await cli(['task', 'add', 'T1', 'x'], { home: t.home, cwd: wt, session: 'second' })).code, 1, 'nor do its lcw calls drive it')
     assert.equal(t.state().driver, 's1')
     assert.equal(fs.existsSync(`${t.home}/sessions/second.json`), false)
     // /clear: a new session id in the driver's own Claude Code process carries on
@@ -353,30 +368,14 @@ test('session-start hook survives bad input', () => {
   assert.match(r.out, /lcw:lcw skill/)
 })
 
-test('session start no longer offers setup, but still says how to set up and uninstall LCW', () => {
-  const home = tmp('home')
-  const repo = makeRepo()
-  const out = run(START_HOOK, [], { home, cwd: repo, input: JSON.stringify({ session_id: 'a', cwd: repo }) }).out
-  assert.ok(!/one-time setup/.test(out))
-  assert.match(out, /"set up LCW"[^\n]*setup\.mjs install/)
-  assert.ok(!/notices\.json/.test(out), 'the person\'s standing choices are not deleted')
-})
-
-test('session start records the id of Claude Code\'s process in the session file, keeping what is there', () => {
+test('session start records the id of Claude Code\'s process under both ids of a resumed payload, keeping what is there', () => {
   const home = tmp('home')
   const repo = makeRepo()
   fs.mkdirSync(`${home}/sessions`)
-  fs.writeFileSync(`${home}/sessions/a.json`, JSON.stringify({ markPercent: 90 }))
-  spawnSync('node', [START_HOOK], { cwd: repo, env: { ...process.env, LCW_HOME: home, CLAUDE_PID: '4242' }, input: JSON.stringify({ session_id: 'a', cwd: repo }) })
-  assert.equal(readJson(`${home}/sessions/a.json`).claudePid, 4242)
-  assert.equal(readJson(`${home}/sessions/a.json`).markPercent, 90)
-})
-
-test('session start records the process id under both ids of a resumed payload', () => {
-  const home = tmp('home')
-  const repo = makeRepo()
+  fs.writeFileSync(`${home}/sessions/old.json`, JSON.stringify({ markPercent: 90 }))
   spawnSync('node', [START_HOOK], { cwd: repo, env: { ...process.env, LCW_HOME: home, CLAUDE_PID: '4242' }, input: JSON.stringify({ session_id: 'old', transcript_path: '/x/new.jsonl', cwd: repo }) })
   for (const id of ['old', 'new']) assert.equal(readJson(`${home}/sessions/${id}.json`).claudePid, 4242)
+  assert.equal(readJson(`${home}/sessions/old.json`).markPercent, 90)
 })
 
 test('session start leaves a live process id in the old session\'s file alone', () => {
@@ -404,7 +403,7 @@ test('session start replaces a recorded process id that now belongs to a program
   } finally { other.kill() }
 })
 
-test('a session with no run is refused new agents at its mark, and allowed once the user raises it', () => {
+test('a session with no run is refused new agents at its mark, and allowed once the user raises it', async () => {
   const home = tmp('home')
   const repo = makeRepo()
   weekAt(home, 80)
@@ -412,11 +411,11 @@ test('a session with no run is refused new agents at its mark, and allowed once 
   const refused = ask()
   assert.equal(refused.code, 2)
   assert.match(refused.err, /usage mark/)
-  lcw(['mark', '90'], { home, cwd: repo, session: 'solo' })
+  await cli(['mark', '90'], { home, cwd: repo, session: 'solo' })
   assert.equal(ask().code, 0)
 })
 
-test('at its mark a session is told to stop on each prompt and after each tool call, until the mark is raised', () => {
+test('at its mark the hook answers a prompt and a tool call in the form Claude Code reads, and says nothing below it', async () => {
   const home = tmp('home')
   const repo = makeRepo()
   const say = (more) => {
@@ -429,14 +428,12 @@ test('at its mark a session is told to stop on each prompt and after each tool c
   weekAt(home, 80)
   const onPrompt = say({ hook_event_name: 'UserPromptSubmit' })
   assert.equal(onPrompt.hookEventName, 'UserPromptSubmit')
-  for (const fact of ['STOP', 'lcw:learn', '80%', '75%', 'run up to', 'lcw mark']) assert.ok(onPrompt.additionalContext.includes(fact), fact)
-  assert.match(say({ hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { file_path: 'a.txt' } }).additionalContext, /^STOP!.*lcw:learn/)
-  assert.equal(say({ hook_event_name: 'PostToolUse', tool_name: 'Edit', agent_id: 'a1' }), null, 'a subagent is left to finish')
-  assert.equal(say({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'node /p/scripts/lcw.mjs mark 90' } }), null, 'the command that lifts the mark is not nagged')
-  assert.match(say({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'grep -n mark scripts/lcw.mjs' } }).additionalContext, /^STOP!/, 'naming lcw.mjs is not calling it')
-  lcw(['mark', '90'], { home, cwd: repo, session: 'solo' })
-  assert.equal(say({ hook_event_name: 'UserPromptSubmit' }), null)
-  assert.equal(say({ hook_event_name: 'PostToolUse', tool_name: 'Edit' }), null)
+  assert.match(onPrompt.additionalContext, /STOP/)
+  const afterCall = say({ hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { file_path: 'a.txt' } })
+  assert.equal(afterCall.hookEventName, 'PostToolUse')
+  assert.match(afterCall.additionalContext, /^STOP!/)
+  await cli(['mark', '90'], { home, cwd: repo, session: 'solo' })
+  assert.equal(say({ hook_event_name: 'UserPromptSubmit' }), null, 'a mark raised from its shell lifts the stop')
 })
 
 test('only a shell line that runs lcw and nothing else is spared the stop note', () => {
@@ -465,14 +462,32 @@ test('the stop hook never blocks: on broken input it exits 0 and says nothing', 
   assert.equal(r.out, '')
 })
 
-test('a resumed session is known by its transcript, so the mark set from its shell is the one the hooks read', () => {
+test('a resumed session is known by its transcript, so the mark set from its shell is the one the hooks read', async () => {
   const home = tmp('home')
   const repo = makeRepo()
   weekAt(home, 80)
-  lcw(['mark', '90'], { home, cwd: repo, session: 'conversation-1' })
+  await cli(['mark', '90'], { home, cwd: repo, session: 'conversation-1' })
   const input = JSON.stringify({ session_id: 'process-7', transcript_path: '/x/projects/y/conversation-1.jsonl', cwd: repo, hook_event_name: 'UserPromptSubmit' })
   assert.equal(run(LIMIT_HOOK, [], { home, cwd: repo, input }).out, '')
   assert.equal(run(GATE_HOOK, [], { home, cwd: repo, input }).code, 0)
+})
+
+test('the activity record follows a turn: its failed calls, the question that waits, the stop and the failure that ends it', () => {
+  let record = null
+  for (const [event, state, fails] of [
+    [{ hook_event_name: 'UserPromptSubmit' }, 'working', 0],
+    [{ hook_event_name: 'PostToolUseFailure', tool_name: 'Bash' }, 'working', 1],
+    [{ hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', is_interrupt: true }, 'working', 1], // cancelled, not failed
+    [{ hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion' }, 'needs', 1],
+    [{ hook_event_name: 'Notification', notification_type: 'idle_prompt' }, 'needs', 1], // closes only a turn still working
+    [{ hook_event_name: 'Stop' }, 'done', 1],
+    [{ hook_event_name: 'UserPromptSubmit' }, 'working', 0], // a new turn starts clean
+    [{ hook_event_name: 'StopFailure', error: 'server_error' }, 'failed', 0],
+  ]) {
+    record = nextActivity(event, record, 1) ?? record
+    assert.deepEqual([record.state, record.fails], [state, fails], JSON.stringify(event))
+  }
+  assert.equal(record.error, 'server_error', 'the error kind of the failed turn')
 })
 
 test('the activity hook records the turn and its failed calls for the mascot, prints nothing, and ignores a subagent', () => {
@@ -483,12 +498,8 @@ test('the activity hook records the turn and its failed calls for the mascot, pr
     [{ hook_event_name: 'UserPromptSubmit' }, 'working', 0],
     [{ hook_event_name: 'Stop', agent_id: 'sub-1' }, 'working', 0], // a subagent's event
     [{ hook_event_name: 'PostToolUseFailure', tool_name: 'Bash' }, 'working', 1],
-    [{ hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', is_interrupt: true }, 'working', 1], // cancelled, not failed
-    [{ hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion' }, 'needs', 1],
-    [{ hook_event_name: 'Notification', notification_type: 'idle_prompt' }, 'needs', 1], // closes only a turn still working
     [{ hook_event_name: 'Stop' }, 'done', 1],
-    [{ hook_event_name: 'UserPromptSubmit' }, 'working', 0], // a new turn starts clean
-    [{ hook_event_name: 'StopFailure', error: 'server_error' }, 'failed', 0],
+    [{ hook_event_name: 'StopFailure', error: 'server_error' }, 'failed', 1],
   ]) {
     const r = fire(event)
     assert.equal(r.code, 0)
@@ -618,25 +629,20 @@ test('a sign-in that cannot tell leaves a settled per-token session as it is', (
   assert.match(startNote(home, repo, { LCW_AUTH_STATUS_JSON: 'fail' }), /billed per token/)
 })
 
-test('at the mark a per-token session is told to stop in dollars, and not once old spend has dropped out', () => {
+test('a per-token session stops at a spend over its dollar mark, and not once the mark is raised or the old spend has dropped out', () => {
   const home = tmp('home')
   const repo = makeRepo()
+  const prompt = () => limit(home, repo, { hook_event_name: 'UserPromptSubmit' })
   writeSession(home, 'p1', { billing: 'payg', toldPayg: true })
   spent(home, 'p1', 2900)
-  assert.equal(limit(home, repo, { hook_event_name: 'UserPromptSubmit' }), null, 'under the mark')
+  assert.equal(prompt(), null, 'under the mark')
   spent(home, 'p1', 3020)
-  const prompt = limit(home, repo, { hook_event_name: 'UserPromptSubmit' })
-  for (const fact of ['STOP', 'lcw:learn', '$3,020', '$3,000', 'run up to', 'lcw mark Xusd', 'lcw mark 100']) assert.ok(prompt.includes(fact), fact)
-  assert.ok(!prompt.includes('% of the week'))
-  assert.match(limit(home, repo, { hook_event_name: 'PostToolUse', tool_name: 'Edit' }), /^STOP! LCW: this session is at its usage mark \(\$3,020 spent in the last 7 days, mark \$3,000\)/)
-  assert.ok(limit(home, repo, { hook_event_name: 'PostToolUse', tool_name: 'Edit' }).includes('lcw:learn'))
-  assert.equal(limit(home, repo, { hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'node /p/scripts/lcw.mjs mark 5500usd' } }), null, 'the command that lifts the mark is not nagged')
-  assert.equal(limit(home, repo, { hook_event_name: 'PostToolUse', tool_name: 'Edit', agent_id: 'a1' }), null, 'a subagent is left to finish')
+  assert.match(prompt(), /STOP.*\$3,020.*\$3,000/s)
   writeSession(home, 'p1', { billing: 'payg', toldPayg: true, markUsd: 5500 })
-  assert.equal(limit(home, repo, { hook_event_name: 'UserPromptSubmit' }), null, 'a raised dollar mark')
+  assert.equal(prompt(), null, 'a raised dollar mark')
   writeSession(home, 'p1', { billing: 'payg', toldPayg: true })
   spent(home, 'p1', 3020, 8 * 24) // spent eight days ago: it no longer counts
-  assert.equal(limit(home, repo, { hook_event_name: 'UserPromptSubmit' }), null, 'old spend drops out')
+  assert.equal(prompt(), null, 'old spend drops out')
 })
 
 test('the limit hook gives a command line that runs from a plugin folder with a space in its path', () => {
@@ -656,15 +662,17 @@ test('the limit hook gives a command line that runs from a plugin folder with a 
   assert.equal(r.status, 0, r.stderr)
 })
 
-test('a resumed per-token session told at its start is not told again at its first prompt', () => {
-  const home = tmp('home')
-  const repo = makeRepo()
-  writeSession(home, 'A', { sessionCanonicalId: 'A', billing: 'payg', toldPayg: true })
-  writeSession(home, 'B', { sessionCanonicalId: 'A', billing: 'payg' })
-  spent(home, 'A', 100)
-  assert.match(startNote(home, repo, KEY, 'B'), /billed per token/)
-  const prompt = limit(home, repo, { hook_event_name: 'UserPromptSubmit' }, 'B')
-  assert.ok(!/turned out/.test(prompt ?? ''), prompt)
+test('a resumed per-token session told at its start is not told again at its first prompt, whether or not the sign-in can be read', () => {
+  for (const signIn of [KEY, { LCW_AUTH_STATUS_JSON: 'fail' }]) {
+    const home = tmp('home')
+    const repo = makeRepo()
+    writeSession(home, 'A', { sessionCanonicalId: 'A', billing: 'payg', toldPayg: true })
+    writeSession(home, 'B', { sessionCanonicalId: 'A', billing: 'payg' })
+    spent(home, 'A', 100)
+    assert.match(startNote(home, repo, signIn, 'B'), /billed per token/)
+    const prompt = limit(home, repo, { hook_event_name: 'UserPromptSubmit' }, 'B')
+    assert.ok(!/turned out/.test(prompt ?? ''), prompt)
+  }
 })
 
 test('a two-name session that settles as billed per token at its start has the note recorded under both names', () => {
@@ -682,15 +690,15 @@ test('a two-name session that settles as billed per token at its start has the n
  * transcript t1 whose row records an older Claude Code, running or ended, after then(home, repo); pids are given back
  * as the limit hook's cases name them: 111 the older process, 222 this one.
  */
-function resumed(oldRunning, t1, signIn = KEY, then = () => {}) {
+async function resumed(oldRunning, t1, signIn = KEY, then = () => {}) {
   const home = tmp('home')
   const repo = makeRepo()
-  const old = oldRunning ? spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' }) : spawnSync(process.execPath, ['-e', ''])
+  const old = oldRunning ? spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' }) : { pid: 2000000000 } // no process holds that pid
   try {
     writeSession(home, 't1', { ...t1, claudePid: old.pid })
     const env = { ...clock, ...signIn, CLAUDE_PID: String(process.pid), LCW_CLAUDE_ARGS: '' }
     run(START_HOOK, [], { home, cwd: repo, env, input: JSON.stringify({ session_id: 'p1', transcript_path: '/x/projects/y/t1.jsonl', cwd: repo }) })
-    then(home, repo)
+    await then(home, repo)
     const pids = { [old.pid]: 111, [process.pid]: 222 }
     return Object.fromEntries(fs.readdirSync(`${home}/sessions`).map((file) => {
       const session = readJson(`${home}/sessions/${file}`)
@@ -702,34 +710,23 @@ function resumed(oldRunning, t1, signIn = KEY, then = () => {}) {
 }
 const caseRows = (name) => cases.find((c) => c.name === name).sessions
 
-test('a per-token session resumed from a transcript whose older Claude Code has ended leaves the rows its limit-hook case holds', () => {
-  assert.deepEqual(resumed(false, { billing: 'payg' }), caseRows('a note given at a resumed start under both names, which share one anchor, leaves the marker down'))
+test('a per-token session resumed from a transcript whose older Claude Code has ended leaves the rows its limit-hook case holds', async () => {
+  assert.deepEqual(await resumed(false, { billing: 'payg' }), caseRows('a note given at a resumed start under both names, which share one anchor, leaves the marker down'))
 })
 
-test('a per-token session resumed from a told transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', () => {
-  assert.deepEqual(resumed(true, { billing: 'payg', toldPayg: true }), caseRows('a note given under both names leaves the marker down though the transcript row records an older process'))
+test('a per-token session resumed from a told transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', async () => {
+  assert.deepEqual(await resumed(true, { billing: 'payg', toldPayg: true }), caseRows('a note given under both names leaves the marker down though the transcript row records an older process'))
 })
 
-test('a per-token session resumed from an untold transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', () => {
-  assert.deepEqual(resumed(true, { billing: 'payg' }), caseRows('a note given under the id at a resumed start leaves the marker down though the transcript row, kept by an older process, records none'))
+test('a per-token session resumed from an untold transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', async () => {
+  assert.deepEqual(await resumed(true, { billing: 'payg' }), caseRows('a note given under the id at a resumed start leaves the marker down though the transcript row, kept by an older process, records none'))
 })
 
-test('a mark raised in a session resumed from a transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', () => {
-  const rows = resumed(true, {}, { LCW_AUTH_STATUS_JSON: 'fail' }, (home, repo) => {
-    assert.equal(lcw(['mark', '90'], { home, cwd: repo, session: 'p1', env: { CLAUDE_PID: String(process.pid) } }).code, 0)
+test('a mark raised in a session resumed from a transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', async () => {
+  const rows = await resumed(true, {}, { LCW_AUTH_STATUS_JSON: 'fail' }, async (home, repo) => {
+    assert.equal((await cli(['mark', '90'], { home, cwd: repo, session: 'p1', env: { CLAUDE_PID: String(process.pid) } })).code, 0)
   })
   assert.deepEqual(rows, caseRows('a mark raised under the id while the transcript row is kept by an older process leaves the marker down below it'))
-})
-
-test('a resumed per-token session is not told again at its first prompt when the sign-in cannot be read', () => {
-  const home = tmp('home')
-  const repo = makeRepo()
-  writeSession(home, 'A', { sessionCanonicalId: 'A', billing: 'payg', toldPayg: true })
-  writeSession(home, 'B', { sessionCanonicalId: 'A', billing: 'payg' })
-  spent(home, 'A', 100)
-  assert.match(startNote(home, repo, { LCW_AUTH_STATUS_JSON: 'fail' }, 'B'), /billed per token/)
-  const prompt = limit(home, repo, { hook_event_name: 'UserPromptSubmit' }, 'B')
-  assert.ok(!/turned out/.test(prompt ?? ''), prompt)
 })
 
 test('a session that turns out to be billed per token is told once, with the commands, and a subscriber is never stopped by dollars', () => {
@@ -766,8 +763,8 @@ test('the agent gate refuses new agents at a dollar mark in dollars, and only wh
   assert.equal(spawnGate(home, repo).code, 0, 'old spend dropped out')
 })
 
-test('the agent gate holds a run at its dollar gate only while the spend is over the mark, at any hour', () => {
-  const t = started('dollars')
+test('the agent gate holds a run at its dollar gate only while the spend is over the mark, at any hour', async () => {
+  const t = await begin('dollars')
   writeSession(t.home, 's1', { ...readJson(`${t.home}/sessions/s1.json`), billing: 'payg', toldPayg: true }) // the file also binds the session to the run
   fs.writeFileSync(`${t.dir}/gate`, JSON.stringify({ reason: 'mark', unit: 'usd', markUsd: 3000, usedUsd: 3020, retryAt: NOW + 3600000, retried: false, at: NOW }))
   spent(t.home, 's1', 3020)
@@ -778,8 +775,8 @@ test('the agent gate holds a run at its dollar gate only while the spend is over
   assert.equal(spawnGate(t.home, t.repo, 's1').code, 0, 'under the mark again, though the gate file stands')
 })
 
-test('the agent gate refuses a run billed per token whose spend is over its mark before any gate file is written', () => {
-  const t = started('dollars')
+test('the agent gate refuses a run billed per token whose spend is over its mark before any gate file is written', async () => {
+  const t = await begin('dollars')
   writeSession(t.home, 's1', { ...readJson(`${t.home}/sessions/s1.json`), billing: 'payg', toldPayg: true })
   weekAt(t.home, 90) // a share of the week does not count for a session billed per token
   spent(t.home, 's1', 2500)
@@ -821,8 +818,8 @@ test('session start removes the temp files a stopped writer left an hour ago or 
   for (const f of [fresh, ...others]) assert.equal(fs.existsSync(f), true, f)
 })
 
-test('session-start hook names each open wave of a sweep with its stage and worktree', () => {
-  const t = started('multi')
+test('session-start hook names each open wave of a sweep with its stage and worktree', async () => {
+  const t = await begin('multi')
   const s = t.state()
   fs.writeFileSync(`${t.dir}/state.json`, JSON.stringify({ ...s, shape: 'sweep', stage: 'Build', sweep: { prs: 'stacked', waves: [
     { n: 1, status: 'running', stage: 'Ship', step: 'final checks', worktree: '/w/one' },
