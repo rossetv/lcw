@@ -1,13 +1,22 @@
-import { test } from 'node:test'
+import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { spawnSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
-import { tmp, lcw, makeRepo } from '../core/helpers.mjs'
+import { tmp, cli, makeRepo } from '../core/helpers.mjs'
 
 const ROOT = new URL('../..', import.meta.url).pathname.replace(/\/$/, '')
 const LINE = `${ROOT}/scripts/statusline.mjs`
 const NOW = Date.UTC(2026, 2, 10, 12)
+
+/** A program run with `input` on its stdin, without blocking: its status, stdout and stderr. */
+const exec = (file, args, { input = '', env, cwd, timeout } = {}) => new Promise((resolve) => {
+  const p = execFile(file, args, { env, cwd, timeout, encoding: 'utf8' }, (err, stdout, stderr) => resolve({ status: err ? (err.code ?? 1) : 0, stdout, stderr }))
+  p.stdin.end(input)
+})
+/** On the PATH of a command run, written once: a `date` that prints LCW_FAKE_DATE. A script written fresh costs its first run dearly. */
+const FAKE = tmp('blank-fake')
+fs.writeFileSync(`${FAKE}/date`, '#!/bin/sh\nprintf "%s\\n" "$LCW_FAKE_DATE"\n', { mode: 0o755 })
 const plain = (s) => s.replace(/\x1b\[[0-9;]*m/g, '')
 
 /** A module to load with --import that makes every money view throw. */
@@ -23,13 +32,13 @@ function brokenMoney() {
   return `${dir}/register.mjs`
 }
 
-test('a card whose money cannot be worked out still leaves the rows and the card', () => {
+test('a card whose money cannot be worked out still leaves the rows and the card', async () => {
   const repo = makeRepo(), home = tmp('home')
-  assert.equal(lcw(['start', 'demo', '--title', 'Demo'], { home, cwd: repo, session: 's1' }).code, 0)
+  assert.equal((await cli(['start', 'demo', '--title', 'Demo'], { home, cwd: repo, session: 's1' })).code, 0)
   const input = { session_id: 's1', cwd: repo, model: { display_name: 'Opus 5' }, rate_limits: { seven_day: { used_percentage: 31, resets_at: NOW / 1000 + 3 * 86400 } } }
   const env = { ...process.env, LCW_HOME: home, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW) }
   delete env.CLAUDE_PID
-  const r = spawnSync('node', ['--import', brokenMoney(), LINE], { input: JSON.stringify(input), encoding: 'utf8', env })
+  const r = await exec('node', ['--import', brokenMoney(), LINE], { input: JSON.stringify(input), env })
   const text = plain(r.stdout)
   assert.match(text, /Opus 5/)
   assert.match(text, /LCW Build · demo/)
@@ -43,10 +52,9 @@ const INPUT = JSON.stringify({ session_id: 's1', cwd: '/', model: { display_name
 function scratch(pointer = ROOT) {
   const t = tmp('blank')
   const home = `${t}/lcw`
-  fs.mkdirSync(`${home}/bin`, { recursive: true }); fs.mkdirSync(`${t}/h`); fs.mkdirSync(`${t}/fake`)
+  fs.mkdirSync(`${home}/bin`, { recursive: true }); fs.mkdirSync(`${t}/h`)
   for (const f of ['statusline.mjs', 'installed.mjs', 'statusline.sh']) fs.copyFileSync(`${ROOT}/scripts/bin/${f}`, `${home}/bin/${f}`)
   if (pointer) fs.writeFileSync(`${home}/plugin-root`, pointer + '\n')
-  fs.writeFileSync(`${t}/fake/date`, '#!/bin/sh\nprintf "%s\\n" "$LCW_FAKE_DATE"\n', { mode: 0o755 })
   return { t, home, config: `${t}/claude` }
 }
 /** A stand-in plugin folder whose status line prints its own name, or runs `code`. */
@@ -63,266 +71,268 @@ export async function main() { process.stdout.write('fresh from ' + JSON.parse(f
 
 const env = (s, more = {}) => ({ PATH: process.env.PATH, HOME: `${s.t}/h`, LCW_HOME: s.home, CLAUDE_CONFIG_DIR: s.config, COLUMNS: '120', TZ: 'UTC', LCW_NOW: String(NOW), ...more })
 /** One run of the launcher, as the player starts it; it must end well and print something. */
-function launch(s, input = INPUT, args = [`${S}+0000`]) {
-  const r = spawnSync(process.execPath, [`${s.home}/bin/statusline.mjs`, ...args], { input, encoding: 'utf8', env: env(s), timeout: 15_000 })
+async function launch(s, input = INPUT, args = [`${S}+0000`]) {
+  const r = await exec(process.execPath, [`${s.home}/bin/statusline.mjs`, ...args], { input, env: env(s), timeout: 15_000 })
   assert.equal(r.status, 0, r.stderr)
   return r.stdout
 }
 /** One tick of the whole command in sh, with only the fake `date` and `extra` on the PATH. */
-function tick(s, { input = INPUT, path = `${s.t}/fake` } = {}) {
-  const r = spawnSync('/bin/sh', ['-c', `. '${s.home}/bin/statusline.sh'`], { input, encoding: 'utf8', env: env(s, { PATH: path, LCW_FAKE_DATE: `${S}+0000` }) })
+async function tick(s, { input = INPUT, path = FAKE } = {}) {
+  const r = await exec('/bin/sh', ['-c', `. '${s.home}/bin/statusline.sh'`], { input, env: env(s, { PATH: path, LCW_FAKE_DATE: `${S}+0000` }) })
   assert.equal(r.status, 0, r.stderr)
   return r.stdout
 }
 const logLines = (s) => (fs.existsSync(`${s.home}/statusline.log`) ? fs.readFileSync(`${s.home}/statusline.log`, 'utf8').split('\n').filter(Boolean) : [])
 const lastRows = (s, rows = 'the rows on screen\n') => { fs.mkdirSync(`${s.home}/frames/s1`, { recursive: true }); fs.writeFileSync(`${s.home}/frames/s1/last`, rows); return rows }
 
-test('the launcher draws from the folder the pointer names', () => {
-  const s = scratch()
-  const a = plugin(`${s.t}/a`)
-  fs.writeFileSync(`${s.home}/plugin-root`, a)
-  assert.equal(launch(s), 'drawn by a\n')
-  assert.deepEqual(logLines(s), [])
-})
+/** The command in each shell, with nothing to start: it prints the approved line and nothing on stderr. */
+const brokenInEveryShell = (s) => Promise.all(['/bin/sh', '/bin/bash', '/bin/zsh', '/bin/dash'].filter((x) => fs.existsSync(x)).map(async (shell) => {
+  const r = await exec(shell, ['-c', `. '${s.home}/bin/statusline.sh'`], { input: INPUT, env: env(s, { PATH: FAKE, LCW_FAKE_DATE: `${S}+0000` }) })
+  assert.deepEqual([r.status, r.stdout, r.stderr], [0, BROKEN, ''], shell)
+}))
 
-test('a draw from a good pointer looks for no other copy of LCW', () => {
-  const s = scratch()
-  fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`))
-  fs.writeFileSync(`${s.home}/bin/installed.mjs`, `import fs from 'node:fs'\nfs.writeFileSync(process.env.LCW_HOME + '/looked', '')\nexport const installedFolder = () => null\n`)
-  assert.equal(launch(s), 'drawn by a\n')
-  assert.ok(!fs.existsSync(`${s.home}/looked`))
-})
+describe('the launcher and the command that runs it', { concurrency: true }, () => {
+  test('the launcher draws from the folder the pointer names', async () => {
+    const s = scratch()
+    const a = plugin(`${s.t}/a`)
+    fs.writeFileSync(`${s.home}/plugin-root`, a)
+    assert.equal(await launch(s), 'drawn by a\n')
+    assert.deepEqual(logLines(s), [])
+  })
 
-test('the same fault leaves one line in the log, however many draws meet it', () => {
-  const s = scratch(`${tmp('gone')}/lcw`)
-  fs.writeFileSync(`${s.home}/bin/setup-root`, older(`${s.t}/older`) + '\n')
-  fs.mkdirSync(`${s.config}/plugins`, { recursive: true })
-  fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'o/lcw' } } }))
-  fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: plugin(`${s.t}/installed`) }] } }))
-  assert.equal(launch(s), 'drawn by installed\n')
-  assert.equal(launch(s), 'drawn by installed\n')
-  assert.equal(logLines(s).length, 1)
-  assert.match(logLines(s)[0], /drawn from .*\/installed,/)
-  fs.rmSync(`${s.t}/installed`, { recursive: true })
-  assert.equal(launch(s), 'fresh from s1 by older\n')
-  assert.equal(launch(s), 'fresh from s1 by older\n')
-  assert.equal(logLines(s).length, 2)
-  assert.match(logLines(s)[1], /drawn afresh/)
-})
+  test('a draw from a good pointer looks for no other copy of LCW', async () => {
+    const s = scratch()
+    fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`))
+    fs.writeFileSync(`${s.home}/bin/installed.mjs`, `import fs from 'node:fs'\nfs.writeFileSync(process.env.LCW_HOME + '/looked', '')\nexport const installedFolder = () => null\n`)
+    assert.equal(await launch(s), 'drawn by a\n')
+    assert.ok(!fs.existsSync(`${s.home}/looked`))
+  })
 
-test('when the pointer\'s folder is gone, the launcher draws from the folder LCW was set up from, then from the installed plugin', () => {
-  const s = scratch(`${tmp('gone')}/lcw`)
-  fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
-  fs.mkdirSync(`${s.config}/plugins`, { recursive: true })
-  const installed = plugin(`${s.t}/installed`)
-  fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'o/lcw' } } }))
-  fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: installed }] } }))
-  assert.equal(launch(s), 'drawn by setup\n')
-  assert.equal(launch(s), 'drawn by setup\n')
-  assert.equal(logLines(s).length, 1, 'one line, not one a tick')
-  assert.match(logLines(s)[0], /is gone; the rows are drawn from .*\/setup/)
-  fs.rmSync(`${s.t}/setup`, { recursive: true })
-  assert.equal(launch(s), 'drawn by installed\n')
-})
+  test('the same fault leaves one line in the log, however many draws meet it', async () => {
+    const s = scratch(`${tmp('gone')}/lcw`)
+    fs.writeFileSync(`${s.home}/bin/setup-root`, older(`${s.t}/older`) + '\n')
+    fs.mkdirSync(`${s.config}/plugins`, { recursive: true })
+    fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'o/lcw' } } }))
+    fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: plugin(`${s.t}/installed`) }] } }))
+    assert.equal(await launch(s), 'drawn by installed\n')
+    assert.equal(await launch(s), 'drawn by installed\n')
+    assert.equal(logLines(s).length, 1)
+    assert.match(logLines(s)[0], /drawn from .*\/installed,/)
+    fs.rmSync(`${s.t}/installed`, { recursive: true })
+    assert.equal(await launch(s), 'fresh from s1 by older\n')
+    assert.equal(await launch(s), 'fresh from s1 by older\n')
+    assert.equal(logLines(s).length, 2)
+    assert.match(logLines(s)[1], /drawn afresh/)
+  })
 
-test('a pointer at a folder whose code cannot draw ahead is passed over for the folder LCW was set up from', () => {
-  const s = scratch(older(`${tmp('old')}/lcw`))
-  fs.writeFileSync(`${s.home}/bin/setup-root`, ROOT + '\n')
-  assert.match(plain(launch(s)), /Opus 5/)
-  assert.ok(fs.existsSync(`${s.home}/frames/s1/key`), 'frames drawn ahead by the current code')
-})
+  test('when the pointer\'s folder is gone, the launcher draws from the folder LCW was set up from, then from the installed plugin', async () => {
+    const s = scratch(`${tmp('gone')}/lcw`)
+    fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
+    fs.mkdirSync(`${s.config}/plugins`, { recursive: true })
+    const installed = plugin(`${s.t}/installed`)
+    fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'o/lcw' } } }))
+    fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: installed }] } }))
+    assert.equal(await launch(s), 'drawn by setup\n')
+    assert.equal(await launch(s), 'drawn by setup\n')
+    assert.equal(logLines(s).length, 1, 'one line, not one a tick')
+    assert.match(logLines(s)[0], /is gone; the rows are drawn from .*\/setup/)
+    fs.rmSync(`${s.t}/setup`, { recursive: true })
+    assert.equal(await launch(s), 'drawn by installed\n')
+  })
 
-test('older code that hangs is given up on, and the session\'s last rows are printed', () => {
-  const s = scratch(plugin(`${tmp('old')}/old`, 'export async function main() { await new Promise(() => setInterval(() => {}, 1000)) }\n'))
-  const rows = lastRows(s)
-  assert.equal(launch(s), rows)
-})
+  test('a pointer at a folder whose code cannot draw ahead is passed over for the folder LCW was set up from', async () => {
+    const s = scratch(older(`${tmp('old')}/lcw`))
+    fs.writeFileSync(`${s.home}/bin/setup-root`, ROOT + '\n')
+    assert.match(plain(await launch(s)), /Opus 5/)
+    assert.ok(fs.existsSync(`${s.home}/frames/s1/key`), 'frames drawn ahead by the current code')
+  })
 
-test('the installed plugin is tried when the folder LCW was set up from holds older code too', () => {
-  const s = scratch(older(`${tmp('old')}/old`))
-  fs.writeFileSync(`${s.home}/bin/setup-root`, older(`${s.t}/older`) + '\n')
-  fs.mkdirSync(`${s.config}/plugins`, { recursive: true })
-  fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'o/lcw' } } }))
-  fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: plugin(`${s.t}/installed`) }] } }))
-  assert.equal(launch(s), 'drawn by installed\n')
-})
+  test('older code that hangs is given up on, and the session\'s last rows are printed', async () => {
+    const s = scratch(plugin(`${tmp('old')}/old`, 'export async function main() { await new Promise(() => setInterval(() => {}, 1000)) }\n'))
+    const rows = lastRows(s)
+    assert.equal(await launch(s), rows)
+  })
 
-test('when no folder holds code that can draw ahead, each tick is one fresh draw from the code there is, and no frames are saved', () => {
-  const s = scratch(older(`${tmp('old')}/old`))
-  fs.writeFileSync(`${s.home}/bin/setup-root`, older(`${s.t}/older`) + '\n')
-  assert.equal(launch(s), 'fresh from s1 by old\n')
-  assert.ok(!fs.existsSync(`${s.home}/frames`))
-})
+  test('the installed plugin is tried when the folder LCW was set up from holds older code too', async () => {
+    const s = scratch(older(`${tmp('old')}/old`))
+    fs.writeFileSync(`${s.home}/bin/setup-root`, older(`${s.t}/older`) + '\n')
+    fs.mkdirSync(`${s.config}/plugins`, { recursive: true })
+    fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'github', repo: 'o/lcw' } } }))
+    fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: plugin(`${s.t}/installed`) }] } }))
+    assert.equal(await launch(s), 'drawn by installed\n')
+  })
 
-test('the log names the pointer the launcher read, beside itself, when the session\'s LCW home is another', () => {
-  const s = scratch(`${tmp('gone')}/lcw`)
-  fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
-  const other = `${s.t}/other`
-  fs.mkdirSync(other)
-  fs.writeFileSync(`${other}/plugin-root`, plugin(`${s.t}/good`) + '\n')
-  const r = spawnSync(process.execPath, [`${s.home}/bin/statusline.mjs`, `${S}+0000`], { input: INPUT, encoding: 'utf8', env: env(s, { LCW_HOME: other }), timeout: 15_000 })
-  assert.equal(r.stdout, 'drawn by setup\n')
-  const line = fs.readFileSync(`${other}/statusline.log`, 'utf8')
-  assert.ok(line.includes(`named in ${s.home}/plugin-root is gone`), line)
-})
+  test('when no folder holds code that can draw ahead, each tick is one fresh draw from the code there is, and no frames are saved', async () => {
+    const s = scratch(older(`${tmp('old')}/old`))
+    fs.writeFileSync(`${s.home}/bin/setup-root`, older(`${s.t}/older`) + '\n')
+    assert.equal(await launch(s), 'fresh from s1 by old\n')
+    assert.ok(!fs.existsSync(`${s.home}/frames`))
+  })
 
-test('a pointer that names no absolute folder is passed over', () => {
-  const s = scratch()
-  plugin(`${s.t}/a`)
-  fs.writeFileSync(`${s.home}/plugin-root`, 'a\n')
-  fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
-  const r = spawnSync(process.execPath, [`${s.home}/bin/statusline.mjs`, `${S}+0000`], { cwd: s.t, input: INPUT, encoding: 'utf8', env: env(s), timeout: 15_000 })
-  assert.equal(r.stdout, 'drawn by setup\n')
-})
+  test('the log names the pointer the launcher read, beside itself, when the session\'s LCW home is another', async () => {
+    const s = scratch(`${tmp('gone')}/lcw`)
+    fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
+    const other = `${s.t}/other`
+    fs.mkdirSync(other)
+    fs.writeFileSync(`${other}/plugin-root`, plugin(`${s.t}/good`) + '\n')
+    const r = await exec(process.execPath, [`${s.home}/bin/statusline.mjs`, `${S}+0000`], { input: INPUT, env: env(s, { LCW_HOME: other }), timeout: 15_000 })
+    assert.equal(r.stdout, 'drawn by setup\n')
+    const line = fs.readFileSync(`${other}/statusline.log`, 'utf8')
+    assert.ok(line.includes(`named in ${s.home}/plugin-root is gone`), line)
+  })
 
-test('a record that names an older copy of the plugin is never followed', () => {
-  const s = scratch(`${tmp('gone')}/lcw`)
-  const moved = `${tmp('moved')}/lcw`
-  fs.mkdirSync(`${s.config}/plugins`, { recursive: true })
-  fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'directory', path: moved } } }))
-  fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: plugin(`${s.t}/old`) }] } }))
-  assert.equal(launch(s), BROKEN)
-  assert.match(logLines(s)[0], /no other copy of LCW was found: install LCW again/)
-})
+  test('a pointer that names no absolute folder is passed over', async () => {
+    const s = scratch()
+    plugin(`${s.t}/a`)
+    fs.writeFileSync(`${s.home}/plugin-root`, 'a\n')
+    fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
+    const r = await exec(process.execPath, [`${s.home}/bin/statusline.mjs`, `${S}+0000`], { cwd: s.t, input: INPUT, env: env(s), timeout: 15_000 })
+    assert.equal(r.stdout, 'drawn by setup\n')
+  })
 
-test('a syntax error in LCW\'s code keeps the rows on screen, writes one line, and the next tick after the repair is live', () => {
-  const s = scratch()
-  const a = plugin(`${s.t}/a`, 'export async function ahead( {\n')
-  fs.writeFileSync(`${s.home}/plugin-root`, a)
-  const rows = lastRows(s)
-  assert.equal(launch(s), rows)
-  assert.equal(launch(s), rows)
-  assert.equal(logLines(s).length, 1)
-  assert.match(logLines(s)[0], /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ LCW's code in .* could not be loaded/)
-  plugin(a)
-  assert.equal(launch(s), 'drawn by a\n')
-})
+  test('a record that names an older copy of the plugin is never followed', async () => {
+    const s = scratch(`${tmp('gone')}/lcw`)
+    const moved = `${tmp('moved')}/lcw`
+    fs.mkdirSync(`${s.config}/plugins`, { recursive: true })
+    fs.writeFileSync(`${s.config}/plugins/known_marketplaces.json`, JSON.stringify({ lcw: { source: { source: 'directory', path: moved } } }))
+    fs.writeFileSync(`${s.config}/plugins/installed_plugins.json`, JSON.stringify({ plugins: { 'lcw@lcw': [{ installPath: plugin(`${s.t}/old`) }] } }))
+    assert.equal(await launch(s), BROKEN)
+    assert.match(logLines(s)[0], /no other copy of LCW was found: install LCW again/)
+  })
 
-test('a new session while LCW is broken prints exactly the approved line', () => {
-  const s = scratch()
-  fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'syntax error here\n'))
-  assert.equal(launch(s), BROKEN)
-  assert.equal(tick(s, { path: `${s.t}/fake:${process.env.PATH}` }), BROKEN)
-})
+  test('a syntax error in LCW\'s code keeps the rows on screen, writes one line, and the next tick after the repair is live', async () => {
+    const s = scratch()
+    const a = plugin(`${s.t}/a`, 'export async function ahead( {\n')
+    fs.writeFileSync(`${s.home}/plugin-root`, a)
+    const rows = lastRows(s)
+    assert.equal(await launch(s), rows)
+    assert.equal(await launch(s), rows)
+    assert.equal(logLines(s).length, 1)
+    assert.match(logLines(s)[0], /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ LCW's code in .* could not be loaded/)
+    plugin(a)
+    assert.equal(await launch(s), 'drawn by a\n')
+  })
 
-test('code that does not load is looked into for its file and line once, not on every tick', () => {
-  const s = scratch()
-  fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'const x = = 1\n'))
-  // counts the Node runs that load the code alone, to find where it fails
-  const trace = `${s.t}/trace.mjs`
-  fs.writeFileSync(trace, `import fs from 'node:fs'\nif (process.execArgv.includes('--input-type=module')) fs.appendFileSync(${JSON.stringify(`${s.t}/looked`)}, 'x\\n')\n`)
-  const looks = () => (fs.existsSync(`${s.t}/looked`) ? fs.readFileSync(`${s.t}/looked`, 'utf8').length / 2 : 0)
-  const run = () => spawnSync(process.execPath, [`${s.home}/bin/statusline.mjs`, `${S}+0000`], { input: INPUT, encoding: 'utf8', env: env(s, { NODE_OPTIONS: `--import ${trace}` }), timeout: 15_000 })
-  for (let i = 0; i < 3; i++) run()
-  assert.equal(looks(), 1)
-  assert.equal(logLines(s).length, 1)
-  fs.writeFileSync(`${s.t}/a/scripts/statusline.mjs`, 'let let = 1\n')
-  run(); run()
-  assert.equal(looks(), 2)
-  assert.equal(logLines(s).length, 2)
-})
+  test('a new session while LCW is broken prints exactly the approved line', async () => {
+    const s = scratch()
+    fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'syntax error here\n'))
+    assert.equal(await launch(s), BROKEN)
+    assert.equal(await tick(s, { path: `${FAKE}:${process.env.PATH}` }), BROKEN)
+  })
 
-test('a draw that fails prints the session\'s last rows again', () => {
-  const s = scratch()
-  fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'export async function ahead() { throw new Error("no") }\n'))
-  const rows = lastRows(s)
-  assert.equal(launch(s), rows)
-  assert.match(logLines(s)[0], /could not be drawn/)
-})
+  test('code that does not load is looked into for its file and line once, not on every tick', async () => {
+    const s = scratch()
+    fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'const x = = 1\n'))
+    // counts the Node runs that load the code alone, to find where it fails
+    const trace = `${s.t}/trace.mjs`
+    fs.writeFileSync(trace, `import fs from 'node:fs'\nif (process.execArgv.includes('--input-type=module')) fs.appendFileSync(${JSON.stringify(`${s.t}/looked`)}, 'x\\n')\n`)
+    const looks = () => (fs.existsSync(`${s.t}/looked`) ? fs.readFileSync(`${s.t}/looked`, 'utf8').length / 2 : 0)
+    const run = () => exec(process.execPath, [`${s.home}/bin/statusline.mjs`, `${S}+0000`], { input: INPUT, env: env(s, { NODE_OPTIONS: `--import ${trace}` }), timeout: 15_000 })
+    for (let i = 0; i < 3; i++) await run()
+    assert.equal(looks(), 1)
+    assert.equal(logLines(s).length, 1)
+    fs.writeFileSync(`${s.t}/a/scripts/statusline.mjs`, 'let let = 1\n')
+    await run(); await run()
+    assert.equal(looks(), 2)
+    assert.equal(logLines(s).length, 2)
+  })
 
-test('with no Node to start, the command prints the last rows, or the approved line, and logs it once', () => {
-  const s = scratch()
-  assert.equal(tick(s), BROKEN)
-  const rows = lastRows(s)
-  assert.equal(tick(s), rows)
-  assert.equal(logLines(s).length, 1)
-  assert.match(logLines(s)[0], new RegExp(`^${new Date(NOW).toISOString().slice(0, 19)}Z node was not found`))
-})
+  test('a draw that fails prints the session\'s last rows again', async () => {
+    const s = scratch()
+    fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'export async function ahead() { throw new Error("no") }\n'))
+    const rows = lastRows(s)
+    assert.equal(await launch(s), rows)
+    assert.match(logLines(s)[0], /could not be drawn/)
+  })
 
-test('two faults that take turns, one a tick, leave one line each', () => {
-  const s = scratch()
-  const withNode = `${s.t}/fake:${process.env.PATH}`
-  // one session has no Node to start; another's launcher is broken, then its plugin's code
-  fs.writeFileSync(`${s.home}/bin/statusline.mjs`, 'this is not javascript\n')
-  for (let i = 0; i < 4; i++) { tick(s); tick(s, { path: withNode }) }
-  assert.equal(logLines(s).length, 2)
-  assert.match(logLines(s)[1], /ended with status 1 and printed nothing: .*setup/)
-  fs.copyFileSync(`${ROOT}/scripts/bin/statusline.mjs`, `${s.home}/bin/statusline.mjs`)
-  fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'const x = = 1\n'))
-  for (let i = 0; i < 4; i++) { tick(s); launch(s) }
-  assert.equal(logLines(s).length, 3)
-})
+  test('with no Node to start, the command prints the last rows, or the approved line, and logs it once', async () => {
+    const s = scratch()
+    assert.equal(await tick(s), BROKEN)
+    const rows = lastRows(s)
+    assert.equal(await tick(s), rows)
+    assert.equal(logLines(s).length, 1)
+    assert.match(logLines(s)[0], new RegExp(`^${new Date(NOW).toISOString().slice(0, 19)}Z node was not found`))
+  })
 
-test('the command adds nothing to a log that would pass 64 KB, whoever writes it', () => {
-  const s = scratch()
-  const old = Array.from({ length: 1000 }, (_, i) => `2026-01-01T00:00:00Z line ${String(i).padStart(3, '0')} ${'x'.repeat(50)}\n`).join('')
-  fs.writeFileSync(`${s.home}/statusline.log`, old.slice(0, old.lastIndexOf('\n', 65_500) + 1))
-  tick(s)
-  assert.ok(fs.statSync(`${s.home}/statusline.log`).size <= 64 * 1024)
-})
+  test('two faults that take turns, one a tick, leave one line each', async () => {
+    const s = scratch()
+    const withNode = `${FAKE}:${process.env.PATH}`
+    // one session has no Node to start; another's launcher is broken, then its plugin's code
+    fs.writeFileSync(`${s.home}/bin/statusline.mjs`, 'this is not javascript\n')
+    for (let i = 0; i < 4; i++) { await tick(s); await tick(s, { path: withNode }) }
+    assert.equal(logLines(s).length, 2)
+    assert.match(logLines(s)[1], /ended with status 1 and printed nothing: .*setup/)
+    fs.copyFileSync(`${ROOT}/scripts/bin/statusline.mjs`, `${s.home}/bin/statusline.mjs`)
+    fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'const x = = 1\n'))
+    for (let i = 0; i < 4; i++) { await tick(s); await launch(s) }
+    assert.equal(logLines(s).length, 3)
+  })
 
-test('a line names what to do: nothing when the rows came from another folder, and the file of code that does not load', () => {
-  const s = scratch(`${tmp('gone')}/lcw`)
-  fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
-  launch(s)
-  assert.match(logLines(s)[0], /is gone; the rows are drawn from .*\/setup, and nothing needs doing/)
-  assert.doesNotMatch(logLines(s)[0], /setup again/)
-  fs.writeFileSync(`${s.t}/setup/scripts/statusline.mjs`, 'export const a = 1\nconst x = = 1\n')
-  launch(s)
-  assert.match(logLines(s)[1], new RegExp(`could not be loaded \\(.* at ${s.t}/setup/scripts/statusline\\.mjs:2\\)`))
-})
+  test('the command adds nothing to a log that would pass 64 KB, whoever writes it', async () => {
+    const s = scratch()
+    const old = Array.from({ length: 1000 }, (_, i) => `2026-01-01T00:00:00Z line ${String(i).padStart(3, '0')} ${'x'.repeat(50)}\n`).join('')
+    fs.writeFileSync(`${s.home}/statusline.log`, old.slice(0, old.lastIndexOf('\n', 65_500) + 1))
+    await tick(s)
+    assert.ok(fs.statSync(`${s.home}/statusline.log`).size <= 64 * 1024)
+  })
 
-test('with the launcher missing, the command prints the approved line and says so in the log', () => {
-  const s = scratch()
-  fs.rmSync(`${s.home}/bin/statusline.mjs`)
-  assert.equal(tick(s, { path: `${s.t}/fake:${process.env.PATH}` }), BROKEN)
-  assert.match(logLines(s)[0], /bin\/statusline\.mjs is missing/)
-})
+  test('a line names what to do: nothing when the rows came from another folder, and the file of code that does not load', async () => {
+    const s = scratch(`${tmp('gone')}/lcw`)
+    fs.writeFileSync(`${s.home}/bin/setup-root`, plugin(`${s.t}/setup`) + '\n')
+    await launch(s)
+    assert.match(logLines(s)[0], /is gone; the rows are drawn from .*\/setup, and nothing needs doing/)
+    assert.doesNotMatch(logLines(s)[0], /setup again/)
+    fs.writeFileSync(`${s.t}/setup/scripts/statusline.mjs`, 'export const a = 1\nconst x = = 1\n')
+    await launch(s)
+    assert.match(logLines(s)[1], new RegExp(`could not be loaded \\(.* at ${s.t}/setup/scripts/statusline\\.mjs:2\\)`))
+  })
 
-test('a log that cannot be written changes nothing on screen, and puts nothing on stderr', { skip: process.getuid?.() === 0 && 'a folder made read-only does not stop root from writing in it' }, () => {
-  const s = scratch()
-  fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'syntax error here\n'))
-  fs.chmodSync(s.home, 0o500)
-  try {
-    for (const shell of ['/bin/sh', '/bin/bash', '/bin/zsh', '/bin/dash'].filter((x) => fs.existsSync(x))) {
-      const r = spawnSync(shell, ['-c', `. '${s.home}/bin/statusline.sh'`], { input: INPUT, encoding: 'utf8', env: env(s, { PATH: `${s.t}/fake`, LCW_FAKE_DATE: `${S}+0000` }) })
-      assert.deepEqual([r.status, r.stdout, r.stderr], [0, BROKEN, ''], shell)
-    }
-    assert.equal(launch(s), BROKEN)
-  } finally { fs.chmodSync(s.home, 0o700) }
-  assert.deepEqual(logLines(s), [])
-  // nor a log that is a folder
-  fs.mkdirSync(`${s.home}/statusline.log`)
-  for (const shell of ['/bin/sh', '/bin/bash', '/bin/zsh', '/bin/dash'].filter((x) => fs.existsSync(x))) {
-    const r = spawnSync(shell, ['-c', `. '${s.home}/bin/statusline.sh'`], { input: INPUT, encoding: 'utf8', env: env(s, { PATH: `${s.t}/fake`, LCW_FAKE_DATE: `${S}+0000` }) })
-    assert.deepEqual([r.status, r.stdout, r.stderr], [0, BROKEN, ''], shell)
-  }
-})
+  test('with the launcher missing, the command prints the approved line and says so in the log', async () => {
+    const s = scratch()
+    fs.rmSync(`${s.home}/bin/statusline.mjs`)
+    assert.equal(await tick(s, { path: `${FAKE}:${process.env.PATH}` }), BROKEN)
+    assert.match(logLines(s)[0], /bin\/statusline\.mjs is missing/)
+  })
 
-test('the log is cut to its newest half once it passes 64 KB', () => {
-  const s = scratch()
-  fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'syntax error here\n'))
-  const old = Array.from({ length: 700 }, (_, i) => `2026-01-01T00:00:00Z line ${String(i).padStart(3, '0')} ${'x'.repeat(70)}`)
-  fs.writeFileSync(`${s.home}/statusline.log`, old.join('\n') + '\n')
-  launch(s)
-  const lines = logLines(s)
-  assert.ok(fs.statSync(`${s.home}/statusline.log`).size < 40 * 1024)
-  assert.equal(lines[0], old[350])
-  assert.match(lines.at(-1), /could not be loaded/)
-})
+  test('a log that cannot be written changes nothing on screen, and puts nothing on stderr', { skip: process.getuid?.() === 0 && 'a folder made read-only does not stop root from writing in it' }, async () => {
+    const s = scratch()
+    fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'syntax error here\n'))
+    fs.chmodSync(s.home, 0o500)
+    try {
+      await brokenInEveryShell(s)
+      assert.equal(await launch(s), BROKEN)
+    } finally { fs.chmodSync(s.home, 0o700) }
+    assert.deepEqual(logLines(s), [])
+    // nor a log that is a folder
+    fs.mkdirSync(`${s.home}/statusline.log`)
+    await brokenInEveryShell(s)
+  })
 
-test('the command line installed before keeps working: one fresh draw, as the launcher gives with no second', () => {
-  const s = scratch()
-  const input = JSON.stringify({ session_id: 's1', cwd: makeRepo(), model: { display_name: 'Opus 5' } })
-  fs.writeFileSync(`${s.home}/bin/old.mjs`, `import fs from 'node:fs'
-let root = ${JSON.stringify(ROOT)}
-try { root = fs.readFileSync(new URL('../plugin-root', import.meta.url), 'utf8').trim() || root } catch {}
-const { main } = await import(\`\${root}/scripts/statusline.mjs\`)
-await main({ margin: 4 })
-`)
-  const r = spawnSync(process.execPath, [`${s.home}/bin/old.mjs`], { input, encoding: 'utf8', env: env(s) })
-  assert.equal(r.status, 0)
-  assert.match(plain(r.stdout), /Opus 5/)
-  assert.equal(launch(s, input, []), r.stdout)
-  assert.ok(!fs.existsSync(`${s.home}/frames`), 'no frames without a second')
+  test('the log is cut to its newest half once it passes 64 KB', async () => {
+    const s = scratch()
+    fs.writeFileSync(`${s.home}/plugin-root`, plugin(`${s.t}/a`, 'syntax error here\n'))
+    const old = Array.from({ length: 700 }, (_, i) => `2026-01-01T00:00:00Z line ${String(i).padStart(3, '0')} ${'x'.repeat(70)}`)
+    fs.writeFileSync(`${s.home}/statusline.log`, old.join('\n') + '\n')
+    await launch(s)
+    const lines = logLines(s)
+    assert.ok(fs.statSync(`${s.home}/statusline.log`).size < 40 * 1024)
+    assert.equal(lines[0], old[350])
+    assert.match(lines.at(-1), /could not be loaded/)
+  })
+
+  test('the command line installed before keeps working: one fresh draw, as the launcher gives with no second', async () => {
+    const s = scratch()
+    const input = JSON.stringify({ session_id: 's1', cwd: makeRepo(), model: { display_name: 'Opus 5' } })
+    fs.writeFileSync(`${s.home}/bin/old.mjs`, `import fs from 'node:fs'
+  let root = ${JSON.stringify(ROOT)}
+  try { root = fs.readFileSync(new URL('../plugin-root', import.meta.url), 'utf8').trim() || root } catch {}
+  const { main } = await import(\`\${root}/scripts/statusline.mjs\`)
+  await main({ margin: 4 })
+  `)
+    const r = await exec(process.execPath, [`${s.home}/bin/old.mjs`], { input, env: env(s) })
+    assert.equal(r.status, 0)
+    assert.match(plain(r.stdout), /Opus 5/)
+    assert.equal(await launch(s, input, []), r.stdout)
+    assert.ok(!fs.existsSync(`${s.home}/frames`), 'no frames without a second')
+  })
 })
