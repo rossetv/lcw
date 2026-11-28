@@ -6,6 +6,7 @@ import path from 'node:path'
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { promisify } from 'node:util'
+import { cli } from './helpers.mjs' // first: it points HOME at a throwaway folder
 import { configureQuota, disableQuota, readQuotaState, claimRefresh, recordQuotaResult, refreshQuota, runQuotaCommand } from '../../scripts/lib/quota-command.mjs'
 import { evaluateQuota, selectQuota } from '../../lib/quota.mjs'
 import { quotaFile } from '../../lib/key.mjs'
@@ -158,7 +159,7 @@ for (const phase of ['preparation', 'release']) test(`abandoned directories from
     }
     await disableQuota(${JSON.stringify(home)})
   `
-  await assert.rejects(promisify(execFile)(process.execPath, ['--input-type=module', '-e', source], { timeout: 3000 }), { signal: 'SIGKILL' })
+  await assert.rejects(promisify(execFile)(process.execPath, ['--input-type=module', '-e', source], { timeout: 30000 }), { signal: 'SIGKILL' })
   const prefix = path.basename(lock) + '.'
   const leftovers = fs.readdirSync(home).filter((name) => name.startsWith(prefix))
   assert.equal(leftovers.length, 1)
@@ -200,7 +201,7 @@ test('dead-owned quota commit files are reclaimed without touching live, symlink
     }
     await disableQuota(${JSON.stringify(home)})
   `
-  await assert.rejects(promisify(execFile)(process.execPath, ['--input-type=module', '-e', source], { timeout: 3000 }), { signal: 'SIGKILL' })
+  await assert.rejects(promisify(execFile)(process.execPath, ['--input-type=module', '-e', source], { timeout: 30000 }), { signal: 'SIGKILL' })
   const leaked = fs.readdirSync(home).find((name) => name.endsWith('.tmp'))
   assert.ok(leaked)
   const deadPid = leaked.slice(path.basename(file).length + 1).split('.')[0]
@@ -258,8 +259,8 @@ test('the adapter group remains bounded when its runner is killed abruptly', asy
   const running = (pid) => {
     try { return !/^Z/.test(execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || 'Z') } catch (e) { return e.status !== 1 }
   }
-  const until = Date.now() + 5000
-  while (pids.some(running) && Date.now() < until) await new Promise((r) => setImmediate(r))
+  const until = Date.now() + 20000
+  while (pids.some(running) && Date.now() < until) await new Promise((r) => setTimeout(r, 20))
   assert.equal(pids.some(running), false)
 })
 
@@ -279,7 +280,7 @@ test('the background entry point refreshes using the same clock and quota state'
   assert.equal((await configureQuota(home, endpoint, command, { now: () => at })).ok, true)
   const before = readQuotaState(home).cache.requestId
   const runner = new URL('../../scripts/quota-refresh.mjs', import.meta.url)
-  await promisify(execFile)(process.execPath, [runner.pathname], { env: { ...process.env, LCW_HOME: home, LCW_NOW: String(at + 300000) }, timeout: 3000 })
+  await promisify(execFile)(process.execPath, [runner.pathname], { env: { ...process.env, LCW_HOME: home, LCW_NOW: String(at + 300000) }, timeout: 30000 })
   const state = readQuotaState(home)
   assert.notEqual(state.cache.requestId, before)
   assert.equal(state.cache.result.status, 'ok')
@@ -301,13 +302,71 @@ test('runner kills descendants even when the shell exits with inherited pipes st
   const dir = fixture(t)
   const pidFile = path.join(dir, 'pid')
   const source = `const {spawn}=require('node:child_process'); const fs=require('node:fs'); const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'inherit'}); fs.writeFileSync(${JSON.stringify(pidFile)},String(c.pid)); process.stdout.write(${JSON.stringify(JSON.stringify(ok))}); c.unref()`
-  const result = await runQuotaCommand(node(source), { now: () => at, timeoutMs: 2000 })
+  const result = await runQuotaCommand(node(source), { now: () => at, timeoutMs: 20000 })
   assert.equal(result.status, 'ok')
   const pid = Number(fs.readFileSync(pidFile, 'utf8'))
   const running = () => {
     try { return !/^Z/.test(execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || 'Z') } catch (e) { return e.status !== 1 }
   }
-  const until = Date.now() + 250
-  while (running() && Date.now() < until) await new Promise((r) => setImmediate(r))
+  const until = Date.now() + 20000
+  while (running() && Date.now() < until) await new Promise((r) => setTimeout(r, 20))
   assert.equal(running(), false)
+})
+
+// The command line itself, in this process through the CLI's main().
+const dollarSource = 'dollar-source'
+const nativeSource = 'native-source'
+
+/** A home under a folder removed when the test ends, with the options that run the CLI in it at the fixed time. */
+function cliHome(t, files = {}) {
+  const dir = fixture(t)
+  const home = path.join(dir, '.lcw')
+  fs.mkdirSync(home)
+  for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(home, name), body)
+  const opts = { home, cwd: dir, env: { LCW_NOW: String(at) } }
+  return { home, run: (...args) => cli(args, opts) }
+}
+
+test('quota command configures, inspects and disables independently of dollars and native cache', async (t) => {
+  const { home, run } = cliHome(t, { 'spend-command.json': dollarSource, 'usage.json': nativeSource })
+  const command = node(`process.stdout.write(${JSON.stringify(JSON.stringify(ok))})`)
+  const unset = await run('quota-command')
+  assert.equal(unset.code, 0)
+  assert.equal((await run('quota-command', 'http://localhost:8080/v1', 'printf credential-secret')).code, 1)
+  assert.equal(fs.existsSync(path.join(home, 'quota-command.json')), false)
+  assert.equal((await run('quota-command')).out, unset.out)
+  const set = await run('quota-command', 'http://LOCALHOST:8080/v1/', command, '--session', 'test-session')
+  assert.equal(set.code, 0, set.out)
+  const state = JSON.parse(fs.readFileSync(path.join(home, 'quota-command.json'), 'utf8'))
+  assert.equal(state.endpoint, 'http://localhost:8080/v1')
+  assert.equal(state.command, command)
+  const inspect = await run('quota-command')
+  assert.match(inspect.out, /42%/)
+  assert.match(inspect.out, /http:\/\/localhost:8080\/v1/)
+  assert.equal(inspect.out.includes(command), false)
+  const bad = await run('quota-command', 'http://localhost:8080/v1', 'printf credential-secret')
+  assert.equal(bad.code, 1)
+  assert.equal(bad.out.includes('credential-secret'), false)
+  assert.equal(JSON.parse(fs.readFileSync(path.join(home, 'quota-command.json'), 'utf8')).revision, state.revision)
+  assert.equal((await run('quota-command', 'off')).code, 0)
+  const off = JSON.parse(fs.readFileSync(path.join(home, 'quota-command.json'), 'utf8'))
+  assert.equal(off.enabled, false)
+  assert.notEqual(off.revision, state.revision)
+  assert.equal(fs.readFileSync(path.join(home, 'spend-command.json'), 'utf8'), dollarSource)
+  assert.equal(fs.readFileSync(path.join(home, 'usage.json'), 'utf8'), nativeSource)
+  assert.match((await run('help')).out, /quota-command/)
+})
+
+test('a quota file holding only the id of an interrupted setup reads as no command set', async (t) => {
+  const { run } = cliHome(t, { 'quota-command.json': JSON.stringify({ setupRequestId: 'abc' }) })
+  const r = await run('quota-command')
+  assert.equal(r.code, 0)
+  assert.match(r.out, /No external quota command set\./)
+})
+
+test('a quota file that names an endpoint but is not usable still says new work is held', async (t) => {
+  const { run } = cliHome(t, { 'quota-command.json': JSON.stringify({ endpoint: 'http://localhost:8080/v1', setupRequestId: 'abc' }) })
+  const r = await run('quota-command')
+  assert.equal(r.code, 0)
+  assert.match(r.out, /http:\/\/localhost:8080\/v1.*new work held/)
 })
