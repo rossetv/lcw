@@ -11,7 +11,7 @@ const command = hooks.PostToolUse[0].hooks[0].command
 
 // A plugin root whose hook-limit script records its stdin, and a home to run in.
 function setup() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'after-gate-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'post-tool-gate-'))
   const root = path.join(dir, 'root')
   fs.mkdirSync(path.join(root, 'scripts'), { recursive: true })
   const ran = path.join(dir, 'ran')
