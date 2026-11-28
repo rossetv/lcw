@@ -119,17 +119,21 @@ test('a value that is itself a flag is reported as a missing value, in either fo
 })
 
 // real processes: the lock is what keeps them apart; a busy machine must not turn a wait for it into a refusal
+// each result is { code, out } so that a failing call says what it printed
 const parallel = (n, t, argsOf) => Promise.all(Array.from({ length: n }, (_, i) => new Promise((res) => {
-  spawn('node', [CLI, ...argsOf(i)], { cwd: t.o.cwd, env: { ...process.env, LCW_LOCK_WAIT_MS: '120000', LCW_HOME: t.o.home, CLAUDE_CODE_SESSION_ID: t.o.session } }).on('close', res)
+  const p = spawn('node', [CLI, ...argsOf(i)], { cwd: t.o.cwd, env: { ...process.env, LCW_LOCK_WAIT_MS: '120000', LCW_HOME: t.o.home, CLAUDE_CODE_SESSION_ID: t.o.session } })
+  let out = `lcw ${argsOf(i).join(' ')}\n`
+  p.stdout.on('data', (d) => { out += d })
+  p.stderr.on('data', (d) => { out += d })
+  p.on('close', (code) => res({ code, out }))
 })))
+const allOk = (results) => assert.ok(results.every((r) => r.code === 0), results.filter((r) => r.code !== 0).map((r) => `exit ${r.code}: ${r.out}`).join('\n'))
 
 test('concurrent calls do not lose changes', async () => {
   const t = await begin()
-  const codes = await parallel(8, t, (i) => ['task', 'add', `T${i}`, `title ${i}`])
-  assert.ok(codes.every((c) => c === 0))
+  allOk(await parallel(8, t, (i) => ['task', 'add', `T${i}`, `title ${i}`]))
   assert.equal(t.state().tasks.length, 8)
-  const codes2 = await parallel(8, t, (i) => ['task', `T${i}`, 'done'])
-  assert.ok(codes2.every((c) => c === 0))
+  allOk(await parallel(8, t, (i) => ['task', `T${i}`, 'done']))
   assert.ok(t.state().tasks.every((x) => x.status === 'done'))
   assert.ok(!fs.existsSync(`${t.dir}/lock`))
 })
