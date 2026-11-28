@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
-import { tmp, makeRepo, run, lcw, START_HOOK, GATE_HOOK, LIMIT_HOOK, readJson } from './helpers.mjs'
+import { tmp, makeRepo, run, cli, START_HOOK, GATE_HOOK, LIMIT_HOOK, readJson } from './helpers.mjs'
 import { quotaFile, sessionFile, usageFile, spendFile } from '../../lib/key.mjs'
 import { applyGate, settleGate, reconcileGate, setSessionMark, sessionMark, sessionIds } from '../../scripts/lib/gate.mjs'
 import { noteQuotaSession } from '../../scripts/lib/quota-session.mjs'
@@ -217,14 +217,14 @@ test('explicit off and a nonmatching resumed endpoint restore default billing on
   }
 })
 
-test('launches check both the launching session and driver even without a prior gate file', () => {
+test('launches check both the launching session and driver even without a prior gate file', async () => {
   for (const externalDriver of [true, false]) {
     const f = fixture()
     put(sessionFile(f.home, 'proxy'), { billing: 'subscription', quotaSelection: selection, markPercent: 40 })
     put(sessionFile(f.home, 'native'), { billing: 'subscription', markPercent: 80 })
     const driver = externalDriver ? 'proxy' : 'native'
     const launcher = externalDriver ? 'native' : 'proxy'
-    const r = lcw(['start', 'dual', '--title', 'Two sources'], { ...f.options, session: driver, env: { ...f.options.env, ANTHROPIC_BASE_URL: externalDriver ? 'https://proxy.test' : '' } })
+    const r = await cli(['start', 'dual', '--title', 'Two sources'], { ...f.options, session: driver, env: { ...f.options.env, ANTHROPIC_BASE_URL: externalDriver ? 'https://proxy.test' : '' } })
     assert.equal(r.code, 0, r.out)
     const dir = /^folder: (.+)$/m.exec(r.out)[1]
     put(sessionFile(f.home, launcher), { ...getSession(f.home, launcher), runDir: dir })
@@ -237,7 +237,7 @@ test('launches check both the launching session and driver even without a prior 
   }
 })
 
-test('the stop hook checks native and dollar driver holds independently of an external launching session', () => {
+test('the stop hook checks native and dollar driver holds independently of an external launching session', async () => {
   for (const billing of ['subscription', 'payg']) {
     const f = fixture()
     f.state.cache.result.weekly.percentUsed = 10
@@ -247,7 +247,7 @@ test('the stop hook checks native and dollar driver holds independently of an ex
     const spend = (usd) => put(spendFile(f.home, 'driver'), { v: 1, base: 0, max: usd, q: { [Math.floor(now / 900000)]: usd } })
     if (billing === 'payg') spend(3500)
     else put(usageFile(f.home), { sevenDay: { percentUsed: 90, resetsAt: reset }, at: now })
-    const started = lcw(['start', 'driver-stop', '--title', 'Driver controls'], { ...f.options, session: 'driver', env: { ...f.options.env, ANTHROPIC_BASE_URL: '' } })
+    const started = await cli(['start', 'driver-stop', '--title', 'Driver controls'], { ...f.options, session: 'driver', env: { ...f.options.env, ANTHROPIC_BASE_URL: '' } })
     const dir = /^folder: (.+)$/m.exec(started.out)[1]
     put(sessionFile(f.home, 'proxy'), { ...getSession(f.home, 'proxy'), runDir: dir })
     for (const hook_event_name of ['UserPromptSubmit', 'PostToolUse']) {
@@ -265,7 +265,7 @@ test('the stop hook checks native and dollar driver holds independently of an ex
   }
 })
 
-test('replacing the configured endpoint cannot transfer permission to an already selected session', () => {
+test('replacing the configured endpoint cannot transfer permission to an already selected session', async () => {
   const f = fixture()
   f.state.cache.result.weekly.percentUsed = 95
   f.save()
@@ -279,7 +279,7 @@ test('replacing the configured endpoint cannot transfer permission to an already
   f.save()
   assert.equal(f.hook(GATE_HOOK).code, 2)
   assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, selection)
-  assert.match(lcw(['usage'], f.options).out, /held/)
+  assert.match((await cli(['usage'], f.options)).out, /held/)
   f.hook(START_HOOK)
   assert.equal(f.hook(GATE_HOOK).code, 2)
   assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, selection)
@@ -324,61 +324,61 @@ test('refusal and reset expiry hold hooks independently of the native cache and 
   }
 })
 
-test('taking a native run preserves the new driver selection and applies its external hold', () => {
+test('taking a native run preserves the new driver selection and applies its external hold', async () => {
   const f = fixture()
   const nativeOptions = { ...f.options, session: 'native', env: { ...f.options.env, ANTHROPIC_BASE_URL: '' } }
   put(sessionFile(f.home, 'native'), { billing: 'subscription', markPercent: 90 })
-  const started = lcw(['start', 'handoff', '--title', 'Source handoff'], nativeOptions)
+  const started = await cli(['start', 'handoff', '--title', 'Source handoff'], nativeOptions)
   const dir = /^folder: (.+)$/m.exec(started.out)[1]
   const state = readJson(`${dir}/state.json`)
   const old = new Date(now - 20 * 60000)
   for (const file of ['state.json', 'ledger.md']) fs.utimesSync(`${dir}/${file}`, old, old)
   f.state.cache.result = { v: 1, status: 'refused', code: 'provider-refused' }
   f.save()
-  const taken = lcw(['take', state.id], f.options)
+  const taken = await cli(['take', state.id], f.options)
   assert.equal(taken.code, 0, taken.out)
   assert.equal(readJson(`${dir}/state.json`).driver, 'proxy')
   assert.equal(readJson(`${dir}/state.json`).weekAtStart, null)
   assert.deepEqual(getSession(f.home, 'proxy').quotaSelection, selection)
   assert.equal(getSession(f.home, 'native').quotaSelection, undefined)
   assert.equal(readJson(`${dir}/gate`).status, 'refused')
-  assert.match(lcw(['usage'], f.options).out, /refused/)
+  assert.match((await cli(['usage'], f.options)).out, /refused/)
 })
 
-test('a resumed session uses the current explicit mark for both raises and lowerings', () => {
+test('a resumed session uses the current explicit mark for both raises and lowerings', async () => {
   const f = fixture()
   f.state.cache.result.weekly.percentUsed = 85
   f.save()
   put(sessionFile(f.home, 'old'), { billing: 'subscription', quotaSelection: selection, markPercent: 75 })
   const options = { ...f.options, session: 'current' }
-  assert.match(lcw(['mark', '100'], options).out, /ok/)
+  assert.match((await cli(['mark', '100'], options)).out, /ok/)
   const input = { transcript_path: '/tmp/old.jsonl' }
   assert.equal(f.hook(GATE_HOOK, 'current', input).code, 0)
-  assert.equal(lcw(['mark', '70'], options).code, 0)
+  assert.equal((await cli(['mark', '70'], options)).code, 0)
   assert.equal(f.hook(GATE_HOOK, 'current', input).code, 2)
   assert.match(f.hook(LIMIT_HOOK, 'current', { ...input, hook_event_name: 'UserPromptSubmit' }).out, /STOP/)
 })
 
-test('sequential resume identities share the current mark even when the run names a previous alias', () => {
+test('sequential resume identities share the current mark even when the run names a previous alias', async () => {
   const f = fixture()
   f.state.cache.result.weekly.percentUsed = 85
   f.save()
   const first = { ...f.options, session: 'original' }
   put(sessionFile(f.home, 'original'), { billing: 'subscription', quotaSelection: selection, markPercent: 75 })
-  const started = lcw(['start', 'aliases', '--title', 'Alias marks'], first)
+  const started = await cli(['start', 'aliases', '--title', 'Alias marks'], first)
   const dir = /^folder: (.+)$/m.exec(started.out)[1]
   f.hook(START_HOOK, 'middle', { transcript_path: '/tmp/original.jsonl' })
   f.hook(START_HOOK, 'latest', { transcript_path: '/tmp/original.jsonl' })
   const latest = { ...f.options, session: 'latest' }
-  assert.equal(lcw(['mark', '100'], latest).code, 0)
+  assert.equal((await cli(['mark', '100'], latest)).code, 0)
   const state = readJson(`${dir}/state.json`)
   put(`${dir}/state.json`, { ...state, driver: 'middle', markPercent: 75 })
   assert.equal(f.hook(GATE_HOOK, 'latest', { transcript_path: '/tmp/original.jsonl' }).code, 0)
-  assert.match(lcw(['usage'], latest).out, /mark: 100%/)
-  assert.match(lcw(['status'], latest).out, /mark: 100%/)
+  assert.match((await cli(['usage'], latest)).out, /mark: 100%/)
+  assert.match((await cli(['status'], latest)).out, /mark: 100%/)
   const reconciled = run(fileURLToPath(new URL('../../scripts/gate-reconcile.mjs', import.meta.url)), [JSON.stringify({ sessionId: 'latest', action: 'sync', expectedGate: readJson(`${dir}/gate`) })], latest)
   assert.equal(JSON.parse(reconciled.out).hold, false)
-  assert.equal(lcw(['mark', '70'], latest).code, 0)
+  assert.equal((await cli(['mark', '70'], latest)).code, 0)
   assert.equal(f.hook(GATE_HOOK, 'middle', { transcript_path: '/tmp/original.jsonl' }).code, 2)
 })
 
@@ -427,10 +427,10 @@ test('positive startup billing replaces unknown history while genuinely unknown 
   }
 })
 
-test('conditional reconciliation retires only acknowledged obsolete gates and retains newer holds', () => {
+test('conditional reconciliation retires only acknowledged obsolete gates and retains newer holds', async () => {
   const f = fixture()
   put(sessionFile(f.home, 'proxy'), { billing: 'subscription', quotaSelection: selection, markPercent: 80 })
-  const started = lcw(['start', 'old-gate', '--title', 'Source transition'], f.options)
+  const started = await cli(['start', 'old-gate', '--title', 'Source transition'], f.options)
   const dir = /^folder: (.+)$/m.exec(started.out)[1]
   const gate = { reason: 'mark', unit: 'usd', markUsd: 100, usedUsd: 120, retryAt: now + 3600000, at: now - 1000 }
   put(`${dir}/gate`, gate)
@@ -498,11 +498,11 @@ test('native gate reconciliation fills a missing reset only from current evidenc
   })
 })
 
-test('legacy retries are serialized and never change run status or trust unsafe helper input', () => {
+test('legacy retries are serialized and never change run status or trust unsafe helper input', async () => {
   const f = fixture()
   const options = { ...f.options, session: 'native', env: { ...f.options.env, ANTHROPIC_BASE_URL: '' } }
   put(sessionFile(f.home, 'native'), { billing: 'payg', markPercent: 75 })
-  const started = lcw(['start', 'retry', '--title', 'Retry gate'], options)
+  const started = await cli(['start', 'retry', '--title', 'Retry gate'], options)
   const dir = /^folder: (.+)$/m.exec(started.out)[1]
   const state = readJson(`${dir}/state.json`)
   const script = fileURLToPath(new URL('../../scripts/gate-reconcile.mjs', import.meta.url))
@@ -541,29 +541,29 @@ test('legacy retries are serialized and never change run status or trust unsafe 
   }
 })
 
-test('usage, marks and resume use the driver quota and retain a hold until an allowable observation', () => {
+test('usage, marks and resume use the driver quota and retain a hold until an allowable observation', async () => {
   const f = fixture()
   put(sessionFile(f.home, 'proxy'), { billing: 'subscription', quotaSelection: selection, markPercent: 40 })
-  const started = lcw(['start', 'quota', '--title', 'Quota run'], f.options)
+  const started = await cli(['start', 'quota', '--title', 'Quota run'], f.options)
   const dir = /^folder: (.+)$/m.exec(started.out)[1]
   assert.equal(readJson(`${dir}/state.json`).weekAtStart, 42)
-  const cli = (...args) => lcw(args, f.options)
-  assert.match(cli('usage').out, /42%/)
+  const lcw = (...args) => cli(args, f.options)
+  assert.match((await lcw('usage')).out, /42%/)
   assert.equal(readJson(`${dir}/gate`).unit, 'quota')
-  assert.match(cli('mark', '80').out, /ok/)
+  assert.match((await lcw('mark', '80')).out, /ok/)
   f.state.cache.result = { v: 1, status: 'unavailable', code: 'network' }
   f.save()
-  cli('pause', 'mark')
-  assert.equal(cli('resume').code, 1)
+  await lcw('pause', 'mark')
+  assert.equal((await lcw('resume')).code, 1)
   assert.equal(readJson(`${dir}/state.json`).status, 'paused')
-  const usage = cli('usage').out
+  const usage = (await lcw('usage')).out
   assert.match(usage, /unavailable/)
   assert.doesNotMatch(usage, /\$|week: 5%|\nok/)
-  assert.equal(cli('mark', '100').code, 0)
-  assert.equal(cli('resume').code, 1)
+  assert.equal((await lcw('mark', '100')).code, 0)
+  assert.equal((await lcw('resume')).code, 1)
   f.state.cache.requestId = 'fresh-two'
   f.state.cache.result = { v: 1, status: 'ok', accountKey: 'b'.repeat(64), weekly: { percentUsed: 3, resetsAt: reset }, blocked: false }
   f.save()
-  assert.equal(cli('resume').code, 0)
+  assert.equal((await lcw('resume')).code, 0)
   assert.equal(readJson(`${dir}/state.json`).markPercent, 100)
 })

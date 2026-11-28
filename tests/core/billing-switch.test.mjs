@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { tmp, makeRepo, run, lcw, readJson, START_HOOK, LIMIT_HOOK } from './helpers.mjs'
+import { tmp, makeRepo, run, cli, readJson, START_HOOK, LIMIT_HOOK } from './helpers.mjs'
 import { measureStep } from '../../hooks/lcw-mod.mjs'
 
 const STATUS_LINE = new URL('../../scripts/statusline.mjs', import.meta.url).pathname
@@ -59,14 +59,14 @@ test('the mod settles a session left unclear at a resume as pay-per-token only o
   assert.equal(measureStep({ billing: 'unclear' }, first.record, { weekly: null, cost: 0.05 }, NOW).billing, 'payg')
 })
 
-test('a stored subscription resumed under an API key whose reply has no weekly figure counts dollars and stops at the dollar mark', () => {
+test('a stored subscription resumed under an API key whose reply has no weekly figure counts dollars and stops at the dollar mark', async () => {
   const t = place({ p1: { billing: 'subscription', toldPayg: true } })
   start(t, 'api_key')
   tick(t, { cost: 0.4 })
   tick(t, { cost: 0.9 })
   assert.equal(billingOf(t.home, 'p1'), 'payg')
   assert.match(prompt(t), /turned out to be billed per token/)
-  assert.equal(lcw(['mark', '10usd'], { home: t.home, cwd: t.repo, session: 'p1' }).code, 0)
+  assert.equal((await cli(['mark', '10usd'], { home: t.home, cwd: t.repo, session: 'p1' })).code, 0)
   tick(t, { cost: 12.4 })
   assert.match(prompt(t), /STOP\. This session is at its usage mark: \$12 was spent .* the mark is \$10/)
 })
@@ -79,14 +79,10 @@ test('a resume known by an older canonical id settles the canonical session too'
   assert.match(prompt(t), /turned out to be billed per token/)
 })
 
-test('a sign-in that cannot be read leaves every stored billing as it is', () => {
-  const t = place({ p2: { billing: 'subscription' } })
-  start(t, null, { session_id: 'p2', transcript_path: '/x/p1.jsonl' })
-  assert.equal(billingOf(t.home, 'p2'), 'subscription')
-})
-
-test('a stored subscription resumed under a subscription sign-in stays a subscription', () => {
-  const t = place({ p1: { billing: 'subscription' } })
-  start(t, 'claude.ai')
-  assert.equal(billingOf(t.home, 'p1'), 'subscription')
+test('a stored subscription stays one when the sign-in cannot be read or is a subscription', () => {
+  for (const [authMethod, input, id] of [[null, { session_id: 'p2', transcript_path: '/x/p1.jsonl' }, 'p2'], ['claude.ai', undefined, 'p1']]) {
+    const t = place({ [id]: { billing: 'subscription' } })
+    start(t, authMethod, input)
+    assert.equal(billingOf(t.home, id), 'subscription', String(authMethod))
+  }
 })
