@@ -29,11 +29,11 @@ export function commit(dir, file) {
   git(dir, 'commit', '-q', '-m', file)
   return sha(dir)
 }
-// one git process writes the commit, and the merge into main when asked, in place of a checkout, a commit and a merge each
+// one git process writes the commit, and a real merge into main (two parents, main's files kept) when asked, in place of a checkout, a commit and a merge each
 export function branch(repo, name, { merge = false } = {}) {
   const file = `${name.replace(/\//g, '-')}.txt`
   const commit = (ref, msg, ...parents) => `commit ${ref}\ncommitter t <t@t> 1700000000 +0000\ndata ${msg.length}\n${msg}\n${parents.join('\n')}\nM 100644 inline ${file}\ndata 5\n${file.slice(0, 4)}\n\n`
-  const stream = commit(`refs/heads/${name}`, file, 'from refs/heads/main') + (merge ? commit('refs/heads/main', `merge ${name}`, `merge refs/heads/${name}`) : '')
+  const stream = commit(`refs/heads/${name}`, file, 'from refs/heads/main') + (merge ? commit('refs/heads/main', `merge ${name}`, 'from refs/heads/main^0', `merge refs/heads/${name}`) : '')
   execFileSync('git', ['fast-import', '--quiet'], { cwd: repo, input: stream })
   if (merge) git(repo, 'reset', '-q', '--hard') // main moved under its checkout
   return sha(repo, name)
