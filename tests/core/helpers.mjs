@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawn, spawnSync, execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { AsyncLocalStorage } from 'node:async_hooks'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 export const CLI = `${root}/scripts/lcw.mjs`
@@ -55,12 +56,21 @@ export function run(script, args, { home, cwd, session, input, env: more = {} } 
 
 export const lcw = (args, opts) => run(CLI, args, opts)
 
-// one in-process call at a time: each takes over the process's env and cwd while it runs
+// One queue for everything that takes over the process's env or cwd while it runs, cli() and the status line's draws alike.
 let queue = Promise.resolve()
+const inside = new AsyncLocalStorage()
+
+/** Runs fn once every takeover before it has ended. A takeover started from inside another one runs at once: it cannot wait for the one that holds it. */
+export function oneAtATime(fn) {
+  if (inside.getStore()) return Promise.resolve().then(fn)
+  const call = queue.then(() => inside.run(true, fn))
+  queue = call.catch(() => {})
+  return call
+}
 
 /** lcw() run inside this process through the CLI's main(), with the same options and result; err is always ''. */
 export function cli(args, { home, cwd, session, env: more = {} } = {}) {
-  const call = queue.then(async () => {
+  return oneAtATime(async () => {
     const env = { ...process.env, ...gitEnv, LCW_HOME: home, LCW_LOAD: '0' }
     delete env.CLAUDE_CODE_SESSION_ID
     delete env.CLAUDE_PID
@@ -70,8 +80,6 @@ export function cli(args, { home, cwd, session, env: more = {} } = {}) {
     const { code, out } = await main(args, { cwd, env })
     return { code, out, err: '' }
   })
-  queue = call.catch(() => {})
-  return call
 }
 
 /** A live process whose program is named claude, as Claude Code's is: node under a link of that name. Kill it when done. */
