@@ -296,8 +296,8 @@ function surroundings(margin) {
   return { width: cols > 5 ? cols - margin : 121, theme: process.env.LCW_THEME === 'light' ? 'light' : 'dark' }
 }
 
-/** Prints one fresh draw for Claude Code's input: `input` when given, else what is on stdin. */
-export async function main({ margin = 5, input } = {}) {
+/** Prints one fresh draw for Claude Code's input: `input` when given, else what is on stdin. `write` takes the output, stdout by default. */
+export async function main({ margin = 5, input, write = (s) => process.stdout.write(s) } = {}) {
   let inp = {}
   try { inp = JSON.parse(input ?? fs.readFileSync(0, 'utf8')) } catch {}
   let f = null
@@ -305,11 +305,11 @@ export async function main({ margin = 5, input } = {}) {
   try {
     const now = clock()
     f = readRecords(inp, now)
-    process.stdout.write(await draw(f, now, surroundings(margin)) + '\n')
+    write(await draw(f, now, surroundings(margin)) + '\n')
     // After the bar is out: on pay-per-token billing, at most one runner per window across every session.
     if (f.money) maybeRefresh(home(), now)
   } catch {
-    process.stdout.write(plainRow(f?.input ?? {}) + '\n')
+    write(plainRow(f?.input ?? {}) + '\n')
   } finally {
     holdReads(false)
   }
