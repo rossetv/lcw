@@ -334,7 +334,7 @@ test('start is refused while this session drives an unfinished run of either sha
 
 test('finish and stop take a pull request as a bare number or a URL', async () => {
   const t = await sweep()
-  await t.cli('stop', '--pr', 'https://github.com/acme/widgets/pull/7')
+  await t.cli('stop', '--pr', '7')
   assert.deepEqual(t.state().pr, { number: 7, url: 'https://github.com/acme/widgets/pull/7' })
   const o = { home: t.home, cwd: makeRepo(), session: 'f1' }
   const dir = /^folder: (.+)$/m.exec((await cli(['start', 'f', '--title', 'F'], o)).out)[1]
