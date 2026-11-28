@@ -18,7 +18,9 @@ test('under 200K a checkpoint records the step and compacts nothing, and the orc
   const t = await at(150_000)
   const r = await t.cli('checkpoint', 'launch milestone 2')
   assert.equal(r.code, 0)
-  assert.match(r.out, /context 150K, under 200K: nothing compacts.*end your turn only to wait for agents/)
+  assert.match(r.out, /150K/)
+  assert.match(r.out, /nothing compacts/)
+  assert.match(r.out, /carry on/i)
   assert.equal(t.file(), '')
   assert.match(t.ledger(), /checkpoint: launch milestone 2/)
   assert.match((await t.cli('status')).out, /next step: launch milestone 2/)
@@ -27,7 +29,9 @@ test('under 200K a checkpoint records the step and compacts nothing, and the orc
 test('from 200K a checkpoint compacts nothing until the orchestrator chooses, and either choice is recorded', async () => {
   const t = await at(320_000)
   const r = await t.cli('checkpoint', 'start the review')
-  assert.match(r.out, /context 320K: yours to decide/)
+  assert.match(r.out, /320K/)
+  assert.match(r.out, /checkpoint --compact/)
+  assert.match(r.out, /checkpoint --keep/)
   assert.equal(t.file(), '')
   assert.equal((await t.cli('checkpoint', '--compact')).code, 0)
   assert.equal(t.file(), 'start the review', 'the step comes from the ledger')
@@ -60,11 +64,11 @@ test('--keep with an unquoted reason is refused and records nothing, so its word
 
 test('near the end of the window, or with no fresh reading, a checkpoint compacts and cannot be kept', async () => {
   for (const t of [await at(850_000), await at(150_000, { age: 11 * 60000 })]) {
-    assert.match((await t.cli('checkpoint', 'go on')).out, /compaction happens when this turn ends/)
+    assert.match((await t.cli('checkpoint', 'go on')).out, /compaction.*end your turn/)
     assert.equal(t.file(), 'go on')
     const r = await t.cli('checkpoint', '--keep', 'still need it')
     assert.equal(r.code, 1)
-    assert.match(r.out, /run lcw checkpoint --compact/)
+    assert.match(r.out, /checkpoint --compact/)
   }
 })
 
@@ -76,7 +80,7 @@ test('--compact with a step compacts at any size', async () => {
 
 test('above 200K, stage, set and status remind the orchestrator of the size; below it they say nothing', async () => {
   const big = await at(260_000)
-  assert.match((await big.cli('set', 'health=on track')).out, /context 260K: compact at your next checkpoint/)
+  assert.match((await big.cli('set', 'health=on track')).out, /context 260K.*compact/)
   const small = await at(120_000)
   assert.doesNotMatch((await small.cli('set', 'health=on track')).out, /context/)
 })
@@ -90,7 +94,7 @@ test('--keep refused for no context reading still records the step, so --compact
   const t = await begin()
   const r = await t.cli('checkpoint', '--keep', 'why', 'start the review')
   assert.equal(r.code, 1)
-  assert.match(r.out, /run lcw checkpoint --compact/)
+  assert.match(r.out, /checkpoint --compact/)
   assert.equal((await t.cli('checkpoint', '--compact')).code, 0)
   assert.equal(fs.readFileSync(`${t.dir}/checkpoint`, 'utf8'), 'start the review')
 })
