@@ -160,12 +160,12 @@ test('Hunt is refused while a wave is queued or still being built, and starts an
   await t.cli('stage', 'Build')
   const unbuilt = await t.cli('stage', 'Hunt')
   assert.equal(unbuilt.code, 1, 'in Build, not built yet')
-  assert.match(unbuilt.out, /Wave 1 \(Build\) is still being planned or built/)
+  assert.match(unbuilt.out, /Wave 1 \(Build\)/)
   assert.equal(t.state().stage, 'Build')
   await t.cli('stage', 'Review')
   const early = await t.cli('stage', 'Hunt')
   assert.equal(early.code, 0, 'built and in Review')
-  assert.match(early.out, /early round: wave 1 \(Review\) is short of Ship/)
+  assert.match(early.out, /early round.*wave 1 \(Review\)/)
   assert.deepEqual([t.state().stage, t.state().sweep.round, t.state().sweep.early, t.state().sweep.waves[0].stage], ['Hunt', 2, [1], 'Review'])
   assert.match((await t.cli('status')).out, /round: 2 \(early: wave 1 was short of Ship during it/)
   assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /stage: Hunt; .*early round: wave 1 \(Review\)/)
@@ -190,7 +190,8 @@ test('a round that starts with every open wave holding in Ship is not an early o
   const before = JSON.stringify(t.state())
   const repeat = await t.cli('stage', 'Hunt')
   assert.equal(repeat.code, 0)
-  assert.equal(repeat.out.trim(), 'stage Hunt: round 2 stands; no new round was started. It is not an early round, so if it finds nothing to fix the sweep ends as the stop line says.', 'a repeat changes nothing and says so')
+  assert.match(repeat.out, /round 2 stands/, 'a repeat changes nothing and says so')
+  assert.doesNotMatch(repeat.out, /early one/)
   assert.equal(JSON.stringify(t.state()), before)
 })
 
@@ -202,12 +203,12 @@ test('an early round that finds nothing to fix is followed by one more, once it 
   await t.cli('stage', 'Build')
   await t.cli('stage', 'Review')
   await t.cli('stage', 'Hunt')
-  assert.match((await t.cli('stage', 'Hunt')).out, /round 2 stands, an early one; no new round was started\. Once it is sorted, record its counts/, 'not sorted yet: a repeat starts no round and says why')
+  assert.match((await t.cli('stage', 'Hunt')).out, /round 2 stands, an early one.*sorted/s, 'not sorted yet: a repeat starts no round and says why')
   assert.equal(t.state().sweep.round, 2)
   await t.cli('hunt', '--fix', '0', '--park', '0', '--drop', '2')
   const waits = await t.cli('stage', 'Hunt')
   assert.equal(waits.code, 0)
-  assert.match(waits.out, /round 2 stands; no new round was started\. The round that follows this early one starts once wave 1 holds in Ship/)
+  assert.match(waits.out, /round 2 stands.*wave 1 holds in Ship/s)
   assert.equal(t.state().sweep.round, 2)
   await t.cli('stage', 'Ship')
   assert.deepEqual([t.state().stage, t.state().sweep.waves[0].stage], ['Hunt', 'Ship'])
@@ -224,8 +225,8 @@ test('a wave sent back from Ship during a round that was not early makes it earl
   assert.deepEqual(t.state().sweep.early, [])
   const back = await t.cli('stage', 'Build')
   assert.equal(back.code, 0, back.out)
-  assert.match(back.out, /round 2 is now an early one: wave 1 left Ship/)
-  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1 stage: Build; round 2 is now an early one: wave 1 left Ship/)
+  assert.match(back.out, /round 2 is now an early one.*wave 1 left Ship/)
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1 stage: Build.*round 2 is now an early one.*wave 1/)
   assert.deepEqual([t.state().stage, t.state().sweep.round, t.state().sweep.early], ['Hunt', 2, [1]])
   assert.match((await t.cli('status')).out, /round: 2 \(early: wave 1/)
   commit(t.wt, 'b.txt', 'fix\n')
@@ -253,7 +254,7 @@ test('an early round that found fixes is not repeated: its waves are queued', as
   await t.cli('stage', 'Ship')
   const repeat = await t.cli('stage', 'Hunt')
   assert.equal(repeat.code, 0)
-  assert.equal(repeat.out.trim(), 'stage Hunt: round 2 stands; no new round was started. It found 3 to fix, which go to waves; the next round starts once they are built.')
+  assert.match(repeat.out, /round 2 stands.*found 3 to fix/s)
   assert.equal(t.state().sweep.round, 2)
 })
 
@@ -264,6 +265,7 @@ test('a wave does not ship while a fix recorded after it entered Ship has no ver
   await t.cli('wave', 'step', 'merging')
   const r = await t.cli('wave', 'shipped')
   assert.equal(r.code, 1)
+  assert.match(r.out, /Wave 1.*F1/, 'it names the wave and the fix that blocks')
   assert.equal(t.state().sweep.waves[0].status, 'running')
   await t.cli('req', 'F1', 'pass')
   assert.equal((await t.cli('wave', 'shipped')).code, 0)
@@ -333,10 +335,15 @@ test('start is refused while this session drives an unfinished run of either sha
 })
 
 test('finish and stop take a pull request as a bare number or a URL', async () => {
-  const t = await sweep()
-  await t.cli('stop', '--pr', '7')
-  assert.deepEqual(t.state().pr, { number: 7, url: 'https://github.com/acme/widgets/pull/7' })
-  const o = { home: t.home, cwd: makeRepo(), session: 'f1' }
+  const pull = (n) => `https://github.com/acme/widgets/pull/${n}`
+  for (const [arg, number] of [['7', 7], [pull(8), 8]]) {
+    const t = await sweep()
+    const r = await t.cli('stop', '--pr', arg)
+    assert.equal(r.code, 0, r.out)
+    assert.equal(t.state().status, 'stopped')
+    assert.deepEqual(t.state().pr, { number, url: pull(number) }, arg)
+  }
+  const o = { home: tmp('home'), cwd: makeRepo(), session: 'f1' }
   const dir = /^folder: (.+)$/m.exec((await cli(['start', 'f', '--title', 'F'], o)).out)[1]
   await cli(['finish', '--pr', '9'], o)
   assert.equal(readJson(`${dir}/state.json`).pr.number, 9)

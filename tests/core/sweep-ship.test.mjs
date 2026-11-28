@@ -144,7 +144,6 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
   await t.cli('req', 'F2', 'pass')
   await t.cli('req', 'F3', 'drop')
   const tip = commit(t.wt, 'b.txt', 'fixed\n')
-  const ledgerBefore = fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8').length
   const r = await t.ship('--pr', '12')
   assert.equal(r.code, 0, r.out)
   assert.equal(git(t.repo, 'rev-parse', 'lcw/tidy'), tip)
@@ -153,7 +152,7 @@ test('wave shipped fast-forwards the sweep\'s branch, counts what passed and wha
   const { n, status, branch, pr, merged, dropped, fixed, tasks, requirements } = s.waves[0]
   assert.deepEqual({ n, status, branch, pr, merged, dropped, fixed }, { n: 1, status: 'shipped', branch: 'lcw/tidy-wave-1', pr: 12, merged: false, dropped: 1, fixed: 2 })
   assert.deepEqual([tasks, requirements.map((r) => r.id + ' ' + r.status)], [[], ['F1 pass', 'F2 pass']])
-  assert.ok(fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8').length > ledgerBefore, 'the ship is recorded')
+  assert.match(fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8'), new RegExp(`wave 1 shipped.*${tip}.*#12`), 'a ship line names wave 1, where it landed and its pull request')
   assert.equal((await t.ship()).code, 1, 'no wave running')
   assert.equal(t.state().sweep.fixed, 2)
 
