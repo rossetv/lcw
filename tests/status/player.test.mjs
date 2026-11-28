@@ -103,7 +103,8 @@ describe('when Node starts', { concurrency: true }, () => {
     const s = scratch()
     await settle(s, inputOf(s))
     const strips = new Set()
-    for (let x = S; x < S + 60; x++) { await tick(s, inputOf(s), x); strips.add(stripOf(s)) }
+    // a draw covers 16 seconds: the ticks are the ones either side of each end of a strip, the rest play alike
+    for (const x of [0, 1, 15, 16, 17, 31, 32, 33, 47, 48, 49, 59]) { await tick(s, inputOf(s), S + x); strips.add(stripOf(s)) }
     assert.equal(starts(s), 4)
     assert.equal(strips.size, 4, 'each start drew, as the frames ran out')
   })
@@ -113,7 +114,8 @@ describe('when Node starts', { concurrency: true }, () => {
     await begun(s)
     fs.writeFileSync(`${runDir(s)}/mod-alive`, String(S * 1000 - 1437))
     await settle(s, inputOf(s))
-    for (let i = 0; i < 15; i++) {
+    // every figure differs from tick to tick, and the heartbeat is renewed at 0, 5 and 10
+    for (const i of [0, 1, 2, 5, 6, 10, 14]) {
       if (i % 5 === 0) fs.writeFileSync(`${runDir(s)}/mod-alive`, String((S + i) * 1000 + 437))
       await tick(s, inputOf(s, {}, i), S + i)
     }

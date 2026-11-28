@@ -8,6 +8,7 @@ import { tmp, cli, makeRepo } from '../core/helpers.mjs'
 import { sweepTemp } from '../../scripts/lib/store.mjs'
 import { keyText, main, ahead } from '../../scripts/statusline.mjs'
 import { fixtures, expectedFile } from './golden/fixtures.mjs'
+import { withEnv } from './golden/draw.mjs'
 
 const ROOT = new URL('../..', import.meta.url).pathname.replace(/\/$/, '')
 const NOW = Date.UTC(2026, 2, 10, 12)
@@ -79,7 +80,12 @@ process.stdout.write(JSON.stringify(bytes), () => process.exit(0))
 `)
 
 describe('frames drawn ahead and played back print the pinned bytes, second by second', { concurrency: true }, () => {
-  const runs = [...fixtures.map((f) => [f, 'sh']), ...SHELLS.filter((s) => s !== 'sh').flatMap((s) => ['run-fresh-heartbeat', 'activity-yawning', 'run-heartbeat-stops-999'].map((n) => [fixtures.find((f) => f.name === n), s]))]
+  // The golden test pins every fixture's bytes in process; here the player plays them, so a fixture goes through it once
+  // per kind of thing it watches. Left out, each a twin of one that is in: another activity state or failure count, another
+  // width past the mascot's, a heartbeat that stops at another millisecond, an ask that holds nothing or holds the run.
+  const twins = ['activity-failed', 'activity-needs', 'run-open-question', 'five-failed-calls', 'too-narrow-for-mascot', 'run-heartbeat-stops-100', 'run-ask-that-holds-nothing']
+  // The other shells run the two that play most of the script: a heartbeat that goes stale, and a figure that changes with the clock.
+  const runs = [...fixtures.filter((f) => !twins.includes(f.name)).map((f) => [f, 'sh']), ...SHELLS.filter((s) => s !== 'sh').flatMap((s) => ['activity-yawning', 'run-heartbeat-stops-999'].map((n) => [fixtures.find((f) => f.name === n), s]))]
   for (const [f, shell] of runs) {
     test(`${f.name} in ${shell}`, async () => {
       const root = playerRoot(shell)
@@ -110,27 +116,18 @@ const baseInput = (s, extra = {}) => ({
   rate_limits: { seven_day: { used_percentage: 31, resets_at: NOW / 1000 + 3 * 86400 } }, ...extra,
 })
 
-// A draw in this process takes over its environment while it runs, as an lcw command does: one at a time.
-let lane = Promise.resolve()
-const alone = (job) => { const done = lane.then(job); lane = done.catch(() => {}); return done }
+// A draw in this process takes over its environment while it runs, as an lcw command does, and gets nothing of this machine's but the way to find node and git.
+const alone = (job, env = {}) => withEnv({ PATH: process.env.PATH, ...env }, job)
 const startRun = async (s) => assert.equal((await alone(() => cli(['start', 'demo', '--title', 'Demo'], { home: s.home, cwd: s.repo, session: 's1' }))).code, 0)
 
 /** One draw at `now`, as the launcher makes it: with `at`, the draw ahead for that second; without, one fresh draw. */
 function launch(s, input, now, { at, home = s.home, tz = 'UTC', zone = '+0000' } = {}) {
   return alone(async () => {
-    const set = { LCW_HOME: home, HOME: `${s.t}/h`, COLUMNS: '120', TZ: tz, LCW_NOW: String(now) }
-    const was = Object.fromEntries([...Object.keys(set), 'LCW_THEME'].map((k) => [k, process.env[k]]))
-    Object.assign(process.env, set)
-    delete process.env.LCW_THEME
-    try {
-      if (at !== undefined) return await ahead(JSON.stringify(input), { at: `${at}${zone}`, margin: 4 })
-      let out = ''
-      await main({ margin: 4, input: JSON.stringify(input), write: (text) => { out += text } })
-      return out
-    } finally {
-      for (const [k, v] of Object.entries(was)) { if (v === undefined) delete process.env[k]; else process.env[k] = v }
-    }
-  })
+    if (at !== undefined) return await ahead(JSON.stringify(input), { at: `${at}${zone}`, margin: 4 })
+    let out = ''
+    await main({ margin: 4, input: JSON.stringify(input), write: (text) => { out += text } })
+    return out
+  }, { LCW_HOME: home, HOME: `${s.t}/h`, COLUMNS: '120', TZ: tz, LCW_NOW: String(now) })
 }
 /** The frames the last draw saved for session s1, by second. */
 function saved(home) {
@@ -139,16 +136,13 @@ function saved(home) {
   return new Map(fs.readdirSync(`${dir}/${tag}`).filter((n) => /^\d+$/.test(n)).map((n) => [Number(n), fs.readFileSync(`${dir}/${tag}/${n}`, 'utf8')]))
 }
 /** Each saved frame against a fresh draw at its own second, each in a copy of the home as the draw ahead left it. */
-async function compareFresh(s, input, frames, only = () => true, ms = 0) {
-  let compared = 0
+async function compareFresh(s, input, frames, ms = 0) {
   for (const [second, rows] of frames) {
-    if (!only(second)) continue
     const copy = `${tmp('copy')}/lcw`
     fs.cpSync(s.home, copy, { recursive: true })
     assert.equal(await launch(s, input, second * 1000 + ms, { home: copy }), rows, `second ${second}`)
-    compared++
   }
-  return compared
+  return frames.size
 }
 
 describe('each frame is what a fresh draw prints at its own second, across a value that the clock flips', { concurrency: true }, () => {
@@ -192,7 +186,7 @@ describe('each frame is what a fresh draw prints at its own second, across a val
     await launch(s, baseInput(s), NOW + 437, { at: S })
     const frames = saved(s.home)
     assert.ok(!/LCW Build/.test(frames.get(S + 5)) && /LCW Build/.test(frames.get(S + 6)))
-    assert.equal(await compareFresh(s, baseInput(s), frames, () => true, 437), frames.size)
+    assert.equal(await compareFresh(s, baseInput(s), frames, 437), frames.size)
   })
 
   test('the clocks go forward part-way: the frames stop at the change, as they are for one offset only', async () => {

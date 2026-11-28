@@ -14,7 +14,7 @@ function fixture() {
   const state = { v: 1, sourceId: 'external-quota', enabled: true, revision: 'one', endpoint: 'https://proxy.test', command: 'false', lastAttemptAt: now, cache: { revision: 'one', requestId: 'read-one', attemptedAt: now, completedAt: now, result: { v: 1, status: 'ok', accountKey: 'a'.repeat(64), weekly: { percentUsed: 42, resetsAt: reset }, blocked: false } } }
   put(quotaFile(home), state)
   const tick = async (id, extra = {}, endpoint = '') => (await drawIn(ROOT, JSON.stringify({ session_id: id, cwd, cost: { total_cost_usd: 23 }, ...extra }),
-    { ...process.env, LCW_HOME: home, LCW_NOW: String(now), ANTHROPIC_BASE_URL: endpoint, COLUMNS: '120', CLAUDE_CODE_SESSION_ID: undefined })).replace(/\x1b\[[0-9;]*m/g, '')
+    { PATH: process.env.PATH, HOME: home, LCW_HOME: home, LCW_NOW: String(now), ANTHROPIC_BASE_URL: endpoint, COLUMNS: '120' })).replace(/\x1b\[[0-9;]*m/g, '')
   return { home, state, tick }
 }
 const native = (used_percentage) => ({ rate_limits: { seven_day: { used_percentage, resets_at: Date.parse(reset) / 1000 } } })
