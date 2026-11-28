@@ -69,8 +69,11 @@ for (const [key, ours, theirs] of [['CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH', '5',
   test(`uninstall removes ${key} only when install set it`, () => {
     const home = tmp('home'), settings = tmp('s') + '/settings.json'
     fs.writeFileSync(settings, JSON.stringify({ theme: 'dark' }))
-    assert.equal(setup(home, settings, 'install').code, 0)
+    const i = setup(home, settings, 'install')
+    assert.equal(i.code, 0)
+    assert.match(i.out, new RegExp(`set env\\.${key} to "${ours}"`))
     assert.equal(read(settings).env[key], ours)
+    assert.match(setup(home, settings, 'status').out, new RegExp(`env\\.${key}: ${ours}`))
     assert.equal(setup(home, settings, 'install').code, 0, 'a second install finds it set and keeps the record')
     setup(home, settings, 'uninstall')
     assert.deepEqual(read(settings), { theme: 'dark' })
@@ -80,8 +83,9 @@ for (const [key, ours, theirs] of [['CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH', '5',
       fs.writeFileSync(settings, JSON.stringify({ env: { [key]: value } }))
       setup(fresh, settings, 'install')
       assert.equal(read(settings).env[key], value, 'install keeps the figure the person set')
-      setup(fresh, settings, 'uninstall')
+      const u = setup(fresh, settings, 'uninstall')
       assert.equal(read(settings).env[key], value, 'uninstall leaves it')
+      assert.ok(!new RegExp(`removed env\\.${key}`).test(u.out), u.out)
     }
   })
 }
@@ -91,10 +95,11 @@ test('limits raises every agent limit under what a run needs, a figure the perso
   fs.writeFileSync(settings, JSON.stringify({ theme: 'dark', env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '40', KEEP: '1' } }))
   const r = setup(home, settings, 'limits')
   assert.equal(r.code, 0, r.err)
-  assert.match(r.out, /80 agents at once, nested 5 deep/)
+  assert.match(r.out, /^Claude Code now runs up to 80 agents at once, nested 5 deep/)
   assert.deepEqual(read(settings).env, { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '80', KEEP: '1', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '5' })
-  assert.equal(setup(home, settings, 'limits').code, 0)
-  setup(home, settings, 'uninstall')
+  assert.match(setup(home, settings, 'limits').out, /already runs up to 80/)
+  const u = setup(home, settings, 'uninstall')
+  assert.match(u.out, /put env\.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS back to "40"/)
   assert.deepEqual(read(settings), { theme: 'dark', env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '40', KEEP: '1' } })
 })
 
@@ -102,7 +107,7 @@ test('limits leaves a limit that is already enough, however it was set', () => {
   const home = tmp('home'), settings = tmp('s') + '/settings.json'
   const theirs = { env: { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '120', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '6' } }
   fs.writeFileSync(settings, JSON.stringify(theirs))
-  assert.equal(setup(home, settings, 'limits').code, 0)
+  assert.match(setup(home, settings, 'limits').out, /already runs up to 80/)
   assert.deepEqual(read(settings), theirs)
   setup(home, settings, 'uninstall')
   assert.deepEqual(read(settings).env, theirs.env)
