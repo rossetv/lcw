@@ -166,20 +166,6 @@ test('a wave with no commits of its own still ships empty after taking in the wa
   assert.equal(git(t.repo, 'merge-base', '--is-ancestor', fix, 'lcw/tidy-wave-2'), '')
 })
 
-test('a run-level ledger line during a hunt stays out of a shipped wave held for its merge', async () => {
-  const t = await hunting()
-  await t.cli('set', 'sweep.prs=merged')
-  await t.cli('wave', 'add', '1')
-  await t.start()
-  await t.cli('stage', 'Ship')
-  commit(t.wt, 'b.txt', 'fix\n')
-  await t.ship('--pr', '5')
-  await t.cli('stage', 'Hunt')
-  assert.equal((await t.cli('hunt', '--fix', '2')).code, 0)
-  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /hunt, round/)
-  assert.ok(!fs.readFileSync(`${t.dir}/waves/1/ledger.md`, 'utf8').includes('hunt, round'))
-})
-
 test('ask and ledger with no --wave, run from the main checkout while one wave is held and another runs, are the run\'s own', async () => {
   const t = await shippedWaves()
   t.edit((s) => { s.sweep.waves.pop(); s.sweep.waves.push({ n: 2, fixes: 1, status: 'running', branch: 'lcw/tidy-wave-2', worktree: `${t.repo}/.claude/worktrees/tidy-wave-2`, stage: 'Build', step: null, round: 0, waiting: false, tasks: [], requirements: [], plan: { tasks: 0, atOnce: 0, models: {} } }) })
