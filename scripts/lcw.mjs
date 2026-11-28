@@ -2,6 +2,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import { format } from 'node:util'
 import { runsDir, repoKey, runPaths, placeFile, slug, sessionFile, spendFile, contextFile } from '../lib/key.mjs'
 import { compactChoice, tokensText, KEEP_UNDER } from '../lib/checkpoint.mjs'
 import { home, readJson, writeJson, writeAtomic, git, mainCheckout, saveState, appendLedger as appendRunLedger, loadState } from './lib/store.mjs'
@@ -24,7 +26,7 @@ import { noteQuotaSession, readSessionQuota, quotaUsage, quotaLine, sessionBilli
 class Fail extends Error {}
 const fail = (msg) => { throw new Fail(msg) }
 // the process refusals --bypass went past in this call, which change() writes to the ledger
-const passed = []
+let passed = []
 /** A refusal of LCW's process, not of what cannot work: with --bypass "<why>" it is recorded and the command goes on. */
 const block = (msg) => {
   if (flags.bypass === undefined) fail(`${msg} If this rule is wrong here (not standard LCW): add --bypass "<why>".`)
@@ -54,9 +56,8 @@ const PROTECTED = ['id', 'version', 'tasks', 'asks', 'requirements', 'driver', '
 const PR_CHOICES = { stacked: 'stacked, one draft for each wave', merged: 'merged as it goes', end: 'one at the end' }
 const HUNT_COUNTS = ['areas', 'hunted', 'running', 'findings', 'fix', 'park', 'drop']
 
-const flags = {}
-const args = []
-const argv = process.argv.slice(2)
+let flags = {}
+let args = []
 const COMMANDS = 'start status stage set task req ask answer question approval ledger checkpoint mark cap spend-command quota-command usage pause resume stop finish worktree pictures runs where take abandon awake hunt wave merge'
 const USAGE = `lcw commands: ${COMMANDS}
 start <name> --title "<line>" [--shape build|sweep] starts a run, a build by default. A build's stages are Brainstorm Spec Plan Build Review Ship, a sweep's Charter Hunt Plan Build Review Ship; stage takes only the run's own.
@@ -75,53 +76,60 @@ question add <id> --text --why --a "<label>: <meaning>" --b ... [--c ...] --reco
 checkpoint "<next step>" records the next step: under 200K tokens of context nothing compacts and the turn carries on; from 200K it asks for checkpoint --compact (compact when the turn ends) or checkpoint --keep "<why>" ["<next step>"]; near the window's end, or with no reading of the size, it compacts. checkpoint --compact "<step>" compacts at any size.
 --bypass "<why>" goes past a refusal of LCW's process, one that names the flag, and writes "BYPASS, not standard LCW: <why>; went past: <refusal>" to the ledger for the person to review; the usage mark, approval and what cannot work never give way.
 help, -h and --help print this and change nothing. Any other argument starting with "-" is refused. Text such as a ledger line must not start with "-".`
-const refuse = (msg) => { console.log(msg); process.exit(1) }
+// where the output goes: the terminal when lcw runs as a program, a buffer when main() runs it
+let print = console.log
+// refuse() and help() end the call with this, carrying its exit code
+class Exit { constructor(code) { this.code = code } }
+const refuse = (msg) => { print(msg); throw new Exit(1) }
 // an error says what went wrong in a line; the whole help is for lcw help
 const SEE_HELP = 'Nothing was changed. "lcw help" prints every command.'
-const help = () => { console.log(USAGE); process.exit(0) }
-const allowed = COMMAND_FLAGS[argv[0]] || []
-const switches = SWITCHES[argv[0]] || []
-// Shell commands preserve their words and flags; only a final --session <id> pair is not part of them.
-let spendWords = null
-let quotaWords = null
-if (argv[0] === 'spend-command' || argv[0] === 'quota-command') {
-  let words = argv.slice(1)
-  if (words.length >= 2 && words.at(-2) === '--session') { flags.session = words.at(-1); words = words.slice(0, -2) }
-  if (words.length === 1 && (words[0] === '-h' || words[0] === '--help')) help()
-  if (argv[0] === 'quota-command') quotaWords = words
-  else spendWords = words
-}
-for (let i = 0; i < (spendWords || quotaWords ? 0 : argv.length); i++) {
-  const a = argv[i]
-  if (!a.startsWith('-')) { args.push(a); continue }
-  // a flag may come with its value in the same word, as --wave=2, or as "--wave 2" from a shell variable that was not split
-  const [, name, joined] = /^--([a-z]+(?:-[a-z]+)*)(?:[=\s]\s*([\s\S]*))?$/.exec(a) ?? []
-  if (name && switches.includes(name) && joined === undefined) flags[name] = true
-  else if (name && (name === 'session' || name === 'bypass' || allowed.includes(name))) {
-    const next = /^--([a-z]+(?:-[a-z]+)*)(?:=|$)/.exec(argv[i + 1] ?? '')?.[1]
-    if (joined === undefined && (i + 1 >= argv.length || (next && (next === 'session' || next === 'bypass' || allowed.includes(next) || switches.includes(next))))) refuse(`${a} needs a value`)
-    flags[name] = joined === undefined ? argv[++i] : joined.trim()
-  } else if (a === '-h' || a === '--help') help()
-  else {
-    const own = [...allowed.map((n) => `--${n} <value>`), ...switches.map((n) => `--${n}`), '--session <id>']
-    // a line of text that starts with "-" lands here too
-    const text = !name || joined !== undefined ? ' Text such as a ledger line must not start with "-".' : ''
-    refuse(`Unknown flag or argument starting with "-": ${a}.${COMMANDS.split(' ').includes(argv[0]) ? ` lcw ${argv[0]} takes ${own.join(', ')}.` : ''}${text} ${SEE_HELP}`)
+const help = () => { print(USAGE); throw new Exit(0) }
+let spendWords, quotaWords, command, rest, sessionId, cwd
+
+/** Reads the command line into flags, args, command and rest; refuses what it cannot take. */
+function parse(argv) {
+  const allowed = COMMAND_FLAGS[argv[0]] || []
+  const switches = SWITCHES[argv[0]] || []
+  // Shell commands preserve their words and flags; only a final --session <id> pair is not part of them.
+  spendWords = null
+  quotaWords = null
+  if (argv[0] === 'spend-command' || argv[0] === 'quota-command') {
+    let words = argv.slice(1)
+    if (words.length >= 2 && words.at(-2) === '--session') { flags.session = words.at(-1); words = words.slice(0, -2) }
+    if (words.length === 1 && (words[0] === '-h' || words[0] === '--help')) help()
+    if (argv[0] === 'quota-command') quotaWords = words
+    else spendWords = words
   }
+  for (let i = 0; i < (spendWords || quotaWords ? 0 : argv.length); i++) {
+    const a = argv[i]
+    if (!a.startsWith('-')) { args.push(a); continue }
+    // a flag may come with its value in the same word, as --wave=2, or as "--wave 2" from a shell variable that was not split
+    const [, name, joined] = /^--([a-z]+(?:-[a-z]+)*)(?:[=\s]\s*([\s\S]*))?$/.exec(a) ?? []
+    if (name && switches.includes(name) && joined === undefined) flags[name] = true
+    else if (name && (name === 'session' || name === 'bypass' || allowed.includes(name))) {
+      const next = /^--([a-z]+(?:-[a-z]+)*)(?:=|$)/.exec(argv[i + 1] ?? '')?.[1]
+      if (joined === undefined && (i + 1 >= argv.length || (next && (next === 'session' || next === 'bypass' || allowed.includes(next) || switches.includes(next))))) refuse(`${a} needs a value`)
+      flags[name] = joined === undefined ? argv[++i] : joined.trim()
+    } else if (a === '-h' || a === '--help') help()
+    else {
+      const own = [...allowed.map((n) => `--${n} <value>`), ...switches.map((n) => `--${n}`), '--session <id>']
+      // a line of text that starts with "-" lands here too
+      const text = !name || joined !== undefined ? ' Text such as a ledger line must not start with "-".' : ''
+      refuse(`Unknown flag or argument starting with "-": ${a}.${COMMANDS.split(' ').includes(argv[0]) ? ` lcw ${argv[0]} takes ${own.join(', ')}.` : ''}${text} ${SEE_HELP}`)
+    }
+  }
+  ;[command, ...rest] = quotaWords ? ['quota-command', ...quotaWords] : spendWords ? ['spend-command', ...spendWords] : args
+  if (command === 'help') help()
+  if (flags.bypass !== undefined) {
+    flags.bypass = String(flags.bypass).replace(/\s+/g, ' ').trim()
+    if (!flags.bypass) refuse(`--bypass needs the reason this run leaves standard LCW, as --bypass "<why>", for the person to review. ${SEE_HELP}`)
+  }
+  if (argv[0] !== command && argv.length) refuse(`The command must come first, as in "lcw status --session <id>". ${SEE_HELP}`)
 }
-const [command, ...rest] = quotaWords ? ['quota-command', ...quotaWords] : spendWords ? ['spend-command', ...spendWords] : args
-if (command === 'help') help()
-if (flags.bypass !== undefined) {
-  flags.bypass = String(flags.bypass).replace(/\s+/g, ' ').trim()
-  if (!flags.bypass) refuse(`--bypass needs the reason this run leaves standard LCW, as --bypass "<why>", for the person to review. ${SEE_HELP}`)
-}
-if (argv[0] !== command && argv.length) refuse(`The command must come first, as in "lcw status --session <id>". ${SEE_HELP}`)
-const sessionId = flags.session || process.env.CLAUDE_CODE_SESSION_ID || null
-const cwd = process.cwd()
 
 let held = null // the run, locked and freshly read, for commands that change state
 const need = () => held || findRun({ sessionId, cwd }) || fail('No LCW run for this session. Use "lcw start <name> --title ..." or "lcw runs".')
-const out = (...lines) => console.log(lines.join('\n'))
+const out = (...lines) => print(lines.join('\n'))
 const weekLine = (usage) => (usage?.sevenDay ? `week: ${usage.sevenDay.percentUsed}% used` : 'week: unknown')
 
 /**
@@ -1908,9 +1916,9 @@ function adopt(run) {
 // the lock's limits are LCW_LOCK_WAIT_MS and LCW_LOCK_HUNG_MS when they are set, so tests need not wait on the clock
 const msFrom = (name, ms) => (Number(process.env[name]) > 0 ? Number(process.env[name]) : ms)
 // how long a call waits for the lock before it gives up: longer than a fetch or a merge holds it, since a slow holder is no longer robbed
-const LOCK_WAIT_MS = msFrom('LCW_LOCK_WAIT_MS', 30000)
+let LOCK_WAIT_MS
 // a holder that still runs is never robbed for being slow, only once it has held the lock this long, far past any real command
-const LOCK_HUNG_MS = msFrom('LCW_LOCK_HUNG_MS', 10 * 60000)
+let LOCK_HUNG_MS
 // a lock with no holder on record was taken by an older lcw, which itself takes one this old
 const LOCK_UNOWNED_MS = 30000
 const holderOf = (lock) => readJson(`${lock}/holder.json`)
@@ -1964,32 +1972,83 @@ function withLock(dir, fn) {
   }
 }
 
-try {
-  if (!command) fail(USAGE)
-  if (!commands[command]) fail(`No lcw command "${command}". The commands are: ${COMMANDS}. ${SEE_HELP}`)
-  noteQuotaSession(sessionId)
-  const byId = BY_ID.includes(command)
-  const run = byId ? namedRun() : MUTATING.includes(command) ? findRun({ sessionId, cwd }) : null
-  if (command === 'merge' && flags.wait !== undefined) await waitForChecks()
-  if (run) withLock(run.dir, () => {
-    run.state = loadState(run.paths)
-    if (byId) checkClaim(run) // before anything is saved, which would make the run look shown
-    if (moveOldWave(run.state)) save(run.paths, run.state)
-    Object.assign(run.state, weekOf(run.state, usageFor(run.state.driver ?? sessionId, now(), driverMark(run.state))?.sevenDay))
-    if (command !== 'abandon') adopt(run)
-    held = run
-    commands[command]()
-  })
-  else await commands[command]()
-  // A reminder above the line, on the commands the orchestrator runs; workers' lcw calls never see it.
-  if (['stage', 'set', 'status'].includes(command)) {
-    const ctx = contextOf(sessionId)
-    if (compactChoice(ctx) === 'ask') out(`context ${tokensText(ctx.tokens)}: compact at your next checkpoint unless the work needs this context`)
-    const busy = machineBusy()
-    if (busy) out(busy)
+/** Runs one lcw command line in cwd and gives its exit code; what it prints goes through print. */
+async function exec(argv, dir) {
+  flags = {}
+  args = []
+  passed = []
+  held = null
+  lockHeld = null
+  passedHead = null
+  waitNoted = false
+  LOCK_WAIT_MS = msFrom('LCW_LOCK_WAIT_MS', 30000)
+  LOCK_HUNG_MS = msFrom('LCW_LOCK_HUNG_MS', 10 * 60000)
+  try { parse(argv) } catch (e) {
+    if (e instanceof Exit) return e.code
+    throw e
   }
-} catch (e) {
-  if (e instanceof Fail) console.log(e.message)
-  else console.log(String(e.stderr || e.message).trim())
-  process.exit(1)
+  sessionId = flags.session || process.env.CLAUDE_CODE_SESSION_ID || null
+  cwd = dir
+  try {
+    if (!command) fail(USAGE)
+    if (!commands[command]) fail(`No lcw command "${command}". The commands are: ${COMMANDS}. ${SEE_HELP}`)
+    noteQuotaSession(sessionId)
+    const byId = BY_ID.includes(command)
+    const run = byId ? namedRun() : MUTATING.includes(command) ? findRun({ sessionId, cwd }) : null
+    if (command === 'merge' && flags.wait !== undefined) await waitForChecks()
+    if (run) withLock(run.dir, () => {
+      run.state = loadState(run.paths)
+      if (byId) checkClaim(run) // before anything is saved, which would make the run look shown
+      if (moveOldWave(run.state)) save(run.paths, run.state)
+      Object.assign(run.state, weekOf(run.state, usageFor(run.state.driver ?? sessionId, now(), driverMark(run.state))?.sevenDay))
+      if (command !== 'abandon') adopt(run)
+      held = run
+      commands[command]()
+    })
+    else await commands[command]()
+    // A reminder above the line, on the commands the orchestrator runs; workers' lcw calls never see it.
+    if (['stage', 'set', 'status'].includes(command)) {
+      const ctx = contextOf(sessionId)
+      if (compactChoice(ctx) === 'ask') out(`context ${tokensText(ctx.tokens)}: compact at your next checkpoint unless the work needs this context`)
+      const busy = machineBusy()
+      if (busy) out(busy)
+    }
+  } catch (e) {
+    if (e instanceof Fail) print(e.message)
+    else print(String(e.stderr || e.message).trim())
+    return 1
+  }
+  return 0
+}
+
+// in place, since process.env is no plain object; a name set to undefined is left out, as a child process's env leaves it
+const putEnv = (env) => {
+  for (const k of Object.keys(process.env)) if (env[k] === undefined) delete process.env[k]
+  for (const [k, v] of Object.entries(env)) if (v !== undefined) process.env[k] = v
+}
+
+/**
+ * Runs lcw with these arguments inside this process, as `node lcw.mjs ...argv` would run in cwd with env, and gives
+ * its exit code and what it would print. Calls must not overlap: they share the process's env, cwd and this module.
+ */
+export async function main(argv, { cwd: dir = process.cwd(), env = process.env } = {}) {
+  const was = { cwd: process.cwd(), env: { ...process.env } }
+  const chunks = []
+  print = (...a) => { chunks.push(`${format(...a)}\n`) }
+  if (env !== process.env) putEnv(env)
+  try {
+    process.chdir(dir)
+    const code = await exec(argv, dir)
+    return { code, out: chunks.join('') }
+  } finally {
+    print = console.log
+    process.chdir(was.cwd)
+    if (env !== process.env) putEnv(was.env)
+  }
+}
+
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
+  const code = await exec(process.argv.slice(2), process.cwd())
+  // detached children and timers would keep a failed call alive
+  if (code) process.exit(code)
 }
