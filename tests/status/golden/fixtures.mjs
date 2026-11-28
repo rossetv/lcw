@@ -111,8 +111,17 @@ async function build(root, f, scratch) {
 
 const draw = async (root, f, home, input, now) => drawIn(root, input, envOf(f, home, now))
 
+// A fixture's setup and its draws each take over the process's environment, so fixtures go one at a time.
+let lane = Promise.resolve()
+
 /** Builds the fixture in a scratch folder, draws once to settle it, then draws each of its 16 seconds in order. Returns the bytes of each. */
-export async function drawFixture(root, f) {
+export function drawFixture(root, f) {
+  const call = lane.then(() => drawOne(root, f))
+  lane = call.catch(() => {})
+  return call
+}
+
+async function drawOne(root, f) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lcw-golden-')))
   try {
     const { ctx, input } = await build(root, f, scratch)
