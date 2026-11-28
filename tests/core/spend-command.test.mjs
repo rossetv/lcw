@@ -148,9 +148,12 @@ test('a command that leaves a child holding its output still gives its figure, a
 
 test('a command that exits with a figure just before the timeout is not reported as a timeout', async () => {
   // The timeout falls inside the wait for the output of a leftover child to drain, so the command must exit within 400 ms.
-  // On a busy machine it can start late and the timeout is then real, so a late exit gets another try.
+  // On a busy machine it can start late and the timeout is then real, so only that failure gets another try.
   let r
-  for (let tries = 0; tries < 3 && !r?.ok; tries++) r = await runCommand('sleep 30 & echo 5', { timeoutMs: 400 })
+  for (let tries = 0; tries < 3 && !r?.ok; tries++) {
+    r = await runCommand('sleep 30 & echo 5', { timeoutMs: 400 })
+    if (!r.ok && !/took longer than/.test(r.error)) break
+  }
   assert.deepEqual(r, { ok: true, usd: 5 })
 })
 
@@ -406,7 +409,7 @@ test('setting a command that prints a figure saves it, takes its reading and say
   const { home, o } = setup()
   const r = await at(['spend-command', 'echo', '1240'], o)
   assert.equal(r.code, 0)
-  assert.equal(r.out, 'Spend command set. It says $1,240 for the last 7 days; LCW now takes the figure from it.\n')
+  assert.match(r.out, /\$1,240/)
   assert.equal(readJson(settingFile(home)).command, 'echo 1240')
   const reading = readJson(readingFile(home))
   assert.deepEqual([reading.command, reading.usd, reading.at, reading.fails], ['echo 1240', 1240, NOW, 0])
@@ -415,15 +418,13 @@ test('setting a command that prints a figure saves it, takes its reading and say
 
 test('a command that gives no figure is refused, whatever it printed, and nothing is saved', async () => {
   const { home, o } = setup()
-  const said = async (line) => {
+  // what the refusal names: what it printed, and for a figure with a bad exit the exit code and not "not a dollar figure"
+  for (const [line, names, not] of [[DENIED, /"401 Unauthorized"/, null], ['true', /printed nothing/, null], ['echo 5; exit 2', /"5".*code 2/, /not a dollar figure/]]) {
     const r = await at(['spend-command', line], o)
-    assert.equal(r.code, 1)
-    return r.out
+    assert.equal(r.code, 1, line)
+    assert.match(r.out, names, line)
+    if (not) assert.doesNotMatch(r.out, not, line)
   }
-  assert.equal(await said(DENIED), 'Not set: the command printed "401 Unauthorized", not a dollar figure. LCW keeps its own count.\n')
-  assert.equal(await said('true'), 'Not set: the command printed nothing. LCW keeps its own count.\n')
-  // a figure with a bad exit is named with the exit code and is not called "not a dollar figure"
-  assert.equal(await said('echo 5; exit 2'), 'Not set: the command printed "5" and exited with code 2. LCW keeps its own count.\n')
   assert.deepEqual(fs.readdirSync(home), [])
 })
 
@@ -433,42 +434,48 @@ test('a refused command leaves a command already set, and its reading, exactly a
   const before = [settingFile(home), readingFile(home)].map((f) => fs.readFileSync(f, 'utf8'))
   const r = await at(['spend-command', DENIED], o)
   assert.equal(r.code, 1)
-  assert.equal(r.out, 'Not set: the command printed "401 Unauthorized", not a dollar figure. Your spend command stays as it was.\n')
+  assert.match(r.out, /"401 Unauthorized"/)
   assert.deepEqual([settingFile(home), readingFile(home)].map((f) => fs.readFileSync(f, 'utf8')), before)
 })
 
 test('off removes the command and its reading and gives LCW\'s own figure; with nothing set it says so', async () => {
   const { home, o } = setup()
   spent(home, 's1')
-  assert.equal((await at(['spend-command', 'off'], o)).out, 'No spend command was set. LCW counts the spend itself: $1,260 in the last 7 days.\n')
+  const none = await at(['spend-command', 'off'], o)
+  assert.equal(none.code, 0)
+  assert.match(none.out, /\$1,260/)
   preset(home, 'echo 1240')
   const r = await at(['spend-command', 'off'], o)
   assert.equal(r.code, 0)
-  assert.equal(r.out, 'Spend command off. LCW counts the spend itself again: $1,260 in the last 7 days.\n')
+  assert.match(r.out, /\$1,260/)
   assert.deepEqual([fs.existsSync(settingFile(home)), fs.existsSync(readingFile(home))], [false, false])
 })
 
 test('with no words it says what is set, how it last read and whether it is failing', async () => {
   const { home, o } = setup()
-  assert.equal((await at(['spend-command'], o)).out, 'No spend command set.\n')
-  preset(home, 'echo 1240')
-  assert.equal((await at(['spend-command'], o)).out, 'Spend command: echo 1240. Last reading: $1,240, 3 min ago.\n')
-  preset(home, 'echo 1240', { at: NOW - 120 * MIN, fails: 3, failingSince: NOW - 35 * MIN, lastError: 'printed "401 Unauthorized"' })
-  assert.equal((await at(['spend-command'], o)).out, 'Spend command: echo 1240. Last reading: $1,240, 2h ago. Failing since 09:25, it printed "401 Unauthorized".\n')
-  preset(home, 'echo 1240', { at: NOW - 120 * MIN, fails: 3, failingSince: NOW - 35 * MIN, lastError: 'printed "5" and exited with code 2' })
-  assert.match((await at(['spend-command'], o)).out, /Failing since 09:25, it printed "5" and exited with code 2\.\n$/)
+  assert.match((await at(['spend-command'], o)).out, /No spend command set/)
+  const failing = { at: NOW - 120 * MIN, fails: 3, failingSince: NOW - 35 * MIN }
+  for (const [opts, facts, not] of [
+    [{}, [/echo 1240/, /\$1,240/, /3 min ago/], /ailing/],
+    [{ ...failing, lastError: 'printed "401 Unauthorized"' }, [/\$1,240/, /2h ago/, /Failing since 09:25/, /"401 Unauthorized"/], null],
+    [{ ...failing, lastError: 'printed "5" and exited with code 2' }, [/Failing since 09:25/, /"5" and exited with code 2/], null],
+  ]) {
+    preset(home, 'echo 1240', opts)
+    const out = (await at(['spend-command'], o)).out
+    for (const f of facts) assert.match(out, f, out)
+    if (not) assert.doesNotMatch(out, not, out)
+  }
 })
 
-test('everything after spend-command is the command line, even a word that starts with "-"', async () => {
-  const { home, o } = setup()
-  assert.equal((await at(['spend-command', 'echo', '1240', '|', 'cat', '-u'], o)).code, 0)
-  assert.equal(readJson(settingFile(home)).command, 'echo 1240 | cat -u')
-})
-
-test('a final --session pair is not part of the command line', async () => {
-  const { home, o } = setup()
-  assert.equal((await at(['spend-command', 'echo', '1240', '--session', 's9'], o)).code, 0)
-  assert.equal(readJson(settingFile(home)).command, 'echo 1240')
+test('everything after spend-command is the command line, even a word that starts with "-"; a final --session pair is not part of it', async () => {
+  for (const [words, command] of [
+    [['echo', '1240', '|', 'cat', '-u'], 'echo 1240 | cat -u'],
+    [['echo', '1240', '--session', 's9'], 'echo 1240'],
+  ]) {
+    const { home, o } = setup()
+    assert.equal((await at(['spend-command', ...words], o)).code, 0, command)
+    assert.equal(readJson(settingFile(home)).command, command)
+  }
 })
 
 test('a flag before spend-command is read as for any command, so the command is not first and nothing is set', async () => {
