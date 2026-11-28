@@ -8,12 +8,7 @@ test('each sign-in method maps to its billing kind', () => {
   assert.equal(signInKind(a('claude.ai'), {}), 'subscription')
   for (const m of ['api_key', 'api_key_helper', 'third_party']) assert.equal(signInKind(a(m), {}), 'payg')
   assert.equal(signInKind(a('none'), {}), 'unclear')
-  assert.equal(signInKind({}, {}), 'unclear')
-})
-
-test('an unreadable sign-in is unclear', () => {
-  assert.equal(signInKind(null, {}), 'unclear')
-  assert.equal(signInKind(undefined, {}), 'unclear')
+  for (const unreadable of [{}, null, undefined]) assert.equal(signInKind(unreadable, {}), 'unclear', String(unreadable))
 })
 
 test('an oauth token is judged by the credential: auth token payg, subscription token alone subscription, behind a proxy unclear', () => {
@@ -25,13 +20,10 @@ test('an oauth token is judged by the credential: auth token payg, subscription 
   assert.equal(signInKind(o, {}), 'unclear')
 })
 
-test('a weekly figure wins over payg and subscription stays subscription', () => {
+test('a weekly figure wins over payg and subscription stays subscription, even a figure of 0', () => {
   assert.equal(settle('payg', { weekly: { percentUsed: 3 } }), 'subscription')
   assert.equal(settle('unclear', { weekly: { percentUsed: 0 }, replied: true }), 'subscription')
   assert.equal(settle('subscription', { replied: true }), 'subscription')
-})
-
-test('a weekly figure of 0 still makes a subscription, whatever the kind', () => {
   assert.equal(settle('unclear', { weekly: 0, replied: true }), 'subscription')
   assert.equal(settle('payg', { weekly: 0, replied: true }), 'subscription')
 })
