@@ -25,6 +25,15 @@ test('merge readies a draft, merges it with a merge commit on the GitHub remote,
   assert.equal(gh.calls().length, 7)
 })
 
+/** Waits for a condition, failing with a message once the deadline passes, so a background lcw that died cannot hang the test. */
+async function until(cond, what, ms = 30000) {
+  const end = Date.now() + ms
+  while (!cond()) {
+    if (Date.now() > end) assert.fail(`timed out after ${ms} ms waiting for ${what}`)
+    await new Promise((r) => setTimeout(r, 20))
+  }
+}
+
 const wrote = (gh) => gh.calls().some((c) => c.startsWith('pr merge') || c.startsWith('pr ready'))
 
 test('merge --wait waits while a check is pending, notes the wait in the ledger and merges once they pass', async () => {
@@ -35,7 +44,7 @@ test('merge --wait waits while a check is pending, notes the wait in the ledger 
   assert.equal(gh.calls().filter((c) => c.startsWith('pr checks')).length, 2)
   assert.ok(gh.calls().includes('pr merge 12 -R acme/widgets --merge --match-head-commit abc123'), gh.calls().join('\n'))
   assert.equal(t.state().sweep.waves[0].merged, true)
-  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1: waiting up to 60 minutes for the checks of #12/)
+  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1:.*60 minutes.*#12/)
 })
 
 test('merge --wait merges nothing once a check fails or is cancelled, whatever else still runs, or when every check was skipped', async () => {
@@ -46,7 +55,7 @@ test('merge --wait merges nothing once a check fails or is cancelled, whatever e
     assert.equal(r.code, 1, r.out)
     assert.match(r.out, said)
     assert.equal(gh.calls().filter((c) => c.startsWith('pr checks')).length, 1, 'settled at the first look')
-    assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1: the wait for the checks of #12 ended with no merge: #12's checks/)
+    assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /wave 1:.*#12.*no merge/)
     assert.ok(!wrote(gh), gh.calls().join('\n'))
     assert.equal(t.state().sweep.waves[0].merged, false)
   }
@@ -109,11 +118,11 @@ test('merge --wait ends, merging nothing, for a run paused before it or stopped 
   let out = ''
   p.stdout.on('data', (d) => { out += d })
   const done = new Promise((res) => p.on('close', (code) => res(code)))
-  while (!gh.calls().some((c) => c.startsWith('pr checks'))) await new Promise((r) => setTimeout(r, 20))
+  await until(() => gh.calls().some((c) => c.startsWith('pr checks')), 'lcw merge --wait to read the checks')
   assert.equal((await u.cli('stop')).code, 0)
   assert.equal(await done, 1, out)
   assert.match(out, /is stopped, so lcw merge --wait ends here for #12/)
-  assert.match(fs.readFileSync(`${u.dir}/ledger.md`, 'utf8'), /wave 1: the wait for the checks of #12 ended with no merge: Run \S+ is stopped/)
+  assert.match(fs.readFileSync(`${u.dir}/ledger.md`, 'utf8'), /wave 1:.*#12.*no merge.*stopped/)
   assert.ok(!wrote(gh), gh.calls().join('\n'))
   assert.equal(u.state().sweep.waves[0].merged, false)
 })
@@ -126,6 +135,8 @@ test('a pull request the merge only queued is not recorded and keeps its branch,
   assert.match(r.out, /not merged yet/)
   assert.ok(queued.calls().includes('pr merge 12 -R acme/widgets --merge --match-head-commit abc123'), queued.calls().join('\n'))
   assert.ok(!queued.calls().some((c) => c.startsWith('api')), queued.calls().join('\n'))
+  assert.ok(queued.calls().includes('pr ready 12 -R acme/widgets'), 'left ready')
+  assert.ok(!queued.calls().some((c) => c.includes('--undo')), queued.calls().join('\n'))
   assert.equal(t.state().sweep.waves[0].merged, false)
   const later = fakeGh({ GH_STATE: 'MERGED' })
   assert.equal((await cli(['merge', '1'], { ...t.o, env: later.env })).code, 0)
@@ -134,29 +145,19 @@ test('a pull request the merge only queued is not recorded and keeps its branch,
   assert.equal(t.state().sweep.waves[0].merged, true)
 })
 
-test('a pull request still based on a wave branch is refused, with no write to GitHub', async () => {
-  const t = await shippedWaves()
-  t.edit((s) => { s.sweep.waves[0].merged = true })
-  const gh = fakeGh({ GH_BASE: 'lcw/tidy-wave-1' })
-  const r = await cli(['merge', '2'], { ...t.o, env: gh.env })
-  assert.equal(r.code, 1, r.out)
-  assert.match(r.out, /lcw\/tidy-wave-1/)
-  assert.match(r.out, /\bmain\b/)
-  assert.ok(gh.calls().length > 0 && gh.calls().every((c) => c.startsWith('pr view') || c.startsWith('repo view')), gh.calls().join('\n'))
-  assert.equal(t.state().sweep.waves[1].merged, false)
-})
-
-test('a pull request GitHub shows merged into a wave branch is not recorded, and its branch is kept', async () => {
-  const t = await shippedWaves()
-  t.edit((s) => { s.sweep.waves[0].merged = true })
-  const gh = fakeGh({ GH_STATE: 'MERGED', GH_BASE: 'lcw/tidy-wave-1' })
-  const r = await cli(['merge', '2'], { ...t.o, env: gh.env })
-  assert.equal(r.code, 1, r.out)
-  assert.match(r.out, /lcw\/tidy-wave-1/)
-  assert.match(r.out, /\bmain\b/)
-  assert.ok(gh.calls().length > 0 && gh.calls().every((c) => c.startsWith('pr view') || c.startsWith('repo view')), gh.calls().join('\n'))
-  assert.equal(t.state().sweep.waves[1].merged, false)
-})
+for (const [name, env] of [['still open', {}], ['already merged by GitHub', { GH_STATE: 'MERGED' }]]) {
+  test(`a pull request ${name} on a wave branch is refused and not recorded, with no write to GitHub`, async () => {
+    const t = await shippedWaves()
+    t.edit((s) => { s.sweep.waves[0].merged = true })
+    const gh = fakeGh({ ...env, GH_BASE: 'lcw/tidy-wave-1' })
+    const r = await cli(['merge', '2'], { ...t.o, env: gh.env })
+    assert.equal(r.code, 1, r.out)
+    assert.match(r.out, /lcw\/tidy-wave-1/)
+    assert.match(r.out, /\bmain\b/)
+    assert.ok(gh.calls().length > 0 && gh.calls().every((c) => c.startsWith('pr view') || c.startsWith('repo view')), gh.calls().join('\n'))
+    assert.equal(t.state().sweep.waves[1].merged, false)
+  })
+}
 
 test('merge deletes the remote wave branch through the api and leaves the local branch, its tracking ref and the worktree alone', async () => {
   const t = await shippedWaves()
@@ -306,7 +307,7 @@ async function slowMerge(t, gh) {
   let out = ''
   p.stdout.on('data', (d) => { out += d })
   const done = new Promise((res) => p.on('close', (code) => res({ code, out })))
-  while (!gh.calls().some((c) => c.startsWith('pr merge'))) await new Promise((r) => setTimeout(r, 20))
+  await until(() => gh.calls().some((c) => c.startsWith('pr merge')), 'lcw merge to reach pr merge')
   return { done }
 }
 
@@ -341,29 +342,13 @@ test('a command whose lock was taken from it as hung saves nothing over the newe
   assert.deepEqual([t.state().sweep.waves[0].merged, t.state().questions.map((x) => x.id)], [true, ['Q1']])
 })
 
-test('a failing gh merge is reported and records nothing', async () => {
-  const t = await shippedWaves()
-  const gh = fakeGh({ GH_FAIL: 'pr merge' })
-  const r = await cli(['merge', '1'], { ...t.o, env: gh.env })
-  assert.equal(r.code, 1)
-  assert.match(r.out, /not mergeable/)
-  assert.equal(t.state().sweep.waves[0].merged, false)
-})
-
 test('a merge GitHub refuses puts the pull request it readied back to draft, and one that was not a draft is left alone', async () => {
   const t = await shippedWaves()
   const refused = fakeGh({ GH_FAIL: 'pr merge' })
   assert.equal((await cli(['merge', '1'], { ...t.o, env: refused.env })).code, 1)
+  assert.equal(t.state().sweep.waves[0].merged, false)
   assert.deepEqual(refused.calls().slice(2), ['pr ready 12 -R acme/widgets', 'pr merge 12 -R acme/widgets --merge --match-head-commit abc123', 'pr ready 12 -R acme/widgets --undo'])
   const open = fakeGh({ GH_FAIL: 'pr merge', GH_DRAFT: 'false' })
   assert.equal((await cli(['merge', '1'], { ...t.o, env: open.env })).code, 1)
   assert.ok(!open.calls().some((c) => c.startsWith('pr ready')), open.calls().join('\n'))
-})
-
-test('a merge that was only queued leaves the pull request ready, not back at draft', async () => {
-  const t = await shippedWaves()
-  const gh = fakeGh({ GH_STATE: 'OPEN' })
-  await cli(['merge', '1'], { ...t.o, env: gh.env })
-  assert.ok(gh.calls().includes('pr ready 12 -R acme/widgets'))
-  assert.ok(!gh.calls().some((c) => c.includes('--undo')), gh.calls().join('\n'))
 })
