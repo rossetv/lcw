@@ -72,6 +72,8 @@ test('a lock that stays held never makes the hook fail or hang, and is left to i
   const unlocked = spawnTime() // what a start costs on this machine now, so a loaded one does not read as a wait
   const dir = home()
   fs.writeFileSync(lockOf(dir), '')
+  const ahead = new Date(Date.now() + 3600000) // a lock cannot go stale however late the hook starts
+  fs.utimesSync(lockOf(dir), ahead, ahead)
   const t = Date.now()
   fire(dir, failed('toolu_1'))
   assert.ok(Date.now() - t < unlocked + 3000, 'the hook waited on a lock far past its short give-up')
