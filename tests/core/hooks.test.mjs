@@ -704,23 +704,16 @@ async function resumed(oldRunning, t1, signIn = KEY, then = () => {}) {
 }
 const caseRows = (name) => cases.find((c) => c.name === name).sessions
 
-test('a per-token session resumed from a transcript whose older Claude Code has ended leaves the rows its limit-hook case holds', async () => {
-  assert.deepEqual(await resumed(false, { billing: 'payg' }), caseRows('a note given at a resumed start under both names, which share one anchor, leaves the marker down'))
-})
-
-test('a per-token session resumed from a told transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', async () => {
-  assert.deepEqual(await resumed(true, { billing: 'payg', toldPayg: true }), caseRows('a note given under both names leaves the marker down though the transcript row records an older process'))
-})
-
-test('a per-token session resumed from an untold transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', async () => {
-  assert.deepEqual(await resumed(true, { billing: 'payg' }), caseRows('a note given under the id at a resumed start leaves the marker down though the transcript row, kept by an older process, records none'))
-})
-
-test('a mark raised in a session resumed from a transcript whose older Claude Code still runs leaves the rows its limit-hook case holds', async () => {
-  const rows = await resumed(true, {}, { LCW_AUTH_STATUS_JSON: 'fail' }, async (home, repo) => {
+test('a session resumed from a transcript leaves the rows its limit-hook case holds, whether the older Claude Code ended or still runs', async () => {
+  const markRaised = async (home, repo) => {
     assert.equal((await cli(['mark', '90'], { home, cwd: repo, session: 'p1', env: { CLAUDE_PID: String(process.pid) } })).code, 0)
-  })
-  assert.deepEqual(rows, caseRows('a mark raised under the id while the transcript row is kept by an older process leaves the marker down below it'))
+  }
+  for (const [name, run, expected] of [
+    ['per-token, the older process has ended', () => resumed(false, { billing: 'payg' }), 'a note given at a resumed start under both names, which share one anchor, leaves the marker down'],
+    ['per-token, told, the older process runs', () => resumed(true, { billing: 'payg', toldPayg: true }), 'a note given under both names leaves the marker down though the transcript row records an older process'],
+    ['per-token, untold, the older process runs', () => resumed(true, { billing: 'payg' }), 'a note given under the id at a resumed start leaves the marker down though the transcript row, kept by an older process, records none'],
+    ['a mark raised, the older process runs', () => resumed(true, {}, { LCW_AUTH_STATUS_JSON: 'fail' }, markRaised), 'a mark raised under the id while the transcript row is kept by an older process leaves the marker down below it'],
+  ]) assert.deepEqual(await run(), caseRows(expected), name)
 })
 
 test('a session that turns out to be billed per token is told once, with the commands, and a subscriber is never stopped by dollars', async () => {
