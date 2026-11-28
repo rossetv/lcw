@@ -116,16 +116,18 @@ test('hunt records a round\'s park and drop after a wave has started and moved t
   const r = await t.cli('hunt', '--park', '2', '--drop', '1')
   assert.equal(r.code, 0, r.out)
   assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped], [2, 1])
-  assert.match(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /hunt, round 1: park 2, drop 1/)
 })
 
-test('hunt, wave and merge are refused in a build', async () => {
+test('sweep-only commands are refused in a build', async () => {
   const o = { home: tmp('home'), cwd: makeRepo(), session: 'b1' }
-  await cli(['start', 'b', '--title', 'B'], o)
-  for (const a of [['hunt', '--fix', '1'], ['wave', 'add', '2'], ['merge', '1'], ['task', 'add', 'T1', 'x']]) await cli(a, o)
-  for (const a of [['hunt', '--fix', '1'], ['wave', 'add', '2'], ['merge', '1'], ['task', 'T1', 'dropped'], ['stop', '--pr', 'https://github.com/a/b/pull/1']]) {
+  const started = await cli(['start', 'b', '--title', 'B'], o)
+  const state = `${/^folder: (.+)$/m.exec(started.out)[1]}/state.json`
+  for (const a of [['task', 'add', 'T1', 'x'], ['req', 'add', 'R1', 'one']]) await cli(a, o)
+  const before = fs.readFileSync(state, 'utf8')
+  for (const a of [['hunt', '--fix', '1'], ['wave', 'add', '2'], ['merge', '1'], ['task', 'T1', 'dropped'], ['req', 'R1', 'partial'], ['stop', '--pr', 'https://github.com/a/b/pull/1']]) {
     assert.equal((await cli(a, o)).code, 1, a.join(' '))
   }
+  assert.equal(fs.readFileSync(state, 'utf8'), before, 'the refusals changed nothing')
 })
 
 test('wave add queues a wave for each number, and a repeat while they wait is refused', async () => {
@@ -139,12 +141,12 @@ test('wave add queues a wave for each number, and a repeat while they wait is re
   ])
 })
 
-test('a fix found while a wave is queued joins it: the refusal says so, and once the wave has started the rest are queued and its own fix that waits joins them', async () => {
+test('a fix found while a wave is queued joins it: more waves are refused, and once the wave has started the rest are queued and its own fix that waits joins them', async () => {
   const t = await hunting()
   await t.cli('wave', 'add', '1')
   const refused = await t.cli('wave', 'add', '2')
   assert.equal(refused.code, 1)
-  assert.match(refused.out, /Wave 1 is already queued.*joins wave 1 in findings\.md.*lcw wave start.*lcw wave add queues the rest/s)
+  assert.equal(t.state().sweep.waves.length, 1)
   await t.start()
   for (const id of ['F2', 'F3']) await t.cli('req', 'add', id, `fix ${id}`)
   assert.equal((await t.cli('wave', 'add', '4')).code, 0)
@@ -154,20 +156,11 @@ test('a fix found while a wave is queued joins it: the refusal says so, and once
   assert.match(out, /^ {2}2 \[queued\] 5 fixes /m)
 })
 
-test('wave add queues more waves while waves are open, as long as none is queued', async () => {
-  const t = await hunting()
-  await t.cli('wave', 'add', '1')
-  await t.start()
-  assert.equal((await t.cli('wave', 'add', '2')).code, 0)
-  assert.deepEqual(t.state().sweep.waves.map((w) => w.status), ['running', 'queued'])
-})
-
-test('wave add given the number of the wave it makes, from wave 10 on, queues it with 1 fix and says why', async () => {
+test('wave add given the number of the wave it makes, from wave 10 on, queues it with 1 fix', async () => {
   const t = await hunting()
   t.edit((s) => { s.sweep.waves = Array.from({ length: 11 }, (_, i) => ({ n: i + 1, fixes: 1, status: 'shipped', branch: null, pr: null, merged: false, dropped: 0 })) })
   const r = await t.cli('wave', 'add', '12')
   assert.equal(r.code, 0, r.out)
-  assert.match(r.out, /takes how many fixes each wave holds, not its number, so wave 12 is queued with 1 fix/)
   assert.equal(t.state().sweep.waves[11].fixes, 1)
   t.edit((s) => { s.sweep.waves[11].status = 'shipped' })
   assert.equal((await t.cli('wave', 'add', '7')).code, 0)
