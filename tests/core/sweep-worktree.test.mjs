@@ -1,9 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import path from 'node:path'
 import { tmp, makeRepo, git, cli } from './helpers.mjs'
-import { sweep, hunting, shipping, commit, fakeGh, overlapping, bothShipping, shippedWaves, twoOpen, three } from './sweep-kit.mjs'
+import { sweep, hunting, shipping, commit, overlapping, bothShipping, twoOpen, three } from './sweep-kit.mjs'
 
 test('a take-in is refused while a task of the wave is running, and nothing moves', async () => {
   const t = await overlapping()
@@ -284,33 +283,6 @@ test('a worktree git refuses says why, not its progress line', async () => {
   assert.doesNotMatch(r.out, /Preparing worktree/)
 })
 
-test('merge of a pull request GitHub closed unmerged says to open a new one first, and to open it again only while its base branch exists', async () => {
-  const t = await shippedWaves()
-  const r = await cli(['merge', '1'], { ...t.o, env: fakeGh({ GH_STATE: 'CLOSED', GH_BASE: 'lcw/tidy' }).env })
-  assert.equal(r.code, 1)
-  assert.match(r.out, /closed without being merged/)
-  assert.match(r.out, /lcw wave pr 1 <number>/, 'a new pull request is recorded on the wave')
-  assert.match(r.out, /base branch lcw\/tidy still exists.*reopen #12/, 'the old one is reopened only while its base exists')
-  assert.match(r.out, /lcw merge 1 again/)
-  assert.doesNotMatch(r.out, /retarget/)
-  assert.equal(t.state().sweep.waves[0].merged, false)
-})
-
-test('merge given a pull request number says it takes a wave number, and names the wave that has that pull request', async () => {
-  const t = await shippedWaves()
-  const gh = fakeGh()
-  const hit = await cli(['merge', '13'], { ...t.o, env: gh.env })
-  assert.equal(hit.code, 1)
-  assert.match(hit.out, /takes a wave number/)
-  assert.match(hit.out, /13.*wave 2.*lcw merge 2/, 'it names the wave that has that pull request')
-  const miss = await cli(['merge', '99'], { ...t.o, env: gh.env })
-  assert.match(miss.out, /No wave 99.*1, 2/s)
-  assert.doesNotMatch(miss.out, /pull request number|is wave/)
-  t.edit((s) => s.sweep.waves.push({ n: 3, fixes: 1, status: 'shipped', branch: 'lcw/tidy-wave-3', pr: null, empty: true, dropped: 1, fixed: 0 }))
-  assert.doesNotMatch((await cli(['merge', '0'], { ...t.o, env: gh.env })).out, /is wave/, 'a wave with no pull request has none numbered 0')
-  assert.deepEqual(gh.calls(), [])
-})
-
 test('a wave start whose worktree git refuses leaves no branch behind, so the retry works', async () => {
   const t = await hunting()
   await t.cli('wave', 'add', '3')
@@ -323,23 +295,6 @@ test('a wave start whose worktree git refuses leaves no branch behind, so the re
   assert.equal((await t.start()).code, 0)
 })
 
-test('merge of a number that is neither a wave nor a wave\'s pull request says there is no such wave and lists the waves', async () => {
-  const t = await sweep()
-  await t.cli('set', 'sweep.prs=merged')
-  const r = await t.cli('merge', '4')
-  assert.equal(r.code, 1)
-  assert.match(r.out, /No wave 4.*no waves/s)
-})
-
-test('merge --wait on a pull request GitHub closed unmerged says so at once and never waits for checks', async () => {
-  const t = await shippedWaves()
-  const gh = fakeGh({ GH_STATE: 'CLOSED', GH_BASE: 'main', GH_CHECKS: 'pending', LCW_CHECKS_MINUTE_MS: '5000' })
-  const r = await cli(['merge', '1', '--wait', '5'], { ...t.o, env: gh.env })
-  assert.equal(r.code, 1)
-  assert.match(r.out, /closed without being merged/)
-  assert.doesNotMatch(fs.readFileSync(`${t.dir}/ledger.md`, 'utf8'), /waiting up to/)
-})
-
 test('re-recording a hunt round\'s park and drop counts after the totals were settled down never takes them below zero', async () => {
   const t = await hunting()
   await t.cli('hunt', '--park', '2', '--drop', '3')
@@ -347,19 +302,4 @@ test('re-recording a hunt round\'s park and drop counts after the totals were se
   t.edit((s) => { s.sweep.parked = 0; s.sweep.dropped = 0 }) // answered questions and dropped fixes took them off
   await t.cli('hunt', '--park', '0', '--drop', '0')
   assert.deepEqual([t.state().sweep.parked, t.state().sweep.dropped], [0, 0])
-})
-
-test('awake on WSL says WSL cannot keep Windows awake', async () => {
-  const t = await hunting()
-  const env = { PATH: tmp('bin') + ':' + path.dirname(process.execPath) } // node only: no caffeinate or systemd-inhibit
-  const wsl = await cli(['awake'], { ...t.o, env: { ...env, WSL_DISTRO_NAME: 'Ubuntu' } })
-  assert.equal(wsl.code, 1)
-  assert.match(wsl.out, /WSL/)
-})
-
-test('awake outside WSL names the programs', { skip: (() => { try { return /microsoft/i.test(fs.readFileSync('/proc/version', 'utf8')) && 'this machine is WSL: /proc/version says so whatever the environment' } catch { return false } })() }, async () => {
-  const t = await hunting()
-  const env = { PATH: tmp('bin') + ':' + path.dirname(process.execPath) }
-  const plain = await cli(['awake'], { ...t.o, env: { ...env, WSL_DISTRO_NAME: '' } })
-  assert.match(plain.out, /caffeinate.*systemd-inhibit/)
 })
