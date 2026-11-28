@@ -46,6 +46,25 @@ export function run(script, args, { home, cwd, session, input, env: more = {} } 
 
 export const lcw = (args, opts) => run(CLI, args, opts)
 
+// one in-process call at a time: each takes over the process's env and cwd while it runs
+let queue = Promise.resolve()
+
+/** lcw() run inside this process through the CLI's main(), with the same options and result; err is always ''. */
+export function cli(args, { home, cwd, session, env: more = {} } = {}) {
+  const call = queue.then(async () => {
+    const env = { ...process.env, ...gitEnv, LCW_HOME: home, LCW_LOAD: '0' }
+    delete env.CLAUDE_CODE_SESSION_ID
+    delete env.CLAUDE_PID
+    if (session) env.CLAUDE_CODE_SESSION_ID = session
+    Object.assign(env, more)
+    const { main } = await import(CLI)
+    const { code, out } = await main(args, { cwd, env })
+    return { code, out, err: '' }
+  })
+  queue = call.catch(() => {})
+  return call
+}
+
 /** A live process whose program is named claude, as Claude Code's is: node under a link of that name. Kill it when done. */
 export function fakeClaude() {
   const bin = `${tmp('bin')}/claude`
@@ -74,4 +93,14 @@ export function started(name = 'demo') {
   const r = lcw(['start', name, '--title', 'Demo run'], o)
   const dir = /^folder: (.+)$/m.exec(r.out)[1]
   return { home, repo, o, dir, state: () => readJson(`${dir}/state.json`), cli: (...a) => lcw(a, o) }
+}
+
+/** started() run in-process: the same, but its cli is async and goes through cli(); opts add to the options it passes. */
+export async function begin(name = 'demo', opts = {}) {
+  const home = tmp('home')
+  const repo = makeRepo()
+  const o = { home, cwd: repo, session: 's1', ...opts }
+  const r = await cli(['start', name, '--title', 'Demo run'], o)
+  const dir = /^folder: (.+)$/m.exec(r.out)[1]
+  return { home, repo, o, dir, state: () => readJson(`${dir}/state.json`), cli: (...a) => cli(a, o) }
 }
