@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { spawn, spawnSync } from 'node:child_process'
+import childProcess, { spawn, spawnSync } from 'node:child_process'
+import { syncBuiltinESMExports } from 'node:module'
 import { tmp, CLI, cli, readJson } from './helpers.mjs' // first: it points HOME at a throwaway folder
 import {
   parseFigure, runCommand, readSetting, writeSetting, clearSetting, readReading, recordResult, claimWindow, maybeRefresh,
@@ -75,6 +76,24 @@ test('long output is cut to 80 characters, ending with an ellipsis', async () =>
   const quoted = /^printed "(.*)"$/.exec(r.error)[1]
   assert.equal(quoted.length, 80)
   assert.ok(quoted.endsWith('…'))
+})
+
+test('the signal handlers are installed before the command is spawned', async () => {
+  const real = childProcess.spawn
+  let at
+  childProcess.spawn = (...a) => { at = process.listenerCount('SIGTERM'); return real(...a) }
+  syncBuiltinESMExports()
+  try { await runCommand('echo 1') } finally { childProcess.spawn = real; syncBuiltinESMExports() }
+  assert.ok(at > 0, 'no SIGTERM handler when spawn ran')
+})
+
+test('a command that cannot start leaves no signal handlers behind', async () => {
+  const count = () => ['SIGINT', 'SIGTERM', 'SIGHUP'].map((s) => process.listenerCount(s))
+  const before = count()
+  const r = await runCommand('echo a\0b')
+  assert.equal(r.ok, false)
+  assert.match(r.error, /^could not start/)
+  assert.deepEqual(count(), before)
 })
 
 test('a command that reads stdin does not hang', async () => {
