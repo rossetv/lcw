@@ -77,7 +77,8 @@ const families = [
     (w) => editState(w, (s) => { s.sweep.waves = [{ n: 1, fixes: 1, status: 'shipped', branch: 'lcw/tidy-wave-1', pr: 12, merged: false, dropped: 0, fixed: 1 }] }),
     ['merge', '1', '--wait', '1'], (w) => editState(w, (s) => { s.sweep.waves[0].merged = true; s.status = 'paused' }), ['merge', '1', '--wait', '1']]],
   ['usage and mark', [['mark', '60'], ['cap', '4000'], ['usage'], ['start', 'demo', '--title', 'Demo run'], ['mark', '3000usd'], ['mark', '101'], ['usage'], ['status']]],
-  ['spend', [['spend-command'], ['spend-command', 'echo', '1240'], ['spend-command'], ['spend-command', 'true'], ['spend-command', 'off'], ['spend-command', 'off']]],
+  // the clock is pinned, so the 5-minute window that names the spend-try file is the same in both passes
+  ['spend', [['spend-command'], ['spend-command', 'echo', '1240'], ['spend-command'], ['spend-command', 'true'], ['spend-command', 'off'], ['spend-command', 'off']], { LCW_NOW: String(Date.parse('2026-01-01T12:00:00Z')) }],
   ['quota', [['quota-command'], ['quota-command', 'http://localhost:8080/v1', 'printf secret'], ['quota-command', 'http://localhost:8080/v1', quotaCmd], ['quota-command'], ['quota-command', 'off']]],
   ['cleanup', [['start', 'demo', '--title', 'Demo run'], ['worktree'], { args: ['abandon', 'ID'], session: 's2' }, leftAlone,
     (w) => fs.writeFileSync(`${w.repo}/.claude/worktrees/demo/b.txt`, 'wip\n'), (w) => fs.rmSync(`${w.repo}/.claude/worktrees/demo/b.txt`),
@@ -105,11 +106,11 @@ function files(dir, base = dir) {
 const timeless = (text) => text.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, '<iso>').replace(/\b1[6-9]\d{11}\b/g, '<ms>')
   .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/g, '<uuid>')
 
-async function pass(pristine, world, door, calls) {
+async function pass(pristine, world, door, calls, extraEnv) {
   fs.rmSync(world, { recursive: true, force: true })
   fs.cpSync(pristine, world, { recursive: true })
   const w = { home: `${world}/home`, repo: `${world}/repo` }
-  const env = { PATH: `${world}/bin:${BASE.PATH}`, GIT_AUTHOR_DATE: '2026-01-01T12:00:00Z', GIT_COMMITTER_DATE: '2026-01-01T12:00:00Z' }
+  const env = { PATH: `${world}/bin:${BASE.PATH}`, GIT_AUTHOR_DATE: '2026-01-01T12:00:00Z', GIT_COMMITTER_DATE: '2026-01-01T12:00:00Z', ...extraEnv }
   const seen = []
   for (const call of calls) {
     if (typeof call === 'function') { call(w); continue }
@@ -121,7 +122,7 @@ async function pass(pristine, world, door, calls) {
   return timeless([...seen.map((r) => `$ lcw ${JSON.stringify(r.args)}\nexit ${r.code}\n${r.out}`), ...files(world), refs].join('\n'))
 }
 
-async function same(calls) {
+async function same(calls, extraEnv) {
   const root = tmp('same')
   const pristine = `${root}/pristine`
   fs.mkdirSync(`${pristine}/bin`, { recursive: true })
@@ -130,12 +131,12 @@ async function same(calls) {
   git(`${pristine}/repo`, 'remote', 'add', 'origin', 'https://github.com/acme/widgets.git')
   fs.mkdirSync(`${pristine}/home`)
   const world = `${root}/world`
-  const ran = await pass(pristine, world, program, calls)
-  const inProcess = await inTurn(() => pass(pristine, world, cli, calls))
+  const ran = await pass(pristine, world, program, calls, extraEnv)
+  const inProcess = await inTurn(() => pass(pristine, world, cli, calls, extraEnv))
   assert.equal(inProcess, ran)
 }
 
 describe('the program and cli() print, exit and leave files the same', { concurrency: true }, () => {
-  for (const [family, calls] of families) test(family, () => same(calls))
+  for (const [family, calls, env] of families) test(family, () => same(calls, env))
 })
 test(`${standing[0]}: the program and cli() print, exit and leave files the same`, () => same(standing[1]))
